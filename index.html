@@ -1,0 +1,3241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClientFlow — Renewals & Payable</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f6f3; --surface: #ffffff; --border: #e8e5df; --border-soft: #f0ede8;
+    --text: #1a1916; --text-muted: #8a8580; --text-soft: #b5b0a8;
+    --accent: #2563eb; --accent-light: #eff4ff;
+    --green: #16a34a; --green-light: #f0fdf4;
+    --amber: #d97706; --amber-light: #fffbeb;
+    --red: #dc2626; --red-light: #fef2f2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 28px 0; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 10; }
+  .logo { padding: 0 20px 28px; border-bottom: 1px solid var(--border-soft); margin-bottom: 12px; }
+  .logo-mark { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 11px; color: var(--text-soft); letter-spacing: 0.3px; }
+  .nav-section { padding: 8px 12px 4px; font-size: 10px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-soft); }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 20px; cursor: pointer; color: var(--text-muted); font-size: 13.5px; transition: all 0.15s; position: relative; }
+  .nav-item:hover { background: var(--bg); color: var(--text); }
+  .nav-item.active { color: var(--accent); background: var(--accent-light); font-weight: 500; }
+  .nav-item.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); border-radius: 0 2px 2px 0; }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+  .nav-badge { margin-left: auto; background: var(--red); color: white; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 20px; font-family: 'DM Mono', monospace; }
+
+  /* MAIN */
+  .main { margin-left: 220px; flex: 1; padding: 32px 36px; max-width: calc(100vw - 220px); }
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.4px; }
+  .page-subtitle { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--bg); color: var(--text); }
+  .btn-success { background: var(--green-light); color: var(--green); border: 1px solid #bbf7d0; }
+  .btn-success:hover { background: #dcfce7; }
+  .btn-amber { background: var(--amber-light); color: var(--amber); border: 1px solid #fde68a; }
+  .btn-amber:hover { background: #fef3c7; }
+  .btn-danger { background: var(--red-light); color: var(--red); border: 1px solid #fecaca; }
+  .btn-danger:hover { background: #fee2e2; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+  .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 8px; }
+  .stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.8px; font-family: 'DM Mono', monospace; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.red { color: var(--red); }
+  .stat-delta { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
+
+  /* CARD */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .mb20 { margin-bottom: 20px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* SEARCH */
+  .search-bar { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; }
+  .search-bar input { border: none; background: transparent; outline: none; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); width: 180px; }
+  .search-bar input::placeholder { color: var(--text-soft); }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { border-bottom: 1px solid var(--border-soft); }
+  th { padding: 10px 16px; text-align: left; font-size: 11.5px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.3px; text-transform: uppercase; background: var(--bg); }
+  td { padding: 13px 16px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fafafa; }
+  .client-name { font-weight: 500; font-size: 13.5px; }
+  .client-email { font-size: 12px; color: var(--text-muted); }
+  .row-actions { display: flex; gap: 5px; opacity: 0; transition: opacity 0.15s; }
+  tr:hover .row-actions { opacity: 1; }
+  .invoice-paid-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: var(--green-light); color: var(--green); border: 1px solid #bbf7d0; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
+  .invoice-paid-btn:hover { background: #dcfce7; transform: scale(1.03); }
+
+  /* EMAIL ALERTS */
+  .email-config { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .email-config-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .email-config-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+  .email-recipients { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+  .email-recipients .form-group { flex: 1; min-width: 220px; }
+  .alert-cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .alert-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .alert-card-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-soft); }
+  .alert-card-title { font-weight: 600; font-size: 13.5px; }
+  .alert-card-body { padding: 16px 18px; min-height: 120px; font-size: 13px; color: var(--text-muted); line-height: 1.7; white-space: pre-wrap; }
+  .alert-card-footer { padding: 12px 18px; border-top: 1px solid var(--border-soft); display: flex; gap: 8px; justify-content: flex-end; }
+  .alert-card.urgent .alert-card-header { background: var(--red-light); }
+  .alert-card.warning .alert-card-header { background: var(--amber-light); }
+  .alert-card.renewal .alert-card-header { background: var(--accent-light); }
+  .generating-pulse { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; }
+  .dot-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:0.3; transform: scale(0.8); } 50% { opacity:1; transform: scale(1); } }
+  .recipient-tag { display: inline-flex; align-items: center; gap: 5px; background: var(--accent-light); color: var(--accent); border: 1px solid #bfdbfe; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 500; }
+  .recipient-tag button { background: none; border: none; cursor: pointer; color: var(--accent); font-size: 13px; line-height: 1; padding: 0 0 0 2px; }
+  .recipients-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; min-height: 28px; }
+  .no-alerts-msg { text-align: center; padding: 48px 24px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .alert-send-all { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-purple { background: #faf5ff; color: #7c3aed; }
+  .badge-amber { background: var(--amber-light); color: var(--amber); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-blue { background: var(--accent-light); color: var(--accent); }
+  .badge-gray { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+  /* FILTERS */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-btn { padding: 5px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
+  .filter-btn:hover, .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* AGING REPORT */
+  .aging-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; padding: 16px; }
+  .aging-bucket { border-radius: 8px; padding: 16px; text-align: center; }
+  .aging-bucket.b30 { background: var(--amber-light); }
+  .aging-bucket.b60 { background: #fff7ed; border: 1px solid #fed7aa; }
+  .aging-bucket.b90 { background: var(--red-light); }
+  .aging-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .aging-bucket.b30 .aging-label { color: var(--amber); }
+  .aging-bucket.b60 .aging-label { color: #ea580c; }
+  .aging-bucket.b90 .aging-label { color: var(--red); }
+  .aging-amount { font-size: 20px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; }
+  .aging-bucket.b30 .aging-amount { color: var(--amber); }
+  .aging-bucket.b60 .aging-amount { color: #ea580c; }
+  .aging-bucket.b90 .aging-amount { color: var(--red); }
+  .aging-count { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* CLIENT DETAIL PANEL */
+  .detail-overlay { display: none; position: fixed; inset: 0; z-index: 49; }
+  .detail-overlay.open { display: block; }
+  .detail-panel { display: none; position: fixed; top: 0; right: 0; width: 420px; height: 100vh; background: white; border-left: 1px solid var(--border); z-index: 50; box-shadow: -4px 0 24px rgba(0,0,0,0.09); overflow-y: auto; }
+  .detail-panel.open { display: block; animation: slideIn 0.2s ease; }
+  @keyframes slideIn { from { transform: translateX(30px); opacity:0; } to { transform: translateX(0); opacity:1; } }
+  .detail-header { padding: 24px 24px 16px; border-bottom: 1px solid var(--border-soft); display: flex; justify-content: space-between; align-items: flex-start; }
+  .detail-title { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .detail-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+  .detail-close { cursor: pointer; color: var(--text-soft); font-size: 18px; padding: 4px; line-height: 1; }
+  .detail-close:hover { color: var(--text); }
+  .detail-section { padding: 16px 24px; border-bottom: 1px solid var(--border-soft); }
+  .detail-section:last-child { border-bottom: none; }
+  .detail-section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; }
+  .detail-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 0; font-size: 13px; gap: 12px; }
+  .detail-label { color: var(--text-muted); flex-shrink: 0; }
+  .detail-val { font-weight: 500; text-align: right; }
+  .notes-area { width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); resize: vertical; min-height: 90px; outline: none; background: var(--bg); line-height: 1.6; }
+  .notes-area:focus { border-color: var(--accent); background: white; }
+  .notes-save { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.25); backdrop-filter: blur(2px); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; animation: fadeIn 0.15s ease; }
+  .modal { background: white; border-radius: 14px; padding: 28px; width: 480px; max-width: 95vw; box-shadow: var(--shadow-md); max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 20px; letter-spacing: -0.3px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.span2 { grid-column: span 2; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .form-input { border: 1px solid var(--border); border-radius: 7px; padding: 8px 11px; font-family: 'DM Sans', sans-serif; font-size: 13.5px; color: var(--text); outline: none; transition: border-color 0.15s; background: var(--bg); }
+  .form-input:focus { border-color: var(--accent); background: white; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+
+  /* ALERTS */
+  .alerts-list { display: flex; flex-direction: column; gap: 10px; }
+  .alert-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--radius); border: 1px solid; }
+  .alert-item.urgent { background: var(--red-light); border-color: #fecaca; }
+  .alert-item.warning { background: var(--amber-light); border-color: #fde68a; }
+  .alert-item.info { background: var(--accent-light); border-color: #bfdbfe; }
+  .alert-item.stale { background: #faf5ff; border-color: #e9d5ff; }
+  .alert-icon { font-size: 18px; }
+  .alert-text { flex: 1; }
+  .alert-title { font-weight: 500; font-size: 13.5px; }
+  .alert-desc { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+  .empty-state { text-align: center; padding: 40px 24px; color: var(--text-muted); }
+  .empty-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.35; }
+  .mono { font-family: 'DM Mono', monospace; font-size: 13px; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: white; padding: 12px 18px; border-radius: 9px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-md); z-index: 999; display: none; }
+  .toast.show { display: block; animation: slideUp 0.2s ease; }
+  @keyframes slideUp { from { transform:translateY(10px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+
+  /* PLAN MULTI-SELECT */
+  .plan-picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
+  .plan-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 500; cursor: pointer; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-muted); transition: all 0.15s; user-select: none; }
+  .plan-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .plan-chip.selected { border-color: var(--accent); background: var(--accent); color: white; }
+  .plan-chip.selected::before { content: '✓ '; font-size: 11px; }
+  .plan-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  /* UPSELL KANBAN */
+  .upsell-stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 24px; }
+  .kanban-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+  .kanban-col { flex: 0 0 220px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; max-height: calc(100vh - 280px); }
+  .kanban-col-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .kanban-col-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kanban-col-count { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 20px; font-family: 'DM Mono', monospace; }
+  .kanban-col.stage-identified .kanban-col-title { color: #6366f1; }
+  .kanban-col.stage-identified .kanban-col-count { background: #eef2ff; color: #6366f1; }
+  .kanban-col.stage-contacted .kanban-col-title { color: var(--accent); }
+  .kanban-col.stage-contacted .kanban-col-count { background: var(--accent-light); color: var(--accent); }
+  .kanban-col.stage-proposal .kanban-col-title { color: var(--amber); }
+  .kanban-col.stage-proposal .kanban-col-count { background: var(--amber-light); color: var(--amber); }
+  .kanban-col.stage-negotiating .kanban-col-title { color: #ea580c; }
+  .kanban-col.stage-negotiating .kanban-col-count { background: #fff7ed; color: #ea580c; }
+  .kanban-col.stage-won .kanban-col-title { color: var(--green); }
+  .kanban-col.stage-won .kanban-col-count { background: var(--green-light); color: var(--green); }
+  .kanban-col.stage-lost .kanban-col-title { color: var(--text-soft); }
+  .kanban-col.stage-lost .kanban-col-count { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .kanban-cards { padding: 10px 10px 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
+  .kanban-add { padding: 8px 10px; border-top: 1px solid var(--border); }
+  .kanban-add-btn { width: 100%; background: none; border: 1px dashed var(--border); border-radius: 8px; padding: 7px; font-size: 12px; color: var(--text-soft); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .kanban-add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+  .upsell-card { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 12px 13px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow); }
+  .upsell-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .upsell-card-client { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .upsell-card-plan { font-size: 11.5px; color: var(--text-muted); margin-bottom: 8px; }
+  .upsell-card-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .upsell-card-value { font-size: 12px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--green); }
+  .upsell-card-date { font-size: 11px; color: var(--text-soft); }
+  .upsell-card-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+  .upsell-tag { font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 20px; }
+  .tag-aliado { background: #f3e8ff; color: #7c3aed; }
+  .tag-consola { background: var(--accent-light); color: var(--accent); }
+  .tag-c3ntro { background: #ecfdf5; color: #059669; }
+  .tag-parvada { background: #fff7ed; color: #ea580c; }
+  .tag-reportes { background: #fef9c3; color: #ca8a04; }
+  .upsell-card-notes { font-size: 11.5px; color: var(--text-muted); border-top: 1px solid var(--border-soft); padding-top: 7px; margin-top: 7px; line-height: 1.5; font-style: italic; }
+
+  .upsell-detail-overlay { display:none; position:fixed; inset:0; z-index:49; }
+  .upsell-detail-overlay.open { display:block; }
+  .upsell-detail-panel { display:none; position:fixed; top:0; right:0; width:440px; height:100vh; background:white; border-left:1px solid var(--border); z-index:50; box-shadow:-4px 0 24px rgba(0,0,0,0.09); overflow-y:auto; }
+  .upsell-detail-panel.open { display:block; animation:slideIn 0.2s ease; }
+  .stage-pill { display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; border:1.5px solid transparent; transition:all 0.15s; }
+  .stage-pill.active { border-color: currentColor; }
+
+  /* RENEWAL DETAIL PANEL */
+  .renewal-detail-panel { display:none; position:fixed; top:0; right:0; width:460px; height:100vh; background:white; border-left:1px solid var(--border); z-index:50; box-shadow:-4px 0 24px rgba(0,0,0,0.09); overflow-y:auto; }
+  .renewal-detail-panel.open { display:block; animation:slideIn 0.2s ease; }
+  .last-contact-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .stale-alert { display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:var(--radius); background:var(--red-light); border:1px solid #fecaca; margin-bottom:12px; }
+  .stale-alert-text { flex:1; font-size:13px; font-weight:500; color:var(--red); }
+  .stale-alert-sub { font-size:11.5px; color:#ef4444; font-weight:400; }
+  .comment-item { padding:10px 0; border-bottom:1px solid var(--border-soft); }
+  .comment-item:last-child { border-bottom:none; }
+  .comment-meta { display:flex; justify-content:space-between; font-size:11px; color:var(--text-soft); margin-bottom:4px; }
+  .comment-text { font-size:13px; line-height:1.6; }
+  .slack-webhook-row { display:flex; gap:8px; align-items:flex-end; margin-top:10px; }
+  .notify-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .sending-spinner { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); }
+  .spinner-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulse 0.8s infinite; }
+  .spinner-dot:nth-child(2) { animation-delay:0.2s; }
+  .spinner-dot:nth-child(3) { animation-delay:0.4s; }
+  .import-tabs { display: flex; gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); width: fit-content; }
+  .import-tab { padding: 9px 22px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: all 0.15s; border: none; background: transparent; font-family: 'DM Sans', sans-serif; }
+  .import-tab.active { background: var(--accent); color: white; }
+  .import-tab:not(.active):hover { background: var(--bg); color: var(--text); }
+
+  .drop-zone { border: 2px dashed var(--border); border-radius: 14px; padding: 52px 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface); }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+  .drop-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+  .drop-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .drop-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+  .drop-formats { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .format-tag { padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+  .mapping-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .mapping-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .mapping-sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; }
+  .mapping-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px 14px; align-items: center; }
+  .mapping-label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+  .mapping-arrow { color: var(--text-soft); font-size: 16px; text-align: center; }
+  .mapping-select { border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); outline: none; background: var(--bg); width: 100%; transition: border-color 0.15s; }
+  .mapping-select:focus { border-color: var(--accent); background: white; }
+  .mapping-select.matched { border-color: var(--green); background: var(--green-light); }
+  .mapping-row { display: contents; }
+  .mapping-header { font-size: 11px; font-weight: 600; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 6px; border-bottom: 1px solid var(--border-soft); margin-bottom: 4px; }
+
+  .preview-table-wrap { overflow-x: auto; max-height: 280px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+  .preview-table-wrap table { min-width: 600px; }
+  .preview-table-wrap th { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+
+  .import-summary { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .import-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; flex: 1; min-width: 120px; box-shadow: var(--shadow); }
+  .import-stat-val { font-size: 24px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; }
+  .import-stat-label { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+  .import-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-soft); }
+  .template-row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .template-card { flex: 1; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; transition: all 0.15s; box-shadow: var(--shadow); }
+  .template-card:hover { border-color: var(--accent); background: var(--accent-light); }
+  .template-card-title { font-weight: 600; font-size: 13.5px; margin-bottom: 4px; }
+  .template-card-sub { font-size: 12px; color: var(--text-muted); }
+  .template-card-icon { font-size: 22px; margin-bottom: 8px; }
+  .step-indicator { display: flex; align-items: center; gap: 0; margin-bottom: 28px; }
+  .step { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; color: var(--text-soft); }
+  .step.active { color: var(--accent); }
+  .step.done { color: var(--green); }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .step-done-check { width: 24px; height: 24px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; font-size: 11px; color: white; flex-shrink: 0; }
+  .step-line { flex: 1; height: 1px; background: var(--border); margin: 0 8px; max-width: 40px; }
+  .conflict-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 20px; font-size: 11px; font-weight: 600; background: var(--amber-light); color: var(--amber); border: 1px solid #fde68a; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">ClientFlow</div>
+      <div class="logo-sub">Renewals & Payable</div>
+    </div>
+    <div id="finance-lock-btn" onclick="toggleFinanceLock()" style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:0 8px 8px;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:500;transition:background 0.15s;border:1px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+      <span id="finance-lock-icon">🔓</span>
+      <span id="finance-lock-label">Finances visible</span>
+    </div>
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="navigate('dashboard')"><span class="nav-icon">⊞</span> Dashboard</div>
+    <div class="nav-section">Management</div>
+    <div class="nav-item" onclick="navigate('clients')"><span class="nav-icon">◎</span> Clients</div>
+    <div class="nav-item" onclick="navigate('renewals')"><span class="nav-icon">↻</span> Renewals <span class="nav-badge" id="renewals-badge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="navigate('invoices')"><span class="nav-icon">$</span> Invoices <span class="nav-badge" id="invoices-badge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="navigate('upsell')"><span class="nav-icon">↑</span> Upsell <span class="nav-badge" id="upsell-badge" style="display:none">0</span></div>
+    <div class="nav-section">Insights</div>
+    <div class="nav-item" onclick="navigate('reports')"><span class="nav-icon">↗</span> Reports</div>
+    <div class="nav-item" onclick="navigate('alerts')"><span class="nav-icon">⚡</span> Alerts</div>
+    <div class="nav-item" onclick="navigate('email-alerts')"><span class="nav-icon">✉</span> Email Alerts <span class="nav-badge" id="email-badge" style="display:none">!</span></div>
+    <div class="nav-section">Data</div>
+    <div class="nav-item" onclick="navigate('import')"><span class="nav-icon">⇪</span> Import</div>
+  </aside>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title" id="dash-greeting">Good day 👋</div>
+          <div class="page-subtitle">Here's what needs your attention today.</div>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="openModal('invoice')">＋ Invoice</button>
+          <button class="btn btn-ghost" onclick="openModal('renewal')">＋ Renewal</button>
+          <button class="btn btn-primary" onclick="openModal('client')">＋ Client</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="dashboard-stats"></div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Overdue &amp; Due Soon</div><span class="badge badge-red" id="dash-renewal-count">—</span></div>
+          <div id="dash-renewals-table"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Outstanding Invoices</div><span class="badge badge-red" id="dash-invoice-count">—</span></div>
+          <div id="dash-invoices-table"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENTS -->
+    <div class="page" id="page-clients">
+      <div class="page-header">
+        <div><div class="page-title">Clients</div><div class="page-subtitle">Click a row to view details and notes</div></div>
+        <button class="btn btn-primary" onclick="openModal('client')">＋ Add Client</button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Clients</div>
+          <div class="search-bar"><span>⌕</span><input type="text" placeholder="Search clients…" oninput="filterClients(this.value)"></div>
+        </div>
+        <table>
+          <thead><tr><th>Client</th><th>Contact</th><th>Plan</th><th>Status</th><th>Since</th><th></th></tr></thead>
+          <tbody id="clients-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RENEWALS -->
+    <div class="page" id="page-renewals">
+      <div class="page-header">
+        <div><div class="page-title">Renewals</div><div class="page-subtitle">Statuses update automatically based on today's date</div></div>
+        <button class="btn btn-primary" onclick="openModal('renewal')">＋ Add Renewal</button>
+      </div>
+      <div class="filter-row" id="renewal-filters"></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Renewal Schedule</div>
+          <div class="search-bar"><span>⌕</span><input type="text" placeholder="Search…" oninput="filterRenewals(this.value)"></div>
+        </div>
+        <table>
+          <thead><tr><th>Client</th><th>Type</th><th>Renewal Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody id="renewals-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- INVOICES -->
+    <div class="page" id="page-invoices">
+      <div class="page-header">
+        <div><div class="page-title">Accounts Payable</div><div class="page-subtitle">Track invoices, payments and outstanding balances</div></div>
+        <button class="btn btn-primary" onclick="openModal('invoice')">＋ Add Invoice</button>
+      </div>
+      <div class="filter-row" id="invoice-filters"></div>
+      <div class="card mb20">
+        <div class="card-header"><div class="card-title">Invoice Aging Report</div><span style="font-size:12px;color:var(--text-muted)">Overdue invoices by days past due</span></div>
+        <div class="aging-grid" id="aging-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Invoices</div>
+          <div class="search-bar"><span>⌕</span><input type="text" placeholder="Search…" oninput="filterInvoices(this.value)"></div>
+        </div>
+        <table>
+          <thead><tr><th>Invoice #</th><th>Client</th><th>Due Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody id="invoices-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div class="page-header">
+        <div><div class="page-title">Reports</div><div class="page-subtitle">Payment history, renewals overview and financial summary</div></div>
+        <button class="btn btn-ghost" onclick="exportCSV()">↓ Export CSV</button>
+      </div>
+      <div class="stats-grid" id="report-stats"></div>
+
+      <!-- RENEWAL STATUS REPORT -->
+      <div class="card mb20">
+        <div class="card-header">
+          <div class="card-title">Renewals by Status</div>
+          <div id="renewal-report-summary" style="font-size:12px;color:var(--text-muted)"></div>
+        </div>
+        <div id="renewal-status-report"></div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Payment History</div></div>
+          <div id="payment-history"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Revenue by Client</div></div>
+          <div id="revenue-by-client"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPSELL -->
+    <div class="page" id="page-upsell">
+      <div class="page-header">
+        <div><div class="page-title">Upsell Pipeline</div><div class="page-subtitle">Track upsell opportunities across plan tiers and stages</div></div>
+        <button class="btn btn-primary" onclick="openUpsellModal()">＋ Add Opportunity</button>
+      </div>
+      <div class="upsell-stats" id="upsell-stats"></div>
+      <div class="kanban-board" id="kanban-board"></div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="page" id="page-alerts">
+      <div class="page-header">
+        <div><div class="page-title">Alerts</div><div class="page-subtitle">Upcoming renewals and overdue items</div></div>
+      </div>
+      <div class="alerts-list" id="alerts-list"></div>
+    </div>
+
+    <!-- EMAIL ALERTS -->
+    <div class="page" id="page-email-alerts">
+      <div class="page-header">
+        <div><div class="page-title">Email Alerts</div><div class="page-subtitle">Send automated alert emails for overdue invoices and upcoming renewals</div></div>
+        <button class="btn btn-primary" onclick="generateAllAlerts()">⚡ Generate All Alerts</button>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="card mb20">
+        <div class="card-header"><div class="card-title">⚙ Settings</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Anthropic API Key <span style="color:var(--red)">*</span></label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="anthropic-api-key" type="password" placeholder="sk-ant-…" style="flex:1;font-family:var(--mono);font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveApiKey()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Required for AI message generation.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Slack Webhook URL</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="global-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="flex:1;font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveGlobalSlackWebhook()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">No API key needed — just paste the webhook URL from your Slack app.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Mailgun API Key</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="mailgun-api-key" type="password" placeholder="key-…" style="flex:1;font-family:var(--mono);font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveMailgunKey()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">From <a href="https://app.mailgun.com/settings/api_security" target="_blank" style="color:var(--accent)">mailgun.com → API Security</a>. Enables real email sending.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Mailgun Domain</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="mailgun-domain" placeholder="mg.yourdomain.com" style="flex:1;font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveMailgunDomain()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Your verified Mailgun sending domain.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Default From Email</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="global-from-email" placeholder="alerts@yourdomain.com" style="flex:1;font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveFromEmail()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Must match a verified Mailgun sender address.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Mailgun Region</label>
+            <div style="display:flex;gap:8px">
+              <select class="form-input" id="mailgun-region" style="flex:1">
+                <option value="us">US (api.mailgun.net)</option>
+                <option value="eu">EU (api.eu.mailgun.net)</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="saveMailgunRegion()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Match the region where your domain is registered.</div>
+          </div>
+        </div>
+        <div id="settings-status" style="margin-top:14px;font-size:12.5px;padding-top:12px;border-top:1px solid var(--border-soft)"></div>
+      </div>
+
+      <!-- FINANCE LOCK SETTINGS -->
+      <div class="card mb20">
+        <div class="card-header"><div class="card-title">🔒 Finance Access Control</div></div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Protect financial figures (amounts, totals, revenue) with a PIN. Only authorized emails will see a hint when the lock is active.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Finance PIN</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="finance-pin-input" type="password" placeholder="New 4–8 digit PIN" style="flex:1;font-family:var(--mono);letter-spacing:4px" maxlength="8">
+              <button class="btn btn-ghost btn-sm" onclick="saveFinancePin()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Required to unlock financial view. Leave blank to disable PIN protection.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Authorized Emails</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="finance-auth-email-input" type="email" placeholder="user@company.com" style="flex:1">
+              <button class="btn btn-ghost btn-sm" onclick="addFinanceAuthEmail()">Add</button>
+            </div>
+            <div id="finance-auth-email-list" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Shown as a hint on the lock screen. Does not enforce login — just informs who to contact.</div>
+          </div>
+        </div>
+        <div id="finance-lock-settings-status" style="margin-top:12px;font-size:12.5px"></div>
+      </div>
+
+      <div class="email-config">
+        <div class="email-config-title">Recipients</div>
+        <div class="email-config-sub">Add the email addresses that should receive alert notifications.</div>
+        <div class="email-recipients">
+          <div class="form-group">
+            <label class="form-label">Add Email Address</label>
+            <input class="form-input" id="recipient-input" type="email" placeholder="e.g. accounts@yourcompany.com" onkeydown="if(event.key==='Enter')addRecipient()">
+          </div>
+          <button class="btn btn-primary" onclick="addRecipient()">＋ Add</button>
+        </div>
+        <div class="recipients-list" id="recipients-list"></div>
+      </div>
+
+      <!-- AUTO-ALERTS -->
+      <div class="card mb20">
+        <div class="card-header">
+          <div class="card-title">🔁 Auto-Alerts</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;color:var(--text-muted)" id="auto-alert-last-run"></span>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="auto-alert-enabled" onchange="toggleAutoAlert()" style="width:16px;height:16px;cursor:pointer">
+              Enabled
+            </label>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Automatically sends a Slack message when selected renewals haven't been contacted within the threshold. Runs once per day when the app is open.</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Check time</label>
+            <input class="form-input" type="time" id="auto-alert-time" value="09:00" onchange="saveAutoAlertSettings()">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">App must be open at this time to trigger.</div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Stale threshold (days)</label>
+            <input class="form-input" type="number" id="auto-alert-days" value="7" min="1" max="30" onchange="saveAutoAlertSettings()">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Filter by renewal status</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="auto-alert-status-filter">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+              <input type="checkbox" value="Overdue" class="auto-status-cb" onchange="renderAutoAlertRenewalPicker()" style="cursor:pointer"> Overdue
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+              <input type="checkbox" value="Due Soon" class="auto-status-cb" onchange="renderAutoAlertRenewalPicker()" style="cursor:pointer"> Due Soon
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+              <input type="checkbox" value="Upcoming" class="auto-status-cb" onchange="renderAutoAlertRenewalPicker()" style="cursor:pointer"> Upcoming
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+              <input type="checkbox" value="Renewed" class="auto-status-cb" onchange="renderAutoAlertRenewalPicker()" style="cursor:pointer"> Renewed
+            </label>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Leave all unchecked to include all statuses (except Renewed).</div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label class="form-label" style="margin:0">Select renewals to monitor</label>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="autoAlertSelectAll()">All</button>
+              <button class="btn btn-ghost btn-sm" onclick="autoAlertSelectNone()">None</button>
+            </div>
+          </div>
+          <div id="auto-alert-renewal-picker" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px"></div>
+        </div>
+
+        <div id="auto-alert-status" style="margin-top:4px;font-size:12.5px;display:flex;align-items:center;gap:12px">
+          <span id="auto-alert-status-text"></span>
+          <button class="btn btn-ghost btn-sm" onclick="runAutoAlertNow()">▶ Run Now</button>
+        </div>
+      </div>
+
+      <div id="email-alerts-content">
+        <div class="no-alerts-msg">
+          <div style="font-size:28px;margin-bottom:8px;opacity:0.3">✉</div>
+          <div style="font-weight:500;margin-bottom:4px">No alerts generated yet</div>
+          <div style="font-size:12px">Click "Generate All Alerts" to create AI-drafted emails for all outstanding items.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div class="page" id="page-import">
+      <div class="page-header">
+        <div><div class="page-title">Import Data</div><div class="page-subtitle">Upload a CSV or Excel file to import clients or invoices</div></div>
+      </div>
+
+      <div class="import-tabs">
+        <button class="import-tab active" onclick="switchImportTab('clients')">◎ Clients</button>
+        <button class="import-tab" onclick="switchImportTab('invoices')">$ Invoices</button>
+      </div>
+
+      <div id="import-step-indicator" class="step-indicator">
+        <div class="step active" id="step-1"><div class="step-num">1</div> Upload File</div>
+        <div class="step-line"></div>
+        <div class="step" id="step-2"><div class="step-num">2</div> Map Columns</div>
+        <div class="step-line"></div>
+        <div class="step" id="step-3"><div class="step-num">3</div> Preview & Import</div>
+      </div>
+
+      <!-- STEP 1: Upload -->
+      <div id="import-step-1">
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+          ondragover="event.preventDefault();this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="handleFileDrop(event)">
+          <div class="drop-icon">⇪</div>
+          <div class="drop-title">Drop your file here or click to browse</div>
+          <div class="drop-sub">Supports CSV and Excel files. Download a template below to get started.</div>
+          <div class="drop-formats">
+            <span class="format-tag">.csv</span>
+            <span class="format-tag">.xlsx</span>
+            <span class="format-tag">.xls</span>
+          </div>
+        </div>
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(this)">
+
+        <div style="margin-top:20px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text-muted)">↓ Download Templates</div>
+          <div class="template-row">
+            <div class="template-card" onclick="downloadTemplate('clients')">
+              <div class="template-card-icon">◎</div>
+              <div class="template-card-title">Clients Template</div>
+              <div class="template-card-sub">name, contact, email, phone, plan, status, since, renewal_type, renewal_date, renewal_amount</div>
+            </div>
+            <div class="template-card" onclick="downloadTemplate('invoices')">
+              <div class="template-card-icon">$</div>
+              <div class="template-card-title">Invoices Template</div>
+              <div class="template-card-sub">client_name, invoice_number, due_date, amount, status</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Map Columns -->
+      <div id="import-step-2" style="display:none">
+        <div class="mapping-section">
+          <div class="mapping-title">Map Your Columns</div>
+          <div class="mapping-sub" id="mapping-sub">Match the columns in your file to the fields ClientFlow expects.</div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px 14px;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.5px">ClientFlow Field</div>
+            <div></div>
+            <div style="font-size:11px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.5px">Your Column</div>
+          </div>
+          <div class="mapping-grid" id="mapping-grid"></div>
+        </div>
+        <div class="import-actions">
+          <button class="btn btn-ghost" onclick="resetImport()">← Back</button>
+          <button class="btn btn-primary" onclick="goToPreview()">Preview Import →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Preview -->
+      <div id="import-step-3" style="display:none">
+        <div class="import-summary" id="import-summary"></div>
+        <div class="card mb20">
+          <div class="card-header"><div class="card-title">Preview <span id="preview-count" style="color:var(--text-muted);font-weight:400"></span></div>
+            <div style="font-size:12px;color:var(--text-muted)">Showing first 20 rows · all rows will be imported</div>
+          </div>
+          <div class="preview-table-wrap"><table><thead id="preview-thead"></thead><tbody id="preview-tbody"></tbody></table></div>
+        </div>
+        <div class="import-actions">
+          <button class="btn btn-ghost" onclick="goToMapping()">← Back</button>
+          <button class="btn btn-primary" onclick="commitImport()" id="commit-btn">⇪ Import Data</button>
+        </div>
+      </div>
+
+      <!-- DATA INSPECTOR -->
+      <div style="margin-top:40px;padding-top:28px;border-top:2px dashed var(--border)">
+        <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.5px">🔍 Data Inspector</div>
+        <div id="data-inspector-stats" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="refreshInspector()">↺ Refresh</button>
+          <button class="btn btn-ghost" onclick="exportRawJSON()">↓ Export current data (JSON)</button>
+          <button class="btn btn-danger" onclick="clearInvoicesData()" style="margin-left:auto">🗑 Clear invoices only</button>
+          <button class="btn btn-danger" onclick="clearAllData()">⚠ Clear all data & reset</button>
+        </div>
+        <div id="data-inspector-preview" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- CLIENT DETAIL PANEL -->
+<div class="detail-overlay" id="detail-overlay" onclick="closeDetail()"></div>
+<div class="detail-panel" id="detail-panel">
+  <div class="detail-header">
+    <div>
+      <div class="detail-title" id="dp-name">—</div>
+      <div class="detail-subtitle" id="dp-sub">—</div>
+    </div>
+    <div class="detail-close" onclick="closeDetail()">✕</div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Contact Info</div>
+    <div id="dp-contact"></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Renewals</div>
+    <div id="dp-renewals"></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Invoices</div>
+    <div id="dp-invoices"></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Internal Notes</div>
+    <textarea class="notes-area" id="dp-notes" placeholder="Add notes about this client…"></textarea>
+    <div class="notes-save"><button class="btn btn-primary btn-sm" onclick="saveNote()">Save Note</button></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<!-- RENEWAL DETAIL PANEL -->
+<div class="detail-overlay" id="rdp-overlay" onclick="closeRenewalDetail()"></div>
+<div class="renewal-detail-panel" id="rdp-panel">
+  <div class="detail-header">
+    <div>
+      <div class="detail-title" id="rdp-client">—</div>
+      <div class="detail-subtitle" id="rdp-subtitle">—</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-ghost btn-sm" id="rdp-edit-btn" onclick="editRenewalFromPanel()">Edit</button>
+      <div class="detail-close" onclick="closeRenewalDetail()">✕</div>
+    </div>
+  </div>
+
+  <!-- Stale contact alert -->
+  <div id="rdp-stale-alert" style="padding:16px 24px 0;display:none">
+    <div class="stale-alert">
+      <div style="font-size:20px">⚠️</div>
+      <div class="alert-text">
+        <div class="stale-alert-text">No contact in over 7 days</div>
+        <div class="stale-alert-sub" id="rdp-stale-sub"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Renewal Info</div>
+    <div id="rdp-info"></div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Last Contact</div>
+    <div class="last-contact-row">
+      <input class="form-input" type="date" id="rdp-last-contact" style="flex:1" onchange="saveLastContact()">
+      <button class="btn btn-primary btn-sm" onclick="setContactToday()">Today</button>
+    </div>
+    <div id="rdp-last-contact-label" style="font-size:12px;color:var(--text-muted);margin-top:6px"></div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Comments</div>
+    <div id="rdp-comments" style="margin-bottom:12px"></div>
+    <textarea class="notes-area" id="rdp-new-comment" placeholder="Add a comment…" style="min-height:70px"></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="addRenewalComment()">Add Comment</button>
+    </div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Send Alert</div>
+    <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px">AI will draft a follow-up message based on the renewal context.</div>
+
+    <div style="margin-bottom:14px">
+      <div class="form-label" style="margin-bottom:6px">Slack Webhook URL</div>
+      <div class="slack-webhook-row">
+        <input class="form-input" id="rdp-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="flex:1">
+        <button class="btn btn-ghost btn-sm" onclick="saveSlackWebhook()">Save</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px">
+      <div class="form-label" style="margin-bottom:6px">From (your email)</div>
+      <input class="form-input" id="rdp-email-from" placeholder="you@company.com">
+    </div>
+
+    <div style="margin-bottom:10px">
+      <div class="form-label" style="margin-bottom:6px">Email Recipients</div>
+      <input class="form-input" id="rdp-email-to" placeholder="email1@company.com, email2@company.com">
+    </div>
+
+    <div id="rdp-generated-msg" style="display:none;margin-bottom:12px">
+      <div class="form-label" style="margin-bottom:6px">Generated Message</div>
+      <textarea class="notes-area" id="rdp-msg-text" style="min-height:100px"></textarea>
+    </div>
+
+    <div class="notify-actions" id="rdp-notify-actions">
+      <button class="btn btn-ghost" id="rdp-gen-btn" onclick="generateRenewalAlert()">⚡ Generate Message</button>
+      <button class="btn btn-primary" id="rdp-send-email-btn" style="display:none" onclick="sendRenewalEmail()">✉ Send Email</button>
+      <button class="btn btn-success" id="rdp-send-slack-btn" style="display:none" onclick="sendRenewalSlack()">💬 Send to Slack</button>
+    </div>
+    <div id="rdp-sending-status" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- INVOICE FOLLOWUP PANEL -->
+<div class="detail-overlay" id="idp-overlay" onclick="closeInvoiceDetail()"></div>
+<div class="renewal-detail-panel" id="idp-panel">
+  <div class="detail-header">
+    <div>
+      <div class="detail-title" id="idp-title">—</div>
+      <div class="detail-subtitle" id="idp-subtitle">—</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-ghost btn-sm" onclick="markPaidFromPanel()">✓ Mark Paid</button>
+      <div class="detail-close" onclick="closeInvoiceDetail()">✕</div>
+    </div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Invoice Info</div>
+    <div id="idp-info"></div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Send Follow-up</div>
+    <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px">AI will draft a payment follow-up based on the invoice details.</div>
+
+    <div style="margin-bottom:10px">
+      <div class="form-label" style="margin-bottom:6px">From (your email)</div>
+      <input class="form-input" id="idp-email-from" placeholder="you@company.com">
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="form-label" style="margin-bottom:6px">To (recipients)</div>
+      <input class="form-input" id="idp-email-to" placeholder="client@company.com, manager@company.com">
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="form-label" style="margin-bottom:6px">Slack Webhook URL</div>
+      <div class="slack-webhook-row">
+        <input class="form-input" id="idp-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="flex:1">
+        <button class="btn btn-ghost btn-sm" onclick="saveInvoiceSlackWebhook()">Save</button>
+      </div>
+    </div>
+
+    <div id="idp-generated-msg" style="display:none;margin-bottom:12px">
+      <div class="form-label" style="margin-bottom:6px">Generated Message</div>
+      <textarea class="notes-area" id="idp-msg-text" style="min-height:110px"></textarea>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">You can edit before sending.</div>
+    </div>
+
+    <div class="notify-actions">
+      <button class="btn btn-ghost" id="idp-gen-btn" onclick="generateInvoiceFollowup()">⚡ Generate Message</button>
+      <button class="btn btn-primary" id="idp-send-email-btn" style="display:none" onclick="sendInvoiceEmail()">✉ Send Email</button>
+      <button class="btn btn-success" id="idp-send-slack-btn" style="display:none" onclick="sendInvoiceSlack()">💬 Send to Slack</button>
+    </div>
+    <div id="idp-sending-status" style="margin-top:8px"></div>
+  </div>
+
+  <div class="detail-section">
+    <div class="detail-section-title">Notes</div>
+    <div id="idp-comments" style="margin-bottom:12px"></div>
+    <textarea class="notes-area" id="idp-new-comment" placeholder="Add a note about this invoice…" style="min-height:60px"></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="addInvoiceComment()">Add Note</button>
+    </div>
+  </div>
+</div>
+<div class="upsell-detail-overlay" id="upsell-detail-overlay" onclick="closeUpsellDetail()"></div>
+<div class="upsell-detail-panel" id="upsell-detail-panel">
+  <div class="detail-header">
+    <div>
+      <div class="detail-title" id="udp-client">—</div>
+      <div class="detail-subtitle" id="udp-plans">—</div>
+    </div>
+    <div class="detail-close" onclick="closeUpsellDetail()">✕</div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Stage</div>
+    <div id="udp-stages" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0"></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Details</div>
+    <div id="udp-details"></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Target Plans</div>
+    <div class="plan-picker" id="udp-plan-picker" style="padding:4px 0"></div>
+    <div style="margin-top:10px;display:flex;justify-content:flex-end">
+      <button class="btn btn-primary btn-sm" onclick="saveUpsellPlans()">Save Plans</button>
+    </div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Notes</div>
+    <textarea class="notes-area" id="udp-notes" placeholder="Add notes about this opportunity…"></textarea>
+    <div class="notes-save"><button class="btn btn-primary btn-sm" onclick="saveUpsellNote()">Save Note</button></div>
+  </div>
+  <div class="detail-section">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-danger btn-sm" onclick="deleteUpsell()">✕ Delete Opportunity</button>
+      <button class="btn btn-success btn-sm" onclick="markUpsellWon()">✓ Mark as Won</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────────────
+const DEFAULT_DATA = {
+  clients: [
+    { id:1, name:'Apex Solutions', email:'billing@apex.com', phone:'(555) 201-4400', plan:['C3ntro','Parvada'], status:'Active', since:'2022-03-15', contact:'Jason Lee', notes:'' },
+    { id:2, name:'Nova Creative', email:'hello@novacreative.io', phone:'(555) 842-7731', plan:['Consola'], status:'Active', since:'2023-01-08', contact:'Maria Santos', notes:'' },
+    { id:3, name:'Blueridge Corp', email:'accounts@blueridge.com', phone:'(555) 399-0122', plan:['Aliado'], status:'At Risk', since:'2021-07-20', contact:'Kevin Park', notes:'Has escalated payment concerns. Follow up before renewal.' },
+    { id:4, name:'Torchlight Inc', email:'finance@torchlight.co', phone:'(555) 610-5588', plan:['Reportes','Consola'], status:'Active', since:'2023-09-01', contact:'Diane Moore', notes:'' },
+    { id:5, name:'Greenfield Ltd', email:'admin@greenfield.net', phone:'(555) 774-3344', plan:['C3ntro'], status:'Inactive', since:'2020-11-15', contact:'Tom Walsh', notes:'Potential churn — consider outreach.' },
+  ],
+  renewals: [
+    { id:1, clientId:1, type:'Annual Contract', date:'2026-03-20', amount:12000, status:'Due Soon' },
+    { id:2, clientId:2, type:'SaaS License', date:'2026-04-05', amount:3600, status:'Upcoming' },
+    { id:3, clientId:3, type:'Support Plan', date:'2026-03-01', amount:1200, status:'Overdue' },
+    { id:4, clientId:4, type:'Annual Contract', date:'2026-06-15', amount:4800, status:'Upcoming' },
+    { id:5, clientId:5, type:'SaaS License', date:'2025-12-01', amount:9600, status:'Renewed' },
+  ],
+  invoices: [
+    { id:1, clientId:1, number:'INV-0041', dueDate:'2026-01-20', amount:4500, status:'Overdue' },
+    { id:2, clientId:2, number:'INV-0042', dueDate:'2026-03-25', amount:900, status:'Pending' },
+    { id:3, clientId:3, number:'INV-0043', dueDate:'2025-12-15', amount:300, status:'Overdue' },
+    { id:4, clientId:4, number:'INV-0044', dueDate:'2026-04-01', amount:1200, status:'Pending' },
+    { id:5, clientId:1, number:'INV-0039', dueDate:'2026-02-15', amount:4500, status:'Paid' },
+    { id:6, clientId:5, number:'INV-0040', dueDate:'2026-02-01', amount:2400, status:'Paid' },
+  ],
+  nextId: 7,
+  upsells: [
+    { id:10, clientId:1, targetPlans:['Reportes'], stage:'Identified',   value:2400, notes:'Currently on C3ntro+Parvada, strong reporting use case.', createdAt:'2026-02-10', updatedAt:'2026-02-10' },
+    { id:11, clientId:2, targetPlans:['Parvada'],  stage:'Contacted',    value:1800, notes:'Reached out via email, awaiting reply.', createdAt:'2026-02-18', updatedAt:'2026-02-20' },
+    { id:12, clientId:3, targetPlans:['C3ntro'],   stage:'Proposal',     value:3600, notes:'Proposal sent 28 Feb. Decision expected this week.', createdAt:'2026-02-01', updatedAt:'2026-02-28' },
+    { id:13, clientId:4, targetPlans:['Aliado'],   stage:'Negotiating',  value:1200, notes:'Discussing pricing on Aliado add-on.', createdAt:'2026-01-15', updatedAt:'2026-03-01' },
+    { id:14, clientId:5, targetPlans:['Consola','Reportes'], stage:'Identified', value:5000, notes:'Inactive client, potential re-engagement with new plans.', createdAt:'2026-03-01', updatedAt:'2026-03-01' },
+  ]
+};
+
+let data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+let currentPage = 'dashboard';
+let renewalFilter = 'All', invoiceFilter = 'All';
+let clientSearch = '', renewalSearch = '', invoiceSearch = '';
+let detailClientId = null;
+
+// ─── PERSISTENCE ──────────────────────────────────────────────────────────────
+// ─── STORAGE SHIM (works in Claude artifacts + plain browser) ────────────────
+const _claudeStorage = (function() {
+  try { return (window.__claudeStorage || null); } catch(e) { return null; }
+})();
+
+const storage = {
+  async get(key) {
+    if (_claudeStorage) {
+      try { return await _claudeStorage.get(key); } catch(e) {}
+    }
+    try { const v = localStorage.getItem(key); return v ? { value: v } : null; } catch(e) { return null; }
+  },
+  async set(key, value) {
+    if (_claudeStorage) {
+      try { await _claudeStorage.set(key, value); return; } catch(e) {}
+    }
+    try { localStorage.setItem(key, value); } catch(e) {}
+  }
+};
+
+async function saveData() {
+  try { await storage.set('clientflow-data', JSON.stringify(data)); } catch(e) {}
+}
+async function loadData() {
+  try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e) {}
+}
+
+// ─── AUTO-STATUS UPDATE ───────────────────────────────────────────────────────
+function autoUpdateStatuses() {
+  let changed = false;
+  data.renewals.forEach(r => {
+    if (r.statusLocked || r.status === 'Renewed') return;
+    const d = daysUntil(r.date);
+    const next = d < 0 ? 'Overdue' : d <= 14 ? 'Due Soon' : 'Upcoming';
+    if (next !== r.status) { r.status = next; changed = true; }
+  });
+  data.invoices.forEach(i => {
+    if (i.statusLocked || i.status === 'Paid') return;
+    const d = daysUntil(i.dueDate);
+    const next = d < 0 ? 'Overdue' : d <= 14 ? 'Due Soon' : 'Pending';
+    if (next !== i.status) { i.status = next; changed = true; }
+  });
+  if (changed) { saveData(); updateBadges(); }
+}
+
+// Re-run status updates every 60 seconds to stay current within a session
+setInterval(() => {
+  autoUpdateStatuses();
+  rerenderCurrentPage();
+}, 60000);
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const clientName = id => { const c = data.clients.find(c=>c.id===id); return c ? c.name : 'Unknown'; };
+const fmt = n => '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits:0});
+// Finance-aware fmt: masks when locked
+function fmtF(n) { return financeUnlocked() ? fmt(n) : '••••'; }
+
+// ─── FINANCE LOCK ─────────────────────────────────────────────────────────────
+function getFinancePin() { return localStorage.getItem('finance-pin') || ''; }
+function getFinanceAuthEmails() { try { return JSON.parse(localStorage.getItem('finance-auth-emails') || '[]'); } catch(e) { return []; } }
+function financeUnlocked() { return !getFinancePin() || sessionStorage.getItem('finance-unlocked') === '1'; }
+
+function updateFinanceLockBtn() {
+  const btn = document.getElementById('finance-lock-btn');
+  const icon = document.getElementById('finance-lock-icon');
+  const label = document.getElementById('finance-lock-label');
+  if (!btn) return;
+  const hasPin = !!getFinancePin();
+  if (!hasPin) {
+    btn.style.opacity = '0.4';
+    btn.style.pointerEvents = 'none';
+    icon.textContent = '🔓';
+    label.textContent = 'No PIN set';
+    return;
+  }
+  btn.style.opacity = '1';
+  btn.style.pointerEvents = '';
+  if (financeUnlocked()) {
+    icon.textContent = '🔓';
+    label.textContent = 'Finances visible';
+    btn.style.borderColor = 'var(--green)';
+    btn.style.color = 'var(--green)';
+  } else {
+    icon.textContent = '🔒';
+    label.textContent = 'Finances hidden';
+    btn.style.borderColor = 'var(--red)';
+    btn.style.color = 'var(--red)';
+  }
+}
+
+function toggleFinanceLock() {
+  if (!getFinancePin()) return;
+  if (financeUnlocked()) {
+    // Lock it
+    sessionStorage.removeItem('finance-unlocked');
+    updateFinanceLockBtn();
+    rerenderCurrentPage();
+    toast('Financial data hidden 🔒');
+  } else {
+    // Show unlock modal
+    openFinanceModal('unlock');
+  }
+}
+
+function openFinanceModal(mode) {
+  const el = document.getElementById('finance-modal-overlay');
+  el.style.display = 'flex';
+  const authEmails = getFinanceAuthEmails();
+  if (mode === 'unlock') {
+    document.getElementById('finance-modal-content').innerHTML = `
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:36px;margin-bottom:8px">🔒</div>
+        <div style="font-size:17px;font-weight:600;margin-bottom:6px">Finance PIN Required</div>
+        <div style="font-size:13px;color:var(--text-muted)">Enter the PIN to view financial data.</div>
+        ${authEmails.length ? `<div style="margin-top:10px;font-size:12px;color:var(--text-muted)">Authorized: ${authEmails.join(', ')}</div>` : ''}
+      </div>
+      <input id="finance-pin-entry" type="password" class="form-input" placeholder="Enter PIN" maxlength="8"
+        style="text-align:center;font-size:20px;letter-spacing:8px;margin-bottom:12px"
+        onkeydown="if(event.key==='Enter')submitFinancePin()">
+      <div id="finance-pin-error" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeFinanceModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitFinancePin()">Unlock</button>
+      </div>`;
+    setTimeout(() => document.getElementById('finance-pin-entry')?.focus(), 50);
+  } else if (mode === 'change-pin') {
+    const newVal = document.getElementById('finance-pin-input').value.trim();
+    document.getElementById('finance-modal-content').innerHTML = `
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:36px;margin-bottom:8px">🔑</div>
+        <div style="font-size:17px;font-weight:600;margin-bottom:6px">Confirm Current PIN</div>
+        <div style="font-size:13px;color:var(--text-muted)">Enter your current PIN to set a new one.</div>
+      </div>
+      <input id="finance-old-pin-entry" type="password" class="form-input" placeholder="Current PIN" maxlength="8"
+        style="text-align:center;font-size:20px;letter-spacing:8px;margin-bottom:12px"
+        onkeydown="if(event.key==='Enter')submitChangePinConfirm('${newVal}')">
+      <div id="finance-pin-error" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeFinanceModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="submitChangePinConfirm('${newVal}')">Confirm</button>
+      </div>`;
+    setTimeout(() => document.getElementById('finance-old-pin-entry')?.focus(), 50);
+  }
+}
+
+function submitChangePinConfirm(newVal) {
+  const entered = document.getElementById('finance-old-pin-entry').value;
+  if (entered !== getFinancePin()) {
+    document.getElementById('finance-pin-error').textContent = 'Incorrect current PIN. Try again.';
+    document.getElementById('finance-old-pin-entry').value = '';
+    document.getElementById('finance-old-pin-entry').focus();
+    return;
+  }
+  // Old PIN correct — apply new PIN
+  localStorage.setItem('finance-pin', newVal);
+  sessionStorage.setItem('finance-unlocked', '1');
+  document.getElementById('finance-pin-input').value = '';
+  closeFinanceModal();
+  updateFinanceLockBtn();
+  renderFinanceLockSettings();
+  toast(newVal ? 'Finance PIN updated ✓' : 'Finance PIN removed ✓');
+}
+
+function closeFinanceModal() {
+  document.getElementById('finance-modal-overlay').style.display = 'none';
+}
+
+function submitFinancePin() {
+  const entered = document.getElementById('finance-pin-entry').value;
+  if (entered === getFinancePin()) {
+    sessionStorage.setItem('finance-unlocked', '1');
+    closeFinanceModal();
+    updateFinanceLockBtn();
+    rerenderCurrentPage();
+    toast('Financial data unlocked 🔓');
+  } else {
+    document.getElementById('finance-pin-error').textContent = 'Incorrect PIN. Try again.';
+    document.getElementById('finance-pin-entry').value = '';
+    document.getElementById('finance-pin-entry').focus();
+  }
+}
+
+function rerenderCurrentPage() {
+  renderPage(currentPage);
+  // Also refresh detail panels if open
+  const rdp = document.getElementById('renewal-detail-panel');
+  const idp = document.getElementById('invoice-detail-panel');
+  if (rdp && rdp.classList.contains('open') && currentRenewalId) openRenewalDetail(currentRenewalId);
+  if (idp && idp.classList.contains('open') && currentInvoiceId) openInvoiceDetail(currentInvoiceId);
+}
+
+// ─── FINANCE LOCK SETTINGS ───────────────────────────────────────────────────
+function saveFinancePin() {
+  const val = document.getElementById('finance-pin-input').value.trim();
+  if (val && (val.length < 4 || !/^\d+$/.test(val))) { toast('PIN must be 4–8 digits ✗'); return; }
+  if (!val && !getFinancePin()) { toast('No PIN is currently set'); return; }
+  // If a PIN already exists, require the old one first
+  if (getFinancePin()) {
+    openFinanceModal('change-pin'); // new val is read from input inside the modal
+    return;
+  }
+  // No existing PIN — set freely
+  localStorage.setItem('finance-pin', val);
+  sessionStorage.setItem('finance-unlocked', '1');
+  document.getElementById('finance-pin-input').value = '';
+  updateFinanceLockBtn();
+  renderFinanceLockSettings();
+  toast('Finance PIN set ✓');
+}
+
+function addFinanceAuthEmail() {
+  const input = document.getElementById('finance-auth-email-input');
+  const email = input.value.trim().toLowerCase();
+  if (!email || !email.includes('@')) { toast('Enter a valid email ✗'); return; }
+  const list = getFinanceAuthEmails();
+  if (list.includes(email)) { toast('Already in list'); return; }
+  list.push(email);
+  localStorage.setItem('finance-auth-emails', JSON.stringify(list));
+  input.value = '';
+  renderFinanceLockSettings();
+  toast('Authorized email added ✓');
+}
+
+function removeFinanceAuthEmail(email) {
+  const list = getFinanceAuthEmails().filter(e => e !== email);
+  localStorage.setItem('finance-auth-emails', JSON.stringify(list));
+  renderFinanceLockSettings();
+}
+
+function renderFinanceLockSettings() {
+  const listEl = document.getElementById('finance-auth-email-list');
+  const statusEl = document.getElementById('finance-lock-settings-status');
+  if (!listEl) return;
+  const emails = getFinanceAuthEmails();
+  listEl.innerHTML = emails.map(e => `
+    <div style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 12px;font-size:12px">
+      ${e}
+      <button onclick="removeFinanceAuthEmail('${e}')" style="background:none;border:none;cursor:pointer;color:var(--text-soft);font-size:14px;line-height:1;padding:0 2px">×</button>
+    </div>`).join('');
+  const hasPin = !!getFinancePin();
+  if (statusEl) statusEl.innerHTML = hasPin
+    ? `<span style="color:var(--green)">✓ PIN is set · ${emails.length} authorized email${emails.length!==1?'s':''} configured.</span>`
+    : `<span style="color:var(--text-muted)">No PIN set — financial data is visible to everyone.</span>`;
+}
+const daysUntil = d => { const now = new Date(); now.setHours(0,0,0,0); return Math.round((new Date(d) - now)/86400000); };
+const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const daysLabel = d => { const n=daysUntil(d); return n<0?Math.abs(n)+'d overdue':n===0?'Due today':'in '+n+'d'; };
+const greet = () => { const h=new Date().getHours(); return h<12?'Good morning 👋':h<17?'Good afternoon 👋':'Good evening 👋'; };
+
+function togglePlanChip(el, plan) {
+  el.classList.toggle('selected');
+}
+
+function statusBadge(s) {
+  const m = {Active:'badge-green',Paid:'badge-green',Renewed:'badge-green',Pending:'badge-amber','Due Soon':'badge-amber',Upcoming:'badge-blue',Overdue:'badge-red','At Risk':'badge-red',Inactive:'badge-gray'};
+  return `<span class="badge ${m[s]||'badge-gray'}"><span class="badge-dot"></span>${s}</span>`;
+}
+
+function updateBadges() {
+  const rN = data.renewals.filter(r=>r.status==='Overdue'||r.status==='Due Soon').length;
+  const bR = document.getElementById('renewals-badge'); bR.textContent=rN; bR.style.display=rN?'inline':'none';
+  const iN = data.invoices.filter(i=>i.status==='Overdue').length;
+  const bI = document.getElementById('invoices-badge'); bI.textContent=iN; bI.style.display=iN?'inline':'none';
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>{ if(n.getAttribute('onclick').includes("'"+page+"'")) n.classList.add('active'); });
+  currentPage = page; renderPage(page);
+}
+function renderPage(p) {
+  if(p==='dashboard') renderDashboard();
+  if(p==='clients') renderClients();
+  if(p==='renewals') renderRenewals();
+  if(p==='invoices') renderInvoices();
+  if(p==='reports') renderReports();
+  if(p==='alerts') renderAlerts();
+  if(p==='email-alerts') { renderEmailAlerts(); restoreSettings(); renderFinanceLockSettings(); }
+  if(p==='upsell') renderUpsell();
+  if(p==='import') resetImport();
+  updateBadges();
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+function renderDashboard() {
+  document.getElementById('dash-greeting').textContent = greet();
+  const active = data.clients.filter(c=>c.status==='Active').length;
+  const pending = data.renewals.filter(r=>['Due Soon','Overdue','Upcoming'].includes(r.status)).length;
+  const outstanding = data.invoices.filter(i=>i.status!=='Paid').reduce((s,i)=>s+i.amount,0);
+  const collected = data.invoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.amount,0);
+  document.getElementById('dashboard-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Active Clients</div><div class="stat-value">${active}</div><div class="stat-delta">${data.clients.length} total accounts</div></div>
+    <div class="stat-card"><div class="stat-label">Pending Renewals</div><div class="stat-value amber">${pending}</div><div class="stat-delta">${data.renewals.filter(r=>r.status==='Overdue').length} overdue</div></div>
+    <div class="stat-card"><div class="stat-label">Outstanding A/P</div><div class="stat-value red">${fmtF(outstanding)}</div><div class="stat-delta">${data.invoices.filter(i=>i.status==='Overdue').length} invoices overdue</div></div>
+    <div class="stat-card"><div class="stat-label">Collected (Paid)</div><div class="stat-value green">${fmtF(collected)}</div><div class="stat-delta">${data.invoices.filter(i=>i.status==='Paid').length} invoices paid</div></div>`;
+  const upR = data.renewals
+    .filter(r => r.status === 'Overdue' || r.status === 'Due Soon')
+    .sort((a,b) => (a.status==='Overdue'?0:1) - (b.status==='Overdue'?0:1) || new Date(a.date)-new Date(b.date))
+    .slice(0, 5);
+  document.getElementById('dash-renewal-count').textContent = upR.length + ' urgent';
+  document.querySelector('.card-title').textContent = 'Overdue & Due Soon';
+  document.getElementById('dash-renewals-table').innerHTML = upR.length
+    ? `<table><tbody>${upR.map(r=>`<tr style="cursor:pointer" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100)"><td><div class="client-name">${clientName(r.clientId)}</div><div class="client-email">${r.type}</div></td><td>${fmtDate(r.date)}</td><td>${statusBadge(r.status)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No overdue or due-soon renewals</div></div>`;
+  const ovI = data.invoices.filter(i=>i.status!=='Paid').slice(0,5);
+  document.getElementById('dash-invoice-count').textContent = fmtF(ovI.reduce((s,i)=>s+i.amount,0));
+  document.getElementById('dash-invoices-table').innerHTML = ovI.length
+    ? `<table><tbody>${ovI.map(i=>`<tr style="cursor:pointer" onclick="navigate('invoices')"><td><div class="client-name">${clientName(i.clientId)}</div><div class="client-email">${i.number}</div></td><td>${fmtDate(i.dueDate)}</td><td>${statusBadge(i.status)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">All invoices paid!</div></div>`;
+}
+
+// ─── CLIENTS ─────────────────────────────────────────────────────────────────
+function filterClients(q) { clientSearch=q.toLowerCase(); renderClients(); }
+function renderClients() {
+  const rows = data.clients.filter(c=>!clientSearch||c.name.toLowerCase().includes(clientSearch)||(c.email||'').toLowerCase().includes(clientSearch));
+  // Update subtitle with live count
+  const sub = document.querySelector('#page-clients .page-subtitle');
+  if (sub) sub.textContent = `${data.clients.length} client${data.clients.length!==1?'s':''} total · Click a row to view details`;
+  document.getElementById('clients-tbody').innerHTML = rows.length
+    ? rows.map(c=>`<tr onclick="openDetail(${c.id})" style="cursor:pointer">
+        <td><div class="client-name">${c.name}</div><div class="client-email">${c.contact}</div></td>
+        <td><div class="client-email">${c.email}</div><div class="client-email">${c.phone}</div></td>
+        <td><div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div></td>
+        <td>${statusBadge(c.status)}</td>
+        <td class="mono" style="color:var(--text-muted)">${fmtDate(c.since)}</td>
+        <td><div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="editClient(${c.id},event)">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteItem('clients',${c.id},event)">✕</button>
+        </div></td>
+      </tr>`).join('')
+    : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No clients yet</div></div></td></tr>`;
+}
+function editClient(id,e) { e.stopPropagation(); openModal('client', data.clients.find(x=>x.id===id)); }
+
+// ─── CLIENT DETAIL PANEL ─────────────────────────────────────────────────────
+function openDetail(id) {
+  const c = data.clients.find(x=>x.id===id);
+  if (!c) return;
+  detailClientId = id;
+  document.getElementById('dp-name').textContent = c.name;
+  document.getElementById('dp-sub').textContent = (Array.isArray(c.plan)?c.plan:[c.plan]).join(', ') + ' · ' + c.status;
+  document.getElementById('dp-contact').innerHTML = `
+    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c.contact}</span></div>
+    <div class="detail-row"><span class="detail-label">Email</span><span class="detail-val">${c.email}</span></div>
+    <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-val">${c.phone}</span></div>
+    <div class="detail-row"><span class="detail-label">Since</span><span class="detail-val">${fmtDate(c.since)}</span></div>`;
+  const cR = data.renewals.filter(r=>r.clientId===id);
+  document.getElementById('dp-renewals').innerHTML = cR.length
+    ? cR.map(r=>`<div class="detail-row"><span class="detail-label">${r.type}<br><small style="color:var(--text-soft)">${fmtDate(r.date)}</small></span>${statusBadge(r.status)}</div>`).join('')
+    : `<div style="font-size:12px;color:var(--text-soft)">No renewals on file.</div>`;
+  const cI = data.invoices.filter(i=>i.clientId===id);
+  document.getElementById('dp-invoices').innerHTML = cI.length
+    ? cI.map(i=>`<div class="detail-row"><span class="detail-label">${i.number}<br><small style="color:var(--text-soft)">${fmtDate(i.dueDate)}</small></span><span class="detail-val">${fmtF(i.amount)} ${statusBadge(i.status)}</span></div>`).join('')
+    : `<div style="font-size:12px;color:var(--text-soft)">No invoices on file.</div>`;
+  document.getElementById('dp-notes').value = c.notes || '';
+  document.getElementById('detail-panel').classList.add('open');
+  document.getElementById('detail-overlay').classList.add('open');
+}
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+  document.getElementById('detail-overlay').classList.remove('open');
+  detailClientId = null;
+}
+function saveNote() {
+  const c = data.clients.find(x=>x.id===detailClientId);
+  if (c) { c.notes = document.getElementById('dp-notes').value; saveData(); toast('Note saved ✓'); }
+}
+
+// ─── RENEWALS ────────────────────────────────────────────────────────────────
+function filterRenewals(q) { renewalSearch=q.toLowerCase(); renderRenewals(); }
+function setRenewalFilter(f) { renewalFilter=f; renderRenewals(); }
+function renderRenewals() {
+  document.getElementById('renewal-filters').innerHTML = ['All','Due Soon','Overdue','Upcoming','Renewed'].map(s=>
+    `<button class="filter-btn ${renewalFilter===s?'active':''}" onclick="setRenewalFilter('${s}')">${s}</button>`).join('');
+  const rows = data.renewals.filter(r=>(renewalFilter==='All'||r.status===renewalFilter)&&(!renewalSearch||clientName(r.clientId).toLowerCase().includes(renewalSearch)||r.type.toLowerCase().includes(renewalSearch)));
+
+  // Update table header to include Last Contact
+  const thead = document.querySelector('#page-renewals table thead tr');
+  if (thead) thead.innerHTML = '<th>Client</th><th>Type</th><th>Renewal Date</th><th>Amount</th><th>Last Contact</th><th>Status</th><th></th>';
+
+  const isStale = r => {
+    if (!r.lastContact) return true;
+    return Math.round((new Date() - new Date(r.lastContact)) / 86400000) > 7;
+  };
+
+  document.getElementById('renewals-tbody').innerHTML = rows.length
+    ? rows.map(r=>`<tr style="cursor:pointer" onclick="openRenewalDetail(${r.id})">
+        <td class="client-name">${clientName(r.clientId)}</td>
+        <td style="color:var(--text-muted)">${r.type}</td>
+        <td><div>${fmtDate(r.date)}</div><div style="font-size:11px;color:var(--text-soft)">${daysLabel(r.date)}</div></td>
+        <td class="mono">${fmtF(r.amount)}</td>
+        <td>${r.lastContact
+          ? `<div style="font-size:13px">${fmtDate(r.lastContact)}</div>${isStale(r)?'<div style="font-size:11px;color:var(--red);font-weight:500">⚠ Overdue</div>':'<div style="font-size:11px;color:var(--green)">✓ Recent</div>'}`
+          : `<span style="font-size:12px;color:var(--text-soft)">Never</span>`}
+        </td>
+        <td>${statusBadge(r.status)}</td>
+        <td><div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="editRenewal(${r.id},event)">Edit</button>
+          <button class="btn btn-amber btn-sm" onclick="duplicateRenewal(${r.id},event)" title="Duplicate for next year">⟳ +1yr</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteItem('renewals',${r.id},event)">✕</button>
+        </div></td>
+      </tr>`).join('')
+    : `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">↻</div><div class="empty-text">No renewals found</div></div></td></tr>`;
+}
+function editRenewal(id,e) { e.stopPropagation(); openModal('renewal', data.renewals.find(x=>x.id===id)); }
+
+// ─── DUPLICATE RENEWAL ────────────────────────────────────────────────────────
+function duplicateRenewal(id,e) {
+  e.stopPropagation();
+  const r = data.renewals.find(x=>x.id===id);
+  if (!r) return;
+  const nd = new Date(r.date+'T00:00:00');
+  nd.setFullYear(nd.getFullYear()+1);
+  data.renewals.push({...r, id:++data.nextId, date:nd.toISOString().split('T')[0], status:'Upcoming'});
+  saveData(); renderRenewals(); updateBadges();
+  toast(`Renewal duplicated for ${nd.getFullYear()} ✓`);
+}
+
+// ─── INVOICES ────────────────────────────────────────────────────────────────
+function filterInvoices(q) { invoiceSearch=q.toLowerCase(); renderInvoices(); }
+function setInvoiceFilter(f) { invoiceFilter=f; renderInvoices(); }
+function renderInvoices() {
+  document.getElementById('invoice-filters').innerHTML = ['All','Pending','Overdue','Paid'].map(s=>
+    `<button class="filter-btn ${invoiceFilter===s?'active':''}" onclick="setInvoiceFilter('${s}')">${s}</button>`).join('');
+
+  // AGING
+  const ov = data.invoices.filter(i=>i.status==='Overdue');
+  const b30=ov.filter(i=>daysUntil(i.dueDate)>=-30), b60=ov.filter(i=>daysUntil(i.dueDate)<-30&&daysUntil(i.dueDate)>=-60), b90=ov.filter(i=>daysUntil(i.dueDate)<-60);
+  document.getElementById('aging-grid').innerHTML = `
+    <div class="aging-bucket b30"><div class="aging-label">1–30 Days</div><div class="aging-amount">${fmtF(b30.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b30.length} invoice${b30.length!==1?'s':''}</div></div>
+    <div class="aging-bucket b60"><div class="aging-label">31–60 Days</div><div class="aging-amount">${fmtF(b60.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b60.length} invoice${b60.length!==1?'s':''}</div></div>
+    <div class="aging-bucket b90"><div class="aging-label">60+ Days</div><div class="aging-amount">${fmtF(b90.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b90.length} invoice${b90.length!==1?'s':''}</div></div>`;
+
+  const rows = data.invoices.filter(i=>(invoiceFilter==='All'||i.status===invoiceFilter)&&(!invoiceSearch||clientName(i.clientId).toLowerCase().includes(invoiceSearch)||i.number.toLowerCase().includes(invoiceSearch)));
+  document.getElementById('invoices-tbody').innerHTML = rows.length
+    ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
+        <td class="mono" style="font-weight:500">${i.number}</td>
+        <td class="client-name">${clientName(i.clientId)}</td>
+        <td><div>${fmtDate(i.dueDate)}</div><div style="font-size:11px;color:var(--text-soft)">${daysLabel(i.dueDate)}</div></td>
+        <td class="mono">${fmtF(i.amount)}</td>
+        <td>${statusBadge(i.status)}</td>
+        <td><div style="display:flex;gap:5px;align-items:center">
+          ${i.status!=='Paid'?`<button class="invoice-paid-btn" onclick="markPaid(${i.id},event)" title="Mark as Paid">✓ Paid</button>`:'<span style="font-size:12px;color:var(--green);font-weight:500">✓ Paid</span>'}
+          <div class="row-actions">
+            <button class="btn btn-ghost btn-sm" onclick="editInvoice(${i.id},event)">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteItem('invoices',${i.id},event)">✕</button>
+          </div>
+        </div></td>
+      </tr>`).join('')
+    : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">$</div><div class="empty-text">No invoices found</div></div></td></tr>`;
+}
+function editInvoice(id,e) { e.stopPropagation(); openModal('invoice', data.invoices.find(x=>x.id===id)); }
+function markPaid(id,e) {
+  e.stopPropagation();
+  const i = data.invoices.find(x=>x.id===id);
+  if (i) { i.status='Paid'; saveData(); renderPage(currentPage); toast('Invoice marked as paid ✓'); }
+}
+
+// ─── REPORTS ─────────────────────────────────────────────────────────────────
+function renderReports() {
+  const paid=data.invoices.filter(i=>i.status==='Paid'), pending=data.invoices.filter(i=>i.status==='Pending'), overdue=data.invoices.filter(i=>i.status==='Overdue');
+  document.getElementById('report-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Collected</div><div class="stat-value green">${fmtF(paid.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${paid.length} invoices paid</div></div>
+    <div class="stat-card"><div class="stat-label">Pending Payments</div><div class="stat-value amber">${fmtF(pending.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${pending.length} awaiting payment</div></div>
+    <div class="stat-card"><div class="stat-label">Overdue Balance</div><div class="stat-value red">${fmtF(overdue.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${overdue.length} overdue invoices</div></div>
+    <div class="stat-card"><div class="stat-label">Renewal Pipeline</div><div class="stat-value">${fmtF(data.renewals.filter(r=>r.status!=='Renewed').reduce((s,r)=>s+r.amount,0))}</div><div class="stat-delta">Upcoming renewal value</div></div>`;
+
+  // ── RENEWAL STATUS REPORT ──
+  const statuses = ['Overdue','Due Soon','Upcoming','Renewed'];
+  const statusColors = { 'Overdue':'var(--red)', 'Due Soon':'var(--amber)', 'Upcoming':'var(--accent)', 'Renewed':'var(--green)' };
+  const statusIcons = { 'Overdue':'⚠️', 'Due Soon':'🔔', 'Upcoming':'📅', 'Renewed':'✅' };
+  const groups = {};
+  statuses.forEach(s => groups[s] = data.renewals.filter(r => r.status === s));
+  const totalRenewals = data.renewals.length;
+  const totalValue = data.renewals.reduce((s,r)=>s+r.amount,0);
+
+  document.getElementById('renewal-report-summary').textContent =
+    `${totalRenewals} total · ${fmtF(totalValue)} pipeline value`;
+
+  document.getElementById('renewal-status-report').innerHTML = statuses.map(status => {
+    const group = groups[status];
+    if (!group.length) return `
+      <div style="padding:14px 0;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:10px;color:var(--text-soft)">
+        <span style="font-size:16px">${statusIcons[status]}</span>
+        <span style="font-weight:500;color:${statusColors[status]}">${status}</span>
+        <span style="font-size:12px">— no renewals</span>
+      </div>`;
+    const groupValue = group.reduce((s,r)=>s+r.amount,0);
+    const pct = totalRenewals ? Math.round(group.length/totalRenewals*100) : 0;
+    // Check stale contacts within this group
+    const staleCount = group.filter(r => { const d = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null; return !r.lastContact || d > 7; }).length;
+    return `
+      <div style="border-bottom:1px solid var(--border-soft)">
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 0 8px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <span style="font-size:16px">${statusIcons[status]}</span>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:600;color:${statusColors[status]}">${status}</span>
+              <span class="badge" style="background:${statusColors[status]}22;color:${statusColors[status]};border:none">${group.length} renewal${group.length!==1?'s':''}</span>
+              ${staleCount && status!=='Renewed' ? `<span class="badge" style="background:var(--red-light);color:var(--red);border:none">📵 ${staleCount} no contact</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <div style="flex:1;height:4px;background:var(--border);border-radius:2px;max-width:200px">
+                <div style="width:${pct}%;height:100%;background:${statusColors[status]};border-radius:2px"></div>
+              </div>
+              <span style="font-size:11px;color:var(--text-muted)">${pct}% · ${fmtF(groupValue)}</span>
+            </div>
+          </div>
+          <span style="font-size:11px;color:var(--text-muted)">▾ details</span>
+        </div>
+        <div style="display:none;padding-bottom:12px">
+          <table style="width:100%">
+            <thead><tr style="font-size:11px;color:var(--text-muted)"><th>Client</th><th>Type</th><th>Renewal Date</th><th>Amount</th><th>Last Contact</th></tr></thead>
+            <tbody>
+              ${group.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(r => {
+                const c = data.clients.find(x=>x.id===r.clientId);
+                const d = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+                const stale = !r.lastContact || d > 7;
+                return `<tr style="cursor:pointer" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100)">
+                  <td><div class="client-name">${c?.name||'Unknown'}</div><div class="client-email">${c?.contact||''}</div></td>
+                  <td style="color:var(--text-muted);font-size:12px">${r.type}</td>
+                  <td style="font-size:12px">${fmtDate(r.date)}<div style="font-size:10px;color:var(--text-soft)">${daysLabel(r.date)}</div></td>
+                  <td class="mono" style="font-size:12px">${fmtF(r.amount)}</td>
+                  <td style="font-size:12px;color:${stale&&status!=='Renewed'?'var(--red)':'var(--green)'}">
+                    ${r.lastContact ? fmtDate(r.lastContact) + (d===0?' (today)':d===1?' (yesterday)':` (${d}d ago)`) : '—'}
+                    ${stale && status!=='Renewed' ? ' ⚠' : ''}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('payment-history').innerHTML = paid.length
+    ? `<table><thead><tr><th>Invoice</th><th>Client</th><th>Amount</th></tr></thead><tbody>${paid.map(i=>`<tr><td class="mono">${i.number}</td><td>${clientName(i.clientId)}</td><td class="mono" style="color:var(--green)">${fmtF(i.amount)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No payment history yet</div></div>`;
+  const byC={};
+  paid.forEach(i=>{const n=clientName(i.clientId);byC[n]=(byC[n]||0)+i.amount;});
+  const ent=Object.entries(byC).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('revenue-by-client').innerHTML = ent.length
+    ? `<table><thead><tr><th>Client</th><th>Revenue</th></tr></thead><tbody>${ent.map(([n,a])=>`<tr><td>${n}</td><td class="mono" style="font-weight:500">${fmtF(a)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty-state"><div class="empty-icon">↗</div><div class="empty-text">No data yet</div></div>`;
+}
+
+// ─── EXPORT CSV ──────────────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = [['Type','Client','Reference','Date','Amount','Status']];
+  data.invoices.forEach(i=>rows.push(['Invoice',clientName(i.clientId),i.number,i.dueDate,i.amount,i.status]));
+  data.renewals.forEach(r=>rows.push(['Renewal',clientName(r.clientId),r.type,r.date,r.amount,r.status]));
+  const csv = rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'clientflow-export.csv'});
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('CSV exported ✓');
+}
+
+// ─── ALERTS ──────────────────────────────────────────────────────────────────
+function renderAlerts() {
+  const alerts=[];
+  data.renewals.forEach(r=>{
+    const d=daysUntil(r.date);
+    if(r.status==='Overdue') alerts.push({type:'urgent',icon:'⚠️',title:`${clientName(r.clientId)} — Renewal Overdue`,desc:`${r.type} was due ${fmtDate(r.date)} · ${fmtF(r.amount)}`,renewalId:r.id});
+    else if(r.status==='Due Soon'||d<=14) alerts.push({type:'warning',icon:'🔔',title:`${clientName(r.clientId)} — Renewal Due Soon`,desc:`${r.type} renews ${fmtDate(r.date)} · ${fmtF(r.amount)}`,renewalId:r.id});
+    // Stale contact alert
+    const daysSince = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+    if(r.status!=='Renewed' && (!r.lastContact || daysSince>7)) {
+      alerts.push({type:'stale',icon:'📵',title:`${clientName(r.clientId)} — No Contact in ${daysSince?daysSince+' days':'ever'}`,desc:`${r.type} · Renewal ${fmtDate(r.date)}`,renewalId:r.id});
+    }
+  });
+  data.invoices.forEach(i=>{
+    if(i.status==='Overdue') alerts.push({type:'urgent',icon:'💸',title:`Invoice ${i.number} Overdue — ${clientName(i.clientId)}`,desc:`${fmtF(i.amount)} was due ${fmtDate(i.dueDate)}`});
+    else if(i.status==='Pending'&&daysUntil(i.dueDate)<=7) alerts.push({type:'warning',icon:'📬',title:`Invoice ${i.number} Due Soon — ${clientName(i.clientId)}`,desc:`${fmtF(i.amount)} due ${fmtDate(i.dueDate)}`});
+  });
+  if(!alerts.length) alerts.push({type:'info',icon:'✅',title:'All clear!',desc:'No urgent items require your attention right now.'});
+  document.getElementById('alerts-list').innerHTML = alerts.map(a=>`
+    <div class="alert-item ${a.type}" style="cursor:${a.renewalId?'pointer':'default'}" ${a.renewalId?`onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${a.renewalId}),100)"`:''}>
+      <div class="alert-icon">${a.icon}</div>
+      <div class="alert-text">
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-desc">${a.desc}${a.renewalId?` <span style="color:var(--accent);font-size:11px">→ Open</span>`:''}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ─── EMAIL ALERTS ────────────────────────────────────────────────────────────
+let emailRecipients = [];
+let generatedAlerts = [];
+
+// ─── API KEY & SETTINGS ──────────────────────────────────────────────────────
+function getApiKey() { return localStorage.getItem('anthropic-api-key') || ''; }
+function getMailgunKey() { return localStorage.getItem('mailgun-api-key') || ''; }
+function getMailgunDomain() { return localStorage.getItem('mailgun-domain') || ''; }
+function getMailgunRegion() { return localStorage.getItem('mailgun-region') || 'us'; }
+function getFromEmail() { return localStorage.getItem('default-from-email') || ''; }
+
+function saveApiKey() {
+  const val = document.getElementById('anthropic-api-key').value.trim();
+  if (!val || val === '••••••••••••••••') { toast('Please enter an API key ✗'); return; }
+  localStorage.setItem('anthropic-api-key', val);
+  restoreSettings(); toast('API key saved ✓');
+}
+function saveMailgunKey() {
+  const val = document.getElementById('mailgun-api-key').value.trim();
+  if (!val || val === '••••••••••••••••') { toast('Please enter a Mailgun API key ✗'); return; }
+  localStorage.setItem('mailgun-api-key', val);
+  restoreSettings(); toast('Mailgun key saved ✓');
+}
+function saveMailgunDomain() {
+  const val = document.getElementById('mailgun-domain').value.trim();
+  localStorage.setItem('mailgun-domain', val);
+  restoreSettings(); toast('Mailgun domain saved ✓');
+}
+function saveMailgunRegion() {
+  localStorage.setItem('mailgun-region', document.getElementById('mailgun-region').value);
+  restoreSettings(); toast('Mailgun region saved ✓');
+}
+function saveFromEmail() {
+  const val = document.getElementById('global-from-email').value.trim();
+  localStorage.setItem('default-from-email', val);
+  // Sync to panel inputs
+  ['rdp-email-from','idp-email-from'].forEach(id => { const el=document.getElementById(id); if(el) el.value=val; });
+  restoreSettings(); toast('From email saved ✓');
+}
+function saveGlobalSlackWebhook() {
+  const val = document.getElementById('global-slack-webhook').value.trim();
+  localStorage.setItem('slack-webhook', val);
+  ['rdp-slack-webhook','idp-slack-webhook'].forEach(id => { const el=document.getElementById(id); if(el) el.value=val; });
+  restoreSettings(); toast('Slack webhook saved ✓');
+}
+
+function restoreSettings() {
+  const key = getApiKey();
+  const mgKey = getMailgunKey();
+  const mgDomain = getMailgunDomain();
+  const mgRegion = getMailgunRegion();
+  const fromEmail = getFromEmail();
+  const webhook = localStorage.getItem('slack-webhook') || '';
+
+  const s = id => document.getElementById(id);
+  if (s('anthropic-api-key')) s('anthropic-api-key').value = key ? '••••••••••••••••' : '';
+  if (s('mailgun-api-key')) s('mailgun-api-key').value = mgKey ? '••••••••••••••••' : '';
+  if (s('mailgun-domain')) s('mailgun-domain').value = mgDomain;
+  if (s('mailgun-region')) s('mailgun-region').value = mgRegion;
+  if (s('global-from-email')) s('global-from-email').value = fromEmail;
+  if (s('global-slack-webhook')) s('global-slack-webhook').value = webhook;
+  if (s('rdp-email-from')) s('rdp-email-from').value = fromEmail;
+  if (s('idp-email-from')) s('idp-email-from').value = fromEmail;
+  if (s('rdp-slack-webhook')) s('rdp-slack-webhook').value = webhook;
+  if (s('idp-slack-webhook')) s('idp-slack-webhook').value = webhook;
+
+  const statusEl = s('settings-status');
+  if (!statusEl) return;
+  const badges = [
+    key ? '✓ Anthropic key set' : '✗ No Anthropic key',
+    mgKey && mgDomain ? '✓ Mailgun ready' : '✗ Mailgun not configured',
+    webhook ? '✓ Slack webhook set' : '○ No Slack webhook',
+  ];
+  const colors = [
+    key ? 'var(--green)' : 'var(--red)',
+    mgKey && mgDomain ? 'var(--green)' : 'var(--amber)',
+    webhook ? 'var(--green)' : 'var(--text-muted)',
+  ];
+  statusEl.innerHTML = badges.map((b,i)=>`<span style="color:${colors[i]};margin-right:16px;font-size:12px">${b}</span>`).join('');
+}
+
+// ─── MAILGUN SEND ─────────────────────────────────────────────────────────────
+async function mailgunSend({ to, from, subject, text }) {
+  const key = getMailgunKey();
+  const domain = getMailgunDomain();
+  const region = getMailgunRegion();
+  if (!key) throw new Error('No Mailgun API key — go to Email Alerts → Settings');
+  if (!domain) throw new Error('No Mailgun domain set — go to Email Alerts → Settings');
+  if (!from) throw new Error('No From email set — go to Email Alerts → Settings');
+  if (!to) throw new Error('No recipient email specified');
+
+  const base = region === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
+  const url = `${base}/v3/${domain}/messages`;
+
+  const body = new FormData();
+  body.append('from', from);
+  body.append('to', to);
+  body.append('subject', subject);
+  body.append('text', text);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': 'Basic ' + btoa('api:' + key) },
+    body
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Mailgun error ${res.status}`);
+  return json;
+}
+
+// Shared Slack send — no API key needed, just the webhook URL
+async function slackSend(webhook, text) {
+  if (!webhook || !webhook.startsWith('https://hooks.slack.com')) throw new Error('Invalid Slack webhook URL — paste it in Email Alerts → Settings');
+  await fetch(webhook, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+  // no-cors always resolves — message sent if webhook is valid
+}
+
+// Shared fetch helper for Anthropic API
+async function claudeFetch(prompt, maxTokens=500) {
+  const key = getApiKey();
+  if (!key) throw new Error('No Anthropic API key — go to Email Alerts → Settings');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'API error');
+  return data.content?.map(b => b.text || '').join('') || '';
+}
+
+async function loadEmailRecipients() {
+  try { const r = await storage.get('clientflow-recipients'); if(r?.value) emailRecipients = JSON.parse(r.value); } catch(e){}
+}
+async function saveEmailRecipients() {
+  try { await storage.set('clientflow-recipients', JSON.stringify(emailRecipients)); } catch(e){}
+}
+
+function addRecipient() {
+  const input = document.getElementById('recipient-input');
+  const val = input.value.trim().toLowerCase();
+  if (!val || !val.includes('@')) { toast('Please enter a valid email ✗'); return; }
+  if (emailRecipients.includes(val)) { toast('Already added ✗'); return; }
+  emailRecipients.push(val);
+  saveEmailRecipients();
+  input.value = '';
+  renderRecipientsList();
+  toast('Recipient added ✓');
+}
+
+function removeRecipient(email) {
+  emailRecipients = emailRecipients.filter(e=>e!==email);
+  saveEmailRecipients();
+  renderRecipientsList();
+}
+
+function renderRecipientsList() {
+  const el = document.getElementById('recipients-list');
+  if (!el) return;
+  el.innerHTML = emailRecipients.length
+    ? emailRecipients.map(e=>`<div class="recipient-tag">✉ ${e}<button onclick="removeRecipient('${e}')" title="Remove">✕</button></div>`).join('')
+    : `<div style="font-size:12px;color:var(--text-soft);padding:4px 0">No recipients added yet.</div>`;
+}
+
+function renderEmailAlerts() {
+  renderRecipientsList();
+  if (generatedAlerts.length) renderAlertCards();
+}
+
+function buildAlertItems() {
+  const items = [];
+  data.renewals.forEach(r => {
+    const d = daysUntil(r.date);
+    const c = data.clients.find(x=>x.id===r.clientId);
+    const latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
+    if (r.status === 'Overdue') {
+      items.push({ type:'urgent', label:'Renewal Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} was due ${fmtDate(r.date)} (${Math.abs(d)} days ago)`, amount: fmt(r.amount), id: 'r-'+r.id, latestComment });
+    } else if (r.status === 'Due Soon' || (d >= 0 && d <= 14)) {
+      items.push({ type:'renewal', label:'Renewal Due Soon', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} renews ${fmtDate(r.date)} (in ${d} days)`, amount: fmt(r.amount), id: 'r-'+r.id, latestComment });
+    }
+    // Stale contact
+    const daysSince = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+    if (r.status !== 'Renewed' && (!r.lastContact || daysSince > 7)) {
+      items.push({ type:'stale', label:'No Recent Contact', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} · last contact ${r.lastContact ? daysSince+' days ago' : 'never recorded'}`, amount: '', id: 'stale-'+r.id, renewalId: r.id, latestComment });
+    }
+  });
+  data.invoices.forEach(i => {
+    const d = daysUntil(i.dueDate);
+    const c = data.clients.find(x=>x.id===i.clientId);
+    const latestComment = (i.comments||[]).slice(-1)[0]?.text || '';
+    if (i.status === 'Overdue') {
+      items.push({ type:'urgent', label:'Invoice Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} was due ${fmtDate(i.dueDate)} (${Math.abs(d)} days ago)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
+    } else if (i.status === 'Pending' && d >= 0 && d <= 7) {
+      items.push({ type:'warning', label:'Invoice Due Soon', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} is due ${fmtDate(i.dueDate)} (in ${d} days)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
+    }
+  });
+  return items;
+}
+
+async function generateAllAlerts() {
+  const items = buildAlertItems();
+  if (!items.length) {
+    document.getElementById('email-alerts-content').innerHTML = `<div class="no-alerts-msg"><div style="font-size:28px;margin-bottom:8px">🎉</div><div style="font-weight:500">All clear!</div><div style="font-size:12px;margin-top:4px">No overdue or due-soon items require alerts right now.</div></div>`;
+    return;
+  }
+  generatedAlerts = items.map(item => {
+    const subject = `${item.label} — ${item.client}`;
+    const commentLine = item.latestComment ? `\n\nLatest note: ${item.latestComment}` : '';
+    const body = `${item.detail}${item.amount ? '\nAmount: ' + item.amount : ''}${commentLine}`;
+    return { ...item, subject, body, loading: false };
+  });
+  renderAlertCards();
+}
+
+function generateEmailForAlert() {} // no-op, kept for regenerate button compat
+
+async function regenerateAlert(idx) {
+  // Re-build from source data instead of calling AI
+  const a = generatedAlerts[idx];
+  // find the original renewal/invoice to refresh the comment
+  let latestComment = a.latestComment || '';
+  if (a.id && a.id.startsWith('r-')) {
+    const rid = parseInt(a.id.replace('r-',''));
+    const r = data.renewals.find(x=>x.id===rid);
+    if (r) latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
+  } else if (a.id && a.id.startsWith('stale-')) {
+    const rid = parseInt(a.id.replace('stale-',''));
+    const r = data.renewals.find(x=>x.id===rid);
+    if (r) latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
+  } else if (a.id && a.id.startsWith('i-')) {
+    const iid = parseInt(a.id.replace('i-',''));
+    const inv = data.invoices.find(x=>x.id===iid);
+    if (inv) latestComment = (inv.comments||[]).slice(-1)[0]?.text || '';
+  }
+  const commentLine = latestComment ? `\n\nLatest note: ${latestComment}` : '';
+  generatedAlerts[idx] = { ...a, latestComment, body: `${a.detail}${a.amount ? '\nAmount: ' + a.amount : ''}${commentLine}`, loading: false };
+  renderAlertCards();
+  toast('Refreshed from latest data ✓');
+}
+
+function renderAlertCards() {
+  const el = document.getElementById('email-alerts-content');
+  if (!generatedAlerts.length) return;
+  const recipientTo = emailRecipients.join(',');
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;color:var(--text-muted)">${generatedAlerts.length} alert${generatedAlerts.length!==1?'s':''} generated</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${recipientTo ? `<button class="btn btn-primary btn-sm" onclick="sendAllEmails()">✉ Send All Email</button>` : `<span style="font-size:12px;color:var(--amber)">⚠ Add recipients to enable email</span>`}
+        ${webhook ? `<button class="btn btn-success btn-sm" onclick="sendAllSlack()">💬 Send All to Slack</button>` : `<span style="font-size:12px;color:var(--text-muted)">○ Add Slack webhook to enable Slack</span>`}
+      </div>
+    </div>
+    <div class="alert-cards-grid">
+      ${generatedAlerts.map((a,i) => `
+        <div class="alert-card ${a.type}" id="alert-card-${i}">
+          <div class="alert-card-header">
+            <div>
+              <div class="alert-card-title">${a.label}</div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">${a.client} · ${a.amount}</div>
+            </div>
+            <span class="badge ${a.type==='urgent'?'badge-red':a.type==='warning'?'badge-amber':a.type==='stale'?'badge-purple':'badge-blue'}">${a.type==='urgent'?'Urgent':a.type==='warning'?'Warning':a.type==='stale'?'Stale':'Renewal'}</span>
+          </div>
+          <div class="alert-card-body" id="alert-body-${i}">
+            ${a.loading ? `<div class="generating-pulse"><div class="dot-pulse"></div> Drafting message…</div>` : escapeHtml(a.body)}
+          </div>
+          <div class="alert-card-footer">
+            ${a.loading ? '' : `
+              <button class="btn btn-ghost btn-sm" onclick="copyAlert(${i})">⎘ Copy</button>
+              ${recipientTo ? `<button class="btn btn-primary btn-sm" onclick="sendSingleEmail(${i})">✉ Email</button>` : ''}
+              ${webhook ? `<button class="btn btn-success btn-sm" onclick="sendSingleSlack(${i})">💬 Slack</button>` : ''}
+              <button class="btn btn-ghost btn-sm" onclick="regenerateAlert(${i})">↺</button>
+            `}
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+
+function copyAlert(idx) {
+  const a = generatedAlerts[idx];
+  const text = `Subject: ${a.subject}\n\n${a.body}`;
+  navigator.clipboard.writeText(text).then(()=>toast('Email copied to clipboard ✓')).catch(()=>toast('Copy failed — try manually ✗'));
+}
+
+async function sendSingleEmail(idx) {
+  const a = generatedAlerts[idx];
+  const to = emailRecipients.join(',');
+  const from = getFromEmail();
+  const btn = document.querySelector(`#alert-card-${idx} .send-btn`);
+
+  try {
+    await mailgunSend({ to, from, subject: a.subject, text: a.body });
+    toast(`Email sent for ${a.client} ✓`);
+  } catch(e) {
+    toast(e.message || 'Send failed ✗');
+  }
+}
+
+async function sendAllEmails() {
+  if (!emailRecipients.length) { toast('Add at least one recipient first ✗'); return; }
+  const ready = generatedAlerts.filter(a=>!a.loading);
+  if (!ready.length) { toast('Emails still generating…'); return; }
+  const to = emailRecipients.join(',');
+  const from = getFromEmail();
+  let sent = 0, failed = 0;
+  for (const a of ready) {
+    try { await mailgunSend({ to, from, subject: a.subject, text: a.body }); sent++; }
+    catch(e) { failed++; }
+  }
+  toast(`${sent} sent${failed ? `, ${failed} failed` : ''} ✓`);
+}
+
+async function sendSingleSlack(idx) {
+  const a = generatedAlerts[idx];
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  try {
+    await slackSend(webhook, `*${a.label} — ${a.client}*\n${a.body}${a.amount ? `\n_${a.amount}_` : ''}`);
+    toast(`Slack sent for ${a.client} ✓`);
+  } catch(e) { toast(e.message || 'Slack send failed ✗'); }
+}
+
+async function sendAllSlack() {
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  const ready = generatedAlerts.filter(a=>!a.loading);
+  if (!ready.length) { toast('Messages still generating…'); return; }
+  let sent = 0, failed = 0;
+  for (const a of ready) {
+    try { await slackSend(webhook, `*${a.label} — ${a.client}*\n${a.body}${a.amount ? `\n_${a.amount}_` : ''}`); sent++; }
+    catch(e) { failed++; }
+  }
+  toast(`${sent} sent to Slack${failed ? `, ${failed} failed` : ''} ✓`);
+}
+
+
+
+// ─── AUTO-ALERT SCHEDULER ────────────────────────────────────────────────────
+let autoAlertTimer = null;
+
+function getAutoAlertSelectedIds() {
+  try { return JSON.parse(localStorage.getItem('auto-alert-selected-ids') || 'null'); } catch(e) { return null; }
+}
+function getAutoAlertStatusFilter() {
+  try { return JSON.parse(localStorage.getItem('auto-alert-status-filter') || '[]'); } catch(e) { return []; }
+}
+
+function loadAutoAlertSettings() {
+  const enabled = localStorage.getItem('auto-alert-enabled') === 'true';
+  const time = localStorage.getItem('auto-alert-time') || '09:00';
+  const days = parseInt(localStorage.getItem('auto-alert-days') || '7');
+  const el = id => document.getElementById(id);
+  if (el('auto-alert-enabled')) el('auto-alert-enabled').checked = enabled;
+  if (el('auto-alert-time')) el('auto-alert-time').value = time;
+  if (el('auto-alert-days')) el('auto-alert-days').value = days;
+
+  // Restore status checkboxes
+  const savedStatuses = getAutoAlertStatusFilter();
+  document.querySelectorAll('.auto-status-cb').forEach(cb => {
+    cb.checked = savedStatuses.includes(cb.value);
+  });
+
+  renderAutoAlertRenewalPicker();
+  updateAutoAlertStatus();
+  if (enabled) scheduleAutoAlert();
+}
+
+function renderAutoAlertRenewalPicker() {
+  const picker = document.getElementById('auto-alert-renewal-picker');
+  if (!picker) return;
+
+  // Save status filter
+  const checkedStatuses = [...document.querySelectorAll('.auto-status-cb:checked')].map(cb => cb.value);
+  localStorage.setItem('auto-alert-status-filter', JSON.stringify(checkedStatuses));
+
+  const selectedIds = getAutoAlertSelectedIds();
+  const statusFilter = getAutoAlertStatusFilter();
+
+  // Filter renewals by selected statuses (if none checked, show all except Renewed)
+  const filtered = data.renewals.filter(r => {
+    if (statusFilter.length) return statusFilter.includes(r.status);
+    return r.status !== 'Renewed';
+  });
+
+  if (!filtered.length) {
+    picker.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-soft)">No renewals match the selected statuses.</div>';
+    return;
+  }
+
+  picker.innerHTML = filtered.map(r => {
+    const c = data.clients.find(x=>x.id===r.clientId);
+    const daysSince = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+    const isChecked = selectedIds === null || selectedIds.includes(r.id); // null = all selected by default
+    const latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
+    return `<label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''" onclick="event.stopPropagation()">
+      <input type="checkbox" value="${r.id}" class="auto-renewal-cb" ${isChecked?'checked':''} onchange="saveAutoAlertRenewalSelection()" style="margin-top:3px;cursor:pointer;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-weight:500;font-size:13px">${c?.name||'Unknown'}</span>
+          ${statusBadge(r.status)}
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">${r.type} · renews ${fmtDate(r.date)}</div>
+        <div style="font-size:11px;margin-top:2px;color:${daysSince>7||!r.lastContact?'var(--red)':'var(--green)'}">
+          ${r.lastContact ? `Last contact: ${daysSince}d ago` : 'No contact recorded'}
+        </div>
+        ${latestComment ? `<div style="font-size:11px;color:var(--text-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">💬 ${latestComment}</div>` : ''}
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function saveAutoAlertRenewalSelection() {
+  const checked = [...document.querySelectorAll('.auto-renewal-cb:checked')].map(cb => parseInt(cb.value));
+  const all = [...document.querySelectorAll('.auto-renewal-cb')].map(cb => parseInt(cb.value));
+  // If all are checked, store null (means "all") to auto-include new renewals
+  const val = checked.length === all.length ? null : checked;
+  localStorage.setItem('auto-alert-selected-ids', JSON.stringify(val));
+}
+
+function autoAlertSelectAll() {
+  document.querySelectorAll('.auto-renewal-cb').forEach(cb => { cb.checked = true; });
+  saveAutoAlertRenewalSelection();
+}
+function autoAlertSelectNone() {
+  document.querySelectorAll('.auto-renewal-cb').forEach(cb => { cb.checked = false; });
+  saveAutoAlertRenewalSelection();
+}
+
+function saveAutoAlertSettings() {
+  localStorage.setItem('auto-alert-time', document.getElementById('auto-alert-time')?.value || '09:00');
+  localStorage.setItem('auto-alert-days', document.getElementById('auto-alert-days')?.value || '7');
+  if (autoAlertTimer) { clearInterval(autoAlertTimer); autoAlertTimer = null; }
+  if (localStorage.getItem('auto-alert-enabled') === 'true') scheduleAutoAlert();
+  updateAutoAlertStatus();
+}
+
+function toggleAutoAlert() {
+  const enabled = document.getElementById('auto-alert-enabled').checked;
+  localStorage.setItem('auto-alert-enabled', enabled);
+  if (autoAlertTimer) { clearInterval(autoAlertTimer); autoAlertTimer = null; }
+  if (enabled) scheduleAutoAlert();
+  updateAutoAlertStatus();
+  toast(enabled ? 'Auto-alerts enabled ✓' : 'Auto-alerts disabled');
+}
+
+function scheduleAutoAlert() {
+  autoAlertTimer = setInterval(() => {
+    const now = new Date();
+    const targetTime = localStorage.getItem('auto-alert-time') || '09:00';
+    const [h, m] = targetTime.split(':').map(Number);
+    const lastRun = localStorage.getItem('auto-alert-last-run');
+    const today = now.toISOString().split('T')[0];
+    if (now.getHours() === h && now.getMinutes() === m && lastRun !== today) {
+      runAutoAlert();
+    }
+  }, 60000);
+}
+
+async function runAutoAlert() {
+  const today = new Date().toISOString().split('T')[0];
+  localStorage.setItem('auto-alert-last-run', today);
+  updateAutoAlertStatus();
+
+  const days = parseInt(localStorage.getItem('auto-alert-days') || '7');
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  const selectedIds = getAutoAlertSelectedIds();
+  const statusFilter = getAutoAlertStatusFilter();
+
+  const staleRenewals = data.renewals.filter(r => {
+    // Status filter
+    if (statusFilter.length && !statusFilter.includes(r.status)) return false;
+    else if (!statusFilter.length && r.status === 'Renewed') return false;
+    // Renewal selection filter
+    if (selectedIds !== null && !selectedIds.includes(r.id)) return false;
+    // Stale check
+    const daysSince = r.lastContact ? Math.round((new Date() - new Date(r.lastContact)) / 86400000) : null;
+    return !r.lastContact || daysSince > days;
+  });
+
+  if (!staleRenewals.length) {
+    toast('Auto-alert ran — no stale renewals matched your filters ✓');
+    return;
+  }
+
+  const lines = staleRenewals.map(r => {
+    const c = data.clients.find(x=>x.id===r.clientId);
+    const daysSince = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+    const latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
+    const meta = `${r.type} · renews ${fmtDate(r.date)} · last contact: ${r.lastContact ? daysSince+'d ago' : 'never'}`;
+    const commentBlock = latestComment ? `\n  "${latestComment}"` : '\n  _No comments recorded._';
+    return `• *${c?.name||'Unknown'}* [${r.status}]${commentBlock}\n  _${meta}_`;
+  }).join('\n\n');
+
+  const msg = `🔔 *ClientFlow Auto-Alert — Stale Renewals (${new Date().toLocaleDateString()})*\n\n${staleRenewals.length} renewal${staleRenewals.length!==1?'s':''} haven't been contacted in ${days}+ days:\n\n${lines}`;
+
+  if (webhook) {
+    try { await slackSend(webhook, msg); toast(`Auto-alert sent to Slack (${staleRenewals.length} renewals) ✓`); }
+    catch(e) { toast('Auto-alert Slack send failed: ' + e.message); }
+  } else {
+    toast(`Auto-alert: ${staleRenewals.length} stale renewals — add a Slack webhook to send automatically`);
+  }
+}
+
+function updateAutoAlertStatus() {
+  const el = document.getElementById('auto-alert-status-text');
+  const lastRunEl = document.getElementById('auto-alert-last-run');
+  const lastRun = localStorage.getItem('auto-alert-last-run');
+  if (lastRunEl) lastRunEl.textContent = lastRun ? `Last run: ${lastRun}` : 'Never run';
+  if (!el) return;
+  const enabled = localStorage.getItem('auto-alert-enabled') === 'true';
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  if (!enabled) { el.innerHTML = '<span style="color:var(--text-muted)">Auto-alerts are disabled.</span>'; return; }
+  if (!webhook) { el.innerHTML = '<span style="color:var(--amber)">⚠ Enabled but no Slack webhook set — add one in Settings above.</span>'; return; }
+  const time = localStorage.getItem('auto-alert-time') || '09:00';
+  const selectedIds = getAutoAlertSelectedIds();
+  const count = selectedIds === null ? 'all' : selectedIds.length;
+  el.innerHTML = `<span style="color:var(--green)">✓ Monitoring ${count} renewal${count!==1?'s':''} · sends to Slack daily at ${time}.</span>`;
+}
+
+async function runAutoAlertNow() {
+  toast('Running auto-alert check now…');
+  await runAutoAlert();
+}
+
+function openModal(type, existing) {
+  const isEdit=!!existing, T=type.charAt(0).toUpperCase()+type.slice(1);
+  let body='';
+  if(type==='client') {
+    body=`<div class="modal-title">${isEdit?'Edit':'New'} Client</div>
+      <div class="form-grid">
+        <div class="form-group span2"><label class="form-label">Company Name</label><input class="form-input" id="f-name" placeholder="Acme Corp" value="${existing?.name||''}"></div>
+        <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="f-contact" placeholder="Jane Doe" value="${existing?.contact||''}"></div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" type="email" value="${existing?.email||''}"></div>
+        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="f-phone" value="${existing?.phone||''}"></div>
+        <div class="form-group span2"><label class="form-label">Plans</label><div class="plan-picker" id="f-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip ${(Array.isArray(existing?.plan)?existing.plan:[existing?.plan]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
+        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Active'?'selected':''}>Active</option><option ${existing?.status==='At Risk'?'selected':''}>At Risk</option><option ${existing?.status==='Inactive'?'selected':''}>Inactive</option></select></div>
+        <div class="form-group"><label class="form-label">Client Since</label><input class="form-input" id="f-since" type="date" value="${existing?.since||new Date().toISOString().split('T')[0]}"></div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveClient(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Client'}</button></div>`;
+  } else if(type==='renewal') {
+    const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
+    body=`<div class="modal-title">${isEdit?'Edit':'New'} Renewal</div>
+      <div class="form-grid">
+        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
+        <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
+        <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
+        <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
+        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveRenewal(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Renewal'}</button></div>`;
+  } else if(type==='invoice') {
+    const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
+    const nextNum='INV-00'+(40+data.invoices.length+1);
+    body=`<div class="modal-title">${isEdit?'Edit':'New'} Invoice</div>
+      <div class="form-grid">
+        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
+        <div class="form-group"><label class="form-label">Invoice #</label><input class="form-input" id="f-number" value="${existing?.number||nextNum}"></div>
+        <div class="form-group"><label class="form-label">Due Date</label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
+        <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
+        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Pending'?'selected':''}>Pending</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Paid'?'selected':''}>Paid</option></select></div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveInvoice(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Invoice'}</button></div>`;
+  }
+  document.getElementById('modal-content').innerHTML=body;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal(e) { if(!e||e.target===document.getElementById('modal-overlay')) document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ─── SAVE HANDLERS ───────────────────────────────────────────────────────────
+function saveClient(id) {
+  const obj={name:document.getElementById('f-name').value,contact:document.getElementById('f-contact').value,email:document.getElementById('f-email').value,phone:document.getElementById('f-phone').value,plan:[...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),status:document.getElementById('f-status').value,since:document.getElementById('f-since').value};
+  if(!obj.name){alert('Company name is required.');return;}
+  if(id){const c=data.clients.find(c=>c.id===id);obj.notes=c.notes||'';Object.assign(c,obj);toast('Client updated ✓');}
+  else{obj.id=++data.nextId;obj.notes='';data.clients.push(obj);toast('Client added ✓');}
+  saveData();closeModal();renderPage(currentPage);updateBadges();
+}
+function saveRenewal(id) {
+  const obj={clientId:parseInt(document.getElementById('f-client').value),type:document.getElementById('f-type').value,date:document.getElementById('f-date').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true};
+  if(!obj.type||!obj.date){alert('Type and date are required.');return;}
+  if(id){Object.assign(data.renewals.find(r=>r.id===id),obj);toast('Renewal updated ✓');}
+  else{obj.id=++data.nextId;data.renewals.push(obj);toast('Renewal added ✓');}
+  saveData();closeModal();renderPage(currentPage);updateBadges();
+}
+function saveInvoice(id) {
+  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true};
+  if(!obj.number||!obj.dueDate){alert('Invoice number and due date are required.');return;}
+  if(id){Object.assign(data.invoices.find(i=>i.id===id),obj);toast('Invoice updated ✓');}
+  else{obj.id=++data.nextId;data.invoices.push(obj);toast('Invoice added ✓');}
+  saveData();closeModal();renderPage(currentPage);updateBadges();
+}
+function deleteItem(collection,id,e) {
+  e.stopPropagation();
+  if(!confirm('Delete this item?'))return;
+  data[collection]=data[collection].filter(x=>x.id!==id);
+  saveData();renderPage(currentPage);updateBadges();toast('Deleted ✓');
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+
+// ─── IMPORT ──────────────────────────────────────────────────────────────────
+let importTab = 'clients';
+let importRawRows = []; // array of objects {col: value}
+let importHeaders = [];
+let importMappings = {}; // fieldKey -> csvCol
+let importParsedRows = [];
+
+const CLIENT_FIELDS = [
+  { key:'name',          label:'Company Name',    required:true  },
+  { key:'contact',       label:'Contact Name',    required:false },
+  { key:'email',         label:'Email',           required:false },
+  { key:'phone',         label:'Phone',           required:false },
+  { key:'plan',          label:'Plan',            required:false },
+  { key:'status',        label:'Status',          required:false },
+  { key:'since',         label:'Client Since',    required:false },
+  { key:'renewalType',   label:'Renewal Type',    required:false },
+  { key:'renewalDate',   label:'Renewal Date',    required:false },
+  { key:'renewalAmount', label:'Renewal Amount',  required:false },
+];
+const INVOICE_FIELDS = [
+  { key:'clientName', label:'Client Name',    required:true  },
+  { key:'number',     label:'Invoice Number', required:true  },
+  { key:'dueDate',    label:'Due Date',       required:true  },
+  { key:'amount',     label:'Amount',         required:true  },
+  { key:'status',     label:'Status',         required:false },
+];
+
+function switchImportTab(tab) {
+  importTab = tab;
+  document.querySelectorAll('.import-tab').forEach((t,i)=>t.classList.toggle('active', (tab==='clients'&&i===0)||(tab==='invoices'&&i===1)));
+  resetImport();
+}
+
+function resetImport() {
+  importRawRows=[]; importHeaders=[]; importMappings={}; importParsedRows=[];
+  document.getElementById('import-step-1').style.display='block';
+  document.getElementById('import-step-2').style.display='none';
+  document.getElementById('import-step-3').style.display='none';
+  document.getElementById('file-input').value='';
+  setStepActive(1);
+  refreshInspector();
+}
+
+function setStepActive(n) {
+  [1,2,3].forEach(i=>{
+    const el=document.getElementById('step-'+i);
+    el.className='step'+(i===n?' active':i<n?' done':'');
+    el.innerHTML = i<n ? `<div class="step-done-check">✓</div> ${['Upload File','Map Columns','Preview & Import'][i-1]}`
+      : `<div class="step-num">${i}</div> ${['Upload File','Map Columns','Preview & Import'][i-1]}`;
+  });
+}
+
+function handleFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFileSelect(input) {
+  if (input.files[0]) processFile(input.files[0]);
+}
+
+function processFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    const reader = new FileReader();
+    reader.onload = e => parseCSV(e.target.result);
+    reader.readAsText(file);
+  } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const reader = new FileReader();
+    reader.onload = e => parseXLSX(e.target.result);
+    reader.readAsArrayBuffer(file);
+  } else {
+    toast('Unsupported file type. Use .csv or .xlsx ✗');
+  }
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) { toast('File appears empty ✗'); return; }
+  const headers = lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+  const rows = lines.slice(1).filter(l=>l.trim()).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g) || line.split(',');
+    const obj = {};
+    headers.forEach((h,i)=>obj[h]=(vals[i]||'').trim().replace(/^"|"$/g,''));
+    return obj;
+  });
+  importHeaders = headers;
+  importRawRows = rows;
+  autoMapColumns();
+  showMappingStep();
+}
+
+function parseXLSX(buffer) {
+  try {
+    const wb = XLSX.read(buffer, {type:'arraybuffer'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    // Get all rows as arrays so we can detect title rows
+    const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    if (!allRows.length) { toast('File appears empty ✗'); return; }
+
+    // Find the real header row: first row where >half the cells are non-empty strings
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(5, allRows.length); i++) {
+      const nonEmpty = allRows[i].filter(c => c !== '' && c !== null && c !== undefined).length;
+      if (nonEmpty >= 3) { headerRowIdx = i; break; }
+    }
+    // If first non-empty row has only 1 cell, skip it (title row)
+    const firstNonEmpty = allRows[headerRowIdx].filter(c => c !== '' && c !== null).length;
+    if (firstNonEmpty === 1 && allRows.length > headerRowIdx + 1) headerRowIdx++;
+
+    const headers = allRows[headerRowIdx].map(h => String(h||'').trim());
+    const dataRows = allRows.slice(headerRowIdx + 1);
+
+    if (!dataRows.length) { toast('No data rows found after header ✗'); return; }
+
+    // Normalize cell values: clean #N/A, nulls, normalize status
+    const statusMap = {
+      'AT RISK': 'At Risk', 'at risk': 'At Risk', 'ACTIVE': 'Active',
+      'INACTIVE': 'Inactive', 'inactive': 'Inactive'
+    };
+    const cleanCell = v => {
+      const s = String(v ?? '').trim();
+      return (s === '#N/A' || s === 'N/A' || s === 'undefined' || s === 'null') ? '' : s;
+    };
+    // Convert any date string → YYYY-MM-DD, handles MM/DD/YYYY and YYYY-MM-DD
+    const normalizeDate = v => {
+      if (!v || typeof v !== 'string') return '';
+      const s = v.trim();
+      // Already YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // MM/DD/YYYY or MM-DD-YYYY
+      const mdy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (mdy) {
+        const [, m, d, y] = mdy;
+        return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+      // DD/MM/YYYY fallback (less common)
+      const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (dmy) {
+        const [, d, m, y] = dmy;
+        return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+      return ''; // not a recognizable date
+    };
+
+    importHeaders = headers;
+    importRawRows = dataRows
+      .filter(row => row.some(c => c !== '' && c !== null && c !== undefined))
+      .map(row => {
+        const obj = {};
+        headers.forEach((h, i) => {
+          let val = cleanCell(row[i]);
+          // Normalize status column
+          if (h.toLowerCase() === 'status' && statusMap[val]) val = statusMap[val];
+          // Normalize date columns
+          if (h.toLowerCase().includes('date') || h.toLowerCase().includes('since')) val = normalizeDate(val) || val;
+          obj[h] = val;
+        });
+        return obj;
+      });
+
+    if (!importRawRows.length) { toast('No valid data rows found ✗'); return; }
+    toast(`${importRawRows.length} rows loaded from file ✓`);
+    autoMapColumns();
+    showMappingStep();
+  } catch(e) {
+    console.error(e);
+    toast('Could not read Excel file: ' + e.message + ' ✗');
+  }
+}
+
+function autoMapColumns() {
+  const fields = importTab==='clients' ? CLIENT_FIELDS : INVOICE_FIELDS;
+  importMappings = {};
+  fields.forEach(f => {
+    const aliases = {
+      name:['name','company','company name','client name','business','organization'],
+      contact:['contact','contact name','person','full name','representative'],
+      email:['email','e-mail','email address','mail'],
+      phone:['phone','telephone','tel','mobile','number'],
+      plan:['plan','tier','package','subscription','producto','servicio'],
+      status:['status','state','estado'],
+      since:['since','start date','client since','joined','from','inicio','desde'],
+      renewalType:['renewal type','renewal','type','tipo','renovacion','renovación','contrato'],
+      renewalDate:['renewal date','renews','next renewal','fecha renovacion','fecha renovación','vencimiento'],
+      renewalAmount:['renewal amount','renewal value','monto renovacion','valor renovacion','renewal cost'],
+      clientName:['client','client name','company','customer','account'],
+      number:['invoice','invoice #','invoice number','number','inv','ref','reference'],
+      dueDate:['due','due date','date','deadline','payment date'],
+      amount:['amount','total','sum','value','price','cost'],
+    };
+    const candidates = aliases[f.key] || [f.key, f.label.toLowerCase()];
+    const match = importHeaders.find(h => candidates.some(c=>h.toLowerCase().includes(c)));
+    if (match) importMappings[f.key] = match;
+  });
+}
+
+function showMappingStep() {
+  const fields = importTab==='clients' ? CLIENT_FIELDS : INVOICE_FIELDS;
+  document.getElementById('mapping-sub').textContent = `Match the columns from your file to ClientFlow's ${importTab} fields. Auto-matched where possible.`;
+  const grid = document.getElementById('mapping-grid');
+  grid.innerHTML = fields.map(f => `
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:13px;font-weight:500">${f.label}</span>
+      ${f.required?'<span style="font-size:10px;color:var(--red);font-weight:600">required</span>':''}
+    </div>
+    <div class="mapping-arrow">→</div>
+    <div>
+      <select class="mapping-select ${importMappings[f.key]?'matched':''}" id="map-${f.key}" onchange="updateMapping('${f.key}',this)">
+        <option value="">— skip —</option>
+        ${importHeaders.map(h=>`<option value="${h}" ${importMappings[f.key]===h?'selected':''}>${h}</option>`).join('')}
+      </select>
+    </div>
+  `).join('');
+
+  document.getElementById('import-step-1').style.display='none';
+  document.getElementById('import-step-2').style.display='block';
+  setStepActive(2);
+}
+
+function updateMapping(fieldKey, select) {
+  importMappings[fieldKey] = select.value || undefined;
+  select.className = 'mapping-select' + (select.value?' matched':'');
+}
+
+function goToMapping() {
+  document.getElementById('import-step-2').style.display='block';
+  document.getElementById('import-step-3').style.display='none';
+  setStepActive(2);
+}
+
+function goToPreview() {
+  const fields = importTab==='clients' ? CLIENT_FIELDS : INVOICE_FIELDS;
+  const missing = fields.filter(f=>f.required && !importMappings[f.key]);
+  if (missing.length) { toast(`Please map required field: ${missing.map(f=>f.label).join(', ')} ✗`); return; }
+  buildParsedRows();
+  renderPreview();
+  document.getElementById('import-step-2').style.display='none';
+  document.getElementById('import-step-3').style.display='block';
+  setStepActive(3);
+}
+
+function buildParsedRows() {
+  importParsedRows = importRawRows.map(row => {
+    const obj = {};
+    Object.entries(importMappings).forEach(([field, col]) => {
+      if (col) obj[field] = row[col] || '';
+    });
+    return obj;
+  }).filter(r => {
+    const key = importTab==='clients' ? 'name' : 'number';
+    return r[key] && r[key].trim();
+  });
+}
+
+function renderPreview() {
+  const fields = importTab==='clients' ? CLIENT_FIELDS : INVOICE_FIELDS;
+  const mappedFields = fields.filter(f=>importMappings[f.key]);
+  const preview = importParsedRows.slice(0,20);
+
+  const isDupe = r => {
+    if (importTab==='clients') {
+      return data.clients.some(c =>
+        c.name.trim().toLowerCase() === (r.name||'').trim().toLowerCase()
+      );
+    }
+    return data.invoices.some(i=>i.number===r.number);
+  };
+
+  // Summary stats
+  const total = importParsedRows.length;
+  const existing = importParsedRows.filter(r=>isDupe(r)).length;
+  const newCount = total - existing;
+
+  document.getElementById('import-summary').innerHTML = `
+    <div class="import-stat"><div class="import-stat-val">${total}</div><div class="import-stat-label">Total rows</div></div>
+    <div class="import-stat"><div class="import-stat-val" style="color:var(--green)">${newCount}</div><div class="import-stat-label">New records</div></div>
+    <div class="import-stat"><div class="import-stat-val" style="color:var(--amber)">${existing}</div><div class="import-stat-label">Duplicates (will skip)</div></div>
+  `;
+  document.getElementById('preview-count').textContent = `(showing first ${Math.min(20,total)} of ${total} rows)`;
+  document.getElementById('preview-thead').innerHTML = `<tr>${mappedFields.map(f=>`<th>${f.label}</th>`).join('')}<th>Status</th></tr>`;
+
+  document.getElementById('preview-tbody').innerHTML = preview.map(r=>`
+    <tr>
+      ${mappedFields.map(f=>`<td style="font-size:13px">${r[f.key]||'<span style="color:var(--text-soft)">—</span>'}</td>`).join('')}
+      <td>${isDupe(r)?`<span class="conflict-badge">⚠ Duplicate</span>`:`<span class="badge badge-green">New</span>`}</td>
+    </tr>`).join('');
+}
+
+function commitImport() {
+  const btn = document.getElementById('commit-btn');
+  btn.disabled = true; btn.textContent = 'Importing…';
+
+  const isClientDupe = r => data.clients.some(c =>
+    c.name.trim().toLowerCase() === (r.name||'').trim().toLowerCase()
+  );
+
+  let added = 0;
+  if (importTab==='clients') {
+    importParsedRows.forEach(r => {
+      if (isClientDupe(r)) return;
+      const validPlans = ['Aliado','Consola','C3ntro','Parvada','Reportes'];
+      const planMap = Object.fromEntries(validPlans.map(p=>[p.toLowerCase(), p]));
+      const statusNorm = {'active':'Active','at risk':'At Risk','at-risk':'At Risk','inactive':'Inactive'};
+      const rawStatus = (r.status||'').trim();
+      const normStatus = statusNorm[rawStatus.toLowerCase()] || 'Active';
+      const rawPlans = r.plan
+        ? r.plan.split(/[;|,]/).map(p=>planMap[p.trim().toLowerCase()]).filter(Boolean)
+        : [];
+      const clientId = ++data.nextId;
+      data.clients.push({
+        id: clientId,
+        name: r.name || 'Unnamed',
+        contact: r.contact || '',
+        email: r.email || '',
+        phone: r.phone || '',
+        plan: rawPlans.length ? rawPlans : ['Aliado'],
+        status: ['Active','At Risk','Inactive'].includes(normStatus) ? normStatus : 'Active',
+        since: r.since || new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+      if (r.renewalDate || r.renewalType) {
+        const rDate = r.renewalDate || '';
+        const rDays = rDate ? Math.round((new Date(rDate) - new Date()) / 86400000) : null;
+        const rStatus = !rDate ? 'Upcoming' : rDays < 0 ? 'Overdue' : rDays <= 14 ? 'Due Soon' : 'Upcoming';
+        data.renewals.push({
+          id: ++data.nextId, clientId,
+          type: r.renewalType || 'Annual Contract',
+          date: rDate || new Date(new Date().setFullYear(new Date().getFullYear()+1)).toISOString().split('T')[0],
+          amount: parseFloat(r.renewalAmount?.toString().replace(/[^0-9.]/g,'')) || 0,
+          status: rStatus,
+          statusLocked: true
+        });
+      }
+      added++;
+    });
+  } else {
+    importParsedRows.forEach(r => {
+      if (data.invoices.some(i=>i.number===r.number)) return;
+      const clientMatch = data.clients.find(c=>c.name.toLowerCase()===r.clientName?.toLowerCase());
+      if (!clientMatch) return;
+      const validStatuses = ['Pending','Overdue','Paid'];
+      data.invoices.push({
+        id: ++data.nextId,
+        clientId: clientMatch.id,
+        number: r.number,
+        dueDate: r.dueDate || new Date().toISOString().split('T')[0],
+        amount: parseFloat(r.amount?.toString().replace(/[^0-9.]/g,'')) || 0,
+        status: validStatuses.includes(r.status) ? r.status : 'Pending'
+      });
+      added++;
+    });
+  }
+
+  saveData();
+  updateBadges();
+  btn.disabled = false;
+  btn.textContent = '⇪ Import Data';
+
+  const skipped = importParsedRows.length - added;
+  if (added > 0) {
+    toast(`${added} ${importTab==='clients'?'client':'invoice'}${added!==1?'s':''} imported${skipped?` · ${skipped} skipped`:''} ✓`);
+    setTimeout(()=>navigate(importTab), 1200);
+  } else {
+    toast(`All ${importParsedRows.length} rows were duplicates — nothing imported ✗`);
+  }
+}
+
+function downloadTemplate(type) {
+  const headers = type==='clients'
+    ? 'name,contact,email,phone,plan,status,since,renewal_type,renewal_date,renewal_amount\nEjemplo S.A.,Juan Pérez,juan@ejemplo.com,(55) 1234-5678,C3ntro|Parvada,Active,2024-01-15,Contrato Anual,2026-01-15,12000'
+    : 'client_name,invoice_number,due_date,amount,status\nAcme Corp,INV-0001,2025-06-30,1500,Pending';
+  const a = Object.assign(document.createElement('a'),{
+    href: URL.createObjectURL(new Blob([headers],{type:'text/csv'})),
+    download: `clientflow-${type}-template.csv`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  toast(`${type} template downloaded ✓`);
+}
+
+// Load SheetJS for Excel parsing
+(function loadSheetJS(){
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  document.head.appendChild(s);
+})();
+
+
+// ─── RENEWAL DETAIL PANEL ────────────────────────────────────────────────────
+let activeRenewalId = null;
+
+function openRenewalDetail(id) {
+  const r = data.renewals.find(x=>x.id===id);
+  if (!r) return;
+  activeRenewalId = id;
+  const c = data.clients.find(x=>x.id===r.clientId);
+
+  document.getElementById('rdp-client').textContent = c?.name || 'Unknown';
+  document.getElementById('rdp-subtitle').textContent = r.type + ' · ' + fmtDate(r.date);
+
+  document.getElementById('rdp-info').innerHTML = `
+    <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Renewal Date</span><span class="detail-val">${fmtDate(r.date)}</span></div>
+    <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--green);font-weight:600">${fmtF(r.amount)}</span></div>
+    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val">${statusBadge(r.status)}</span></div>`;
+
+  document.getElementById('rdp-last-contact').value = r.lastContact || '';
+  updateLastContactLabel(r);
+
+  const days = r.lastContact ? Math.round((new Date() - new Date(r.lastContact)) / 86400000) : null;
+  const staleDiv = document.getElementById('rdp-stale-alert');
+  if (!r.lastContact || days > 7) {
+    document.getElementById('rdp-stale-sub').textContent = days ? `Last contact was ${days} days ago` : 'No contact has been recorded yet';
+    staleDiv.style.display = 'block';
+  } else { staleDiv.style.display = 'none'; }
+
+  renderRenewalComments(r);
+
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  document.getElementById('rdp-slack-webhook').value = webhook;
+  document.getElementById('rdp-email-from').value = localStorage.getItem('default-from-email') || '';
+  document.getElementById('rdp-generated-msg').style.display = 'none';
+  document.getElementById('rdp-send-email-btn').style.display = 'none';
+  document.getElementById('rdp-send-slack-btn').style.display = 'none';
+  document.getElementById('rdp-sending-status').textContent = '';
+
+  document.getElementById('rdp-panel').classList.add('open');
+  document.getElementById('rdp-overlay').classList.add('open');
+}
+
+function closeRenewalDetail() {
+  document.getElementById('rdp-panel').classList.remove('open');
+  document.getElementById('rdp-overlay').classList.remove('open');
+  activeRenewalId = null;
+}
+
+function editRenewalFromPanel() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  if (r) openModal('renewal', r);
+}
+
+function updateLastContactLabel(r) {
+  const el = document.getElementById('rdp-last-contact-label');
+  if (!r || !r.lastContact) { el.textContent = 'No contact recorded yet.'; el.style.color = 'var(--text-soft)'; return; }
+  const d = Math.round((new Date() - new Date(r.lastContact)) / 86400000);
+  el.textContent = d === 0 ? 'Contacted today ✓' : d === 1 ? 'Last contacted yesterday' : `Last contacted ${d} days ago`;
+  el.style.color = d > 7 ? 'var(--red)' : 'var(--green)';
+}
+
+function saveLastContact() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  if (!r) return;
+  r.lastContact = document.getElementById('rdp-last-contact').value;
+  saveData(); renderRenewals(); updateLastContactLabel(r);
+  const d = Math.round((new Date() - new Date(r.lastContact)) / 86400000);
+  document.getElementById('rdp-stale-alert').style.display = d > 7 ? 'block' : 'none';
+  toast('Last contact saved ✓');
+}
+
+function setContactToday() {
+  document.getElementById('rdp-last-contact').value = new Date().toISOString().split('T')[0];
+  saveLastContact();
+}
+
+function renderRenewalComments(r) {
+  const comments = r.comments || [];
+  document.getElementById('rdp-comments').innerHTML = comments.length
+    ? comments.slice().reverse().map(c=>`
+        <div class="comment-item">
+          <div class="comment-meta"><span>${c.author||'You'}</span><span>${fmtDate(c.date)}</span></div>
+          <div class="comment-text">${c.text}</div>
+        </div>`).join('')
+    : `<div style="font-size:12.5px;color:var(--text-soft);padding:4px 0">No comments yet.</div>`;
+}
+
+function addRenewalComment() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const text = document.getElementById('rdp-new-comment').value.trim();
+  if (!r || !text) return;
+  if (!r.comments) r.comments = [];
+  r.comments.push({ text, date: new Date().toISOString().split('T')[0], author: 'You' });
+  saveData(); renderRenewalComments(r);
+  document.getElementById('rdp-new-comment').value = '';
+  toast('Comment added ✓');
+}
+
+function saveSlackWebhook() {
+  localStorage.setItem('slack-webhook', document.getElementById('rdp-slack-webhook').value.trim());
+  toast('Slack webhook saved ✓');
+}
+
+async function generateRenewalAlert() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const c = data.clients.find(x=>x.id===r?.clientId);
+  if (!r || !c) return;
+
+  const daysSinceContact = r.lastContact ? Math.round((new Date() - new Date(r.lastContact)) / 86400000) : null;
+  const daysToRenewal = daysUntil(r.date);
+  const latestComment = (r.comments||[]).slice(-1)[0]?.text || 'None';
+
+  const genBtn = document.getElementById('rdp-gen-btn');
+  if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating…'; }
+
+  const prompt = `You are an account manager. Write a short internal follow-up note (3-4 sentences) about this renewal that needs attention.
+
+Client: ${c.name} | Contact: ${c.contact}
+Renewal: ${r.type} on ${fmtDate(r.date)} (${daysToRenewal >= 0 ? 'in '+daysToRenewal+' days' : Math.abs(daysToRenewal)+' days overdue'})
+Status: ${r.status}
+Last contact: ${r.lastContact ? fmtDate(r.lastContact)+' ('+daysSinceContact+' days ago)' : 'Never recorded'}
+Latest comment: ${latestComment}
+
+Be direct. Include one clear next step. Do not use placeholders like [Name].`;
+
+  try {
+    const msg = await claudeFetch(prompt, 350);
+    document.getElementById('rdp-msg-text').value = msg;
+    document.getElementById('rdp-generated-msg').style.display = 'block';
+    document.getElementById('rdp-send-email-btn').style.display = 'inline-flex';
+    document.getElementById('rdp-send-slack-btn').style.display = 'inline-flex';
+  } catch(e) { toast(e.message || 'Failed to generate message ✗'); console.error(e); }
+
+  if (genBtn) { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Message'; }
+}
+
+async function sendRenewalEmail() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const c = data.clients.find(x=>x.id===r?.clientId);
+  const from = document.getElementById('rdp-email-from').value.trim() || getFromEmail();
+  const to = document.getElementById('rdp-email-to').value.trim();
+  const msg = document.getElementById('rdp-msg-text').value.trim();
+  if (!msg) { toast('Generate a message first ✗'); return; }
+
+  const btn = document.getElementById('rdp-send-email-btn');
+  const statusEl = document.getElementById('rdp-sending-status');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+
+  try {
+    await mailgunSend({ to, from, subject: `Follow-up: ${c?.name} — ${r?.type}`, text: msg });
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Mailgun</span>';
+    toast('Email sent ✓');
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
+    toast('Email failed ✗');
+  }
+  btn.disabled = false;
+}
+
+// ─── INVOICE DETAIL PANEL ────────────────────────────────────────────────────
+let activeInvoiceId = null;
+
+function openInvoiceDetail(id) {
+  const inv = data.invoices.find(x=>x.id===id);
+  if (!inv) return;
+  activeInvoiceId = id;
+  const c = data.clients.find(x=>x.id===inv.clientId);
+  const daysOver = Math.abs(daysUntil(inv.dueDate));
+
+  document.getElementById('idp-title').textContent = inv.number;
+  document.getElementById('idp-subtitle').textContent = (c?.name||'Unknown') + ' · ' + fmt(inv.amount);
+
+  document.getElementById('idp-info').innerHTML = `
+    <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Invoice #</span><span class="detail-val" style="font-family:var(--mono)">${inv.number}</span></div>
+    <div class="detail-row"><span class="detail-label">Due Date</span><span class="detail-val">${fmtDate(inv.dueDate)}</span></div>
+    <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--red);font-weight:600">${fmtF(inv.amount)}</span></div>
+    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val">${statusBadge(inv.status)}${inv.status==='Overdue'?` <span style="font-size:11px;color:var(--red)">(${daysOver} days overdue)</span>`:''}</span></div>`;
+
+  // Restore saved emails
+  document.getElementById('idp-email-from').value = localStorage.getItem('default-from-email') || '';
+  document.getElementById('idp-email-to').value = inv.followupTo || '';
+  document.getElementById('idp-slack-webhook').value = localStorage.getItem('slack-webhook') || '';
+
+  // Reset message
+  document.getElementById('idp-generated-msg').style.display = 'none';
+  document.getElementById('idp-send-email-btn').style.display = 'none';
+  document.getElementById('idp-send-slack-btn').style.display = 'none';
+  document.getElementById('idp-sending-status').textContent = '';
+
+  // Notes
+  renderInvoiceComments(inv);
+
+  document.getElementById('idp-panel').classList.add('open');
+  document.getElementById('idp-overlay').classList.add('open');
+}
+
+function closeInvoiceDetail() {
+  document.getElementById('idp-panel').classList.remove('open');
+  document.getElementById('idp-overlay').classList.remove('open');
+  activeInvoiceId = null;
+}
+
+function markPaidFromPanel() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  if (!inv) return;
+  inv.status = 'Paid'; inv.statusLocked = true;
+  saveData(); renderInvoices(); closeInvoiceDetail();
+  toast('Invoice marked as paid ✓');
+}
+
+function renderInvoiceComments(inv) {
+  const comments = inv.comments || [];
+  document.getElementById('idp-comments').innerHTML = comments.length
+    ? comments.slice().reverse().map(c=>`
+        <div class="comment-item">
+          <div class="comment-meta"><span>${c.author||'You'}</span><span>${fmtDate(c.date)}</span></div>
+          <div class="comment-text">${c.text}</div>
+        </div>`).join('')
+    : `<div style="font-size:12.5px;color:var(--text-soft);padding:4px 0">No notes yet.</div>`;
+}
+
+function addInvoiceComment() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const text = document.getElementById('idp-new-comment').value.trim();
+  if (!inv || !text) return;
+  if (!inv.comments) inv.comments = [];
+  inv.comments.push({ text, date: new Date().toISOString().split('T')[0], author: 'You' });
+  saveData(); renderInvoiceComments(inv);
+  document.getElementById('idp-new-comment').value = '';
+  toast('Note added ✓');
+}
+
+function saveInvoiceSlackWebhook() {
+  localStorage.setItem('slack-webhook', document.getElementById('idp-slack-webhook').value.trim());
+  toast('Slack webhook saved ✓');
+}
+
+async function generateInvoiceFollowup() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  if (!inv || !c) return;
+
+  const daysOver = daysUntil(inv.dueDate);
+  const latestNote = (inv.comments||[]).slice(-1)[0]?.text || 'None';
+
+  const btn = document.getElementById('idp-gen-btn');
+  btn.disabled = true; btn.textContent = 'Generating…';
+
+  const prompt = `You are an accounts manager. Write a professional but firm payment follow-up email for an overdue invoice.
+
+Client: ${c.name}
+Contact: ${c.contact}
+Invoice: ${inv.number}
+Amount: ${fmt(inv.amount)}
+Due date: ${fmtDate(inv.dueDate)} (${daysOver < 0 ? Math.abs(daysOver)+' days overdue' : 'due in '+daysOver+' days'})
+Status: ${inv.status}
+Latest note: ${latestNote}
+
+Include a subject line prefixed with "SUBJECT: ".
+Write the full email body. Keep it under 130 words. Be polite but clear about the overdue amount and request payment urgently. Sign off as "The Accounts Team". Do NOT use any placeholders.`;
+
+  try {
+    const text = await claudeFetch(prompt, 500);
+    // Save to-email for this invoice
+    const toVal = document.getElementById('idp-email-to').value.trim();
+    if (toVal) { const inv2 = data.invoices.find(x=>x.id===activeInvoiceId); if(inv2) { inv2.followupTo=toVal; saveData(); } }
+    // Save from-email globally
+    const fromVal = document.getElementById('idp-email-from').value.trim();
+    if (fromVal) localStorage.setItem('default-from-email', fromVal);
+
+    document.getElementById('idp-msg-text').value = text.replace(/SUBJECT:\s*.+\n?/i,'').trim();
+    document.getElementById('idp-generated-msg').style.display = 'block';
+    document.getElementById('idp-send-email-btn').style.display = 'inline-flex';
+    document.getElementById('idp-send-slack-btn').style.display = 'inline-flex';
+  } catch(e) { toast(e.message || 'Failed to generate message ✗'); console.error(e); }
+
+  btn.disabled = false; btn.textContent = '⚡ Generate Message';
+}
+
+async function sendInvoiceEmail() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  const from = document.getElementById('idp-email-from').value.trim() || getFromEmail();
+  const to = document.getElementById('idp-email-to').value.trim();
+  const msg = document.getElementById('idp-msg-text').value.trim();
+  if (!msg) { toast('Generate a message first ✗'); return; }
+
+  const btn = document.getElementById('idp-send-email-btn');
+  const statusEl = document.getElementById('idp-sending-status');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+
+  try {
+    await mailgunSend({ to, from, subject: `Payment Follow-up: ${inv?.number} — ${c?.name}`, text: msg });
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Mailgun</span>';
+    toast('Email sent ✓');
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
+    toast('Email failed ✗');
+  }
+  btn.disabled = false;
+}
+
+async function sendInvoiceSlack() {
+  const webhook = document.getElementById('idp-slack-webhook').value.trim() || localStorage.getItem('slack-webhook') || '';
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  const msg = document.getElementById('idp-msg-text').value.trim();
+  if (!msg) { toast('Generate a message first ✗'); return; }
+
+  const statusEl = document.getElementById('idp-sending-status');
+  const btn = document.getElementById('idp-send-slack-btn');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+
+  try {
+    await slackSend(webhook, `*Payment Follow-up — ${c?.name}*\n${msg}\n\n_Invoice ${inv?.number} · ${fmtF(inv?.amount)} · due ${fmtDate(inv?.dueDate)}_`);
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack (no-cors mode — check your channel)</span>';
+    toast('Sent to Slack ✓');
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
+    toast('Slack send failed ✗');
+  }
+  btn.disabled = false;
+}
+
+
+
+async function sendRenewalSlack() {
+  const webhook = document.getElementById('rdp-slack-webhook').value.trim() || localStorage.getItem('slack-webhook') || '';
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const c = data.clients.find(x=>x.id===r?.clientId);
+  const msg = document.getElementById('rdp-msg-text').value.trim();
+  if (!msg) { toast('Generate a message first ✗'); return; }
+
+  const statusEl = document.getElementById('rdp-sending-status');
+  const btn = document.getElementById('rdp-send-slack-btn');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+
+  try {
+    await slackSend(webhook, `*Renewal Follow-up — ${c?.name}*\n${msg}\n\n_${r?.type} · ${fmtDate(r?.date)} · ${fmtF(r?.amount)}_`);
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack (no-cors mode — check your channel)</span>';
+    toast('Sent to Slack ✓');
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
+    toast('Slack send failed ✗');
+  }
+  btn.disabled = false;
+}
+
+// ─── DATA INSPECTOR ──────────────────────────────────────────────────────────
+function refreshInspector() {
+  const el = document.getElementById('data-inspector-stats');
+  const prev = document.getElementById('data-inspector-preview');
+  if (!el) return;
+
+  el.innerHTML = `
+    <div class="import-stat"><div class="import-stat-val">${data.clients.length}</div><div class="import-stat-label">Clients stored</div></div>
+    <div class="import-stat"><div class="import-stat-val">${data.renewals.length}</div><div class="import-stat-label">Renewals stored</div></div>
+    <div class="import-stat"><div class="import-stat-val">${data.invoices.length}</div><div class="import-stat-label">Invoices stored</div></div>
+    <div class="import-stat"><div class="import-stat-val">${(data.upsells||[]).length}</div><div class="import-stat-label">Upsells stored</div></div>`;
+
+  // Show first 5 clients as sanity check
+  const sample = data.clients.slice(0, 5);
+  prev.innerHTML = sample.length ? `
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px">First ${sample.length} clients in storage:</div>
+    <div class="preview-table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Plan</th><th>Status</th></tr></thead>
+        <tbody>${sample.map((c,i)=>`<tr>
+          <td class="mono" style="color:var(--text-soft)">${i+1}</td>
+          <td style="font-weight:500">${c.name}</td>
+          <td style="color:var(--text-muted)">${c.email||'—'}</td>
+          <td>${(Array.isArray(c.plan)?c.plan:[c.plan]).join(', ')}</td>
+          <td>${statusBadge(c.status)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    ${data.clients.length > 5 ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px">…and ${data.clients.length-5} more. Go to <a href="#" onclick="navigate('clients');return false;" style="color:var(--accent)">Clients</a> to see all.</div>` : ''}
+  ` : `<div style="font-size:13px;color:var(--text-soft)">No clients in storage yet.</div>`;
+}
+
+function exportRawJSON() {
+  const json = JSON.stringify(data, null, 2);
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([json], {type:'application/json'})),
+    download: 'clientflow-backup.json'
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Data exported as JSON ✓');
+}
+
+function clearAllData() {
+  if (!confirm(`This will permanently delete all ${data.clients.length} clients, ${data.renewals.length} renewals, ${data.invoices.length} invoices and all other data. Are you sure?`)) return;
+  data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  saveData();
+  updateBadges();
+  refreshInspector();
+  toast('All data cleared — reset to defaults ✓');
+}
+
+function clearInvoicesData() {
+  const count = data.invoices.length;
+  if (!count) { toast("No invoices to clear"); return; }
+  if (!confirm(`This will permanently delete all ${count} invoices. Clients and renewals will not be affected. Are you sure?`)) return;
+  data.invoices = [];
+  saveData();
+  updateBadges();
+  refreshInspector();
+  toast(`${count} invoice${count !== 1 ? "s" : ""} cleared ✓`);
+}
+
+
+const UPSELL_STAGES = [
+  { key:'Identified',  label:'Identified',  color:'#6366f1', bg:'#eef2ff' },
+  { key:'Contacted',   label:'Contacted',   color:'#2563eb', bg:'#eff4ff' },
+  { key:'Proposal',    label:'Proposal',    color:'#d97706', bg:'#fffbeb' },
+  { key:'Negotiating', label:'Negotiating', color:'#ea580c', bg:'#fff7ed' },
+  { key:'Won',         label:'Won',         color:'#16a34a', bg:'#f0fdf4' },
+  { key:'Lost',        label:'Lost',        color:'#94a3b8', bg:'#f1f5f9' },
+];
+const PLAN_TAG_CLASS = { Aliado:'tag-aliado', Consola:'tag-consola', C3ntro:'tag-c3ntro', Parvada:'tag-parvada', Reportes:'tag-reportes' };
+let activeUpsellId = null;
+
+function planTags(plans) {
+  return (plans||[]).map(p=>`<span class="upsell-tag ${PLAN_TAG_CLASS[p]||''}">${p}</span>`).join('');
+}
+
+function renderUpsell() {
+  if (!data.upsells) data.upsells = [];
+  const active = data.upsells.filter(u=>u.stage!=='Won'&&u.stage!=='Lost');
+  const pipeline = active.reduce((s,u)=>s+u.value,0);
+  const won = data.upsells.filter(u=>u.stage==='Won').reduce((s,u)=>s+u.value,0);
+
+  // Stats
+  const stageCounts = {};
+  UPSELL_STAGES.forEach(s=>stageCounts[s.key]=data.upsells.filter(u=>u.stage===s.key).length);
+  document.getElementById('upsell-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Pipeline Value</div><div class="stat-value" style="color:var(--accent)">${fmtF(pipeline)}</div><div class="stat-delta">${active.length} active opportunities</div></div>
+    <div class="stat-card"><div class="stat-label">Won</div><div class="stat-value green">${fmtF(won)}</div><div class="stat-delta">${data.upsells.filter(u=>u.stage==='Won').length} closed</div></div>
+    <div class="stat-card"><div class="stat-label">Identified</div><div class="stat-value" style="color:#6366f1">${stageCounts.Identified}</div><div class="stat-delta">Not yet contacted</div></div>
+    <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value amber">${(stageCounts.Contacted||0)+(stageCounts.Proposal||0)+(stageCounts.Negotiating||0)}</div><div class="stat-delta">Contacted → Negotiating</div></div>
+    <div class="stat-card"><div class="stat-label">Lost</div><div class="stat-value" style="color:var(--text-soft)">${stageCounts.Lost}</div><div class="stat-delta">Closed lost</div></div>`;
+
+  // Kanban
+  document.getElementById('kanban-board').innerHTML = UPSELL_STAGES.map(stage => {
+    const cards = data.upsells.filter(u=>u.stage===stage.key);
+    return `
+      <div class="kanban-col stage-${stage.key.toLowerCase()}">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">${stage.label}</span>
+          <span class="kanban-col-count">${cards.length}</span>
+        </div>
+        <div class="kanban-cards">
+          ${cards.length ? cards.map(u => {
+            const c = data.clients.find(x=>x.id===u.clientId);
+            return `<div class="upsell-card" onclick="openUpsellDetail(${u.id})">
+              <div class="upsell-card-client">${c?.name||'Unknown Client'}</div>
+              <div class="upsell-card-tags">${planTags(u.targetPlans)}</div>
+              ${u.notes?`<div class="upsell-card-notes">${u.notes.substring(0,80)}${u.notes.length>80?'…':''}</div>`:''}
+              <div class="upsell-card-meta">
+                <span class="upsell-card-value">${fmtF(u.value)}</span>
+                <span class="upsell-card-date">${fmtDate(u.updatedAt)}</span>
+              </div>
+            </div>`;
+          }).join('') : `<div style="font-size:12px;color:var(--text-soft);text-align:center;padding:16px 8px;opacity:0.6">No opportunities</div>`}
+        </div>
+        <div class="kanban-add">
+          <button class="kanban-add-btn" onclick="openUpsellModal('${stage.key}')">＋ Add</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Badge
+  const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
+  const ub = document.getElementById('upsell-badge');
+  if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
+}
+
+function openUpsellDetail(id) {
+  const u = data.upsells.find(x=>x.id===id);
+  if (!u) return;
+  activeUpsellId = id;
+  const c = data.clients.find(x=>x.id===u.clientId);
+
+  document.getElementById('udp-client').textContent = c?.name || 'Unknown Client';
+  document.getElementById('udp-plans').textContent = (u.targetPlans||[]).join(', ') + ' · ' + fmt(u.value);
+
+  // Stage pills
+  document.getElementById('udp-stages').innerHTML = UPSELL_STAGES.map(s=>`
+    <span class="stage-pill ${u.stage===s.key?'active':''}"
+      style="background:${u.stage===s.key?s.bg:'var(--bg)'};color:${s.color};border-color:${u.stage===s.key?s.color:'var(--border)'}"
+      onclick="setUpsellStage(${id},'${s.key}')">
+      ${u.stage===s.key?'● ':''}${s.label}
+    </span>`).join('');
+
+  // Details
+  document.getElementById('udp-details').innerHTML = `
+    <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Current Plans</span><span class="detail-val">${(Array.isArray(c?.plan)?c.plan:[c?.plan]).join(', ')}</span></div>
+    <div class="detail-row"><span class="detail-label">Est. Value</span><span class="detail-val" style="color:var(--green);font-weight:600">${fmtF(u.value)}</span></div>
+    <div class="detail-row"><span class="detail-label">Created</span><span class="detail-val">${fmtDate(u.createdAt)}</span></div>
+    <div class="detail-row"><span class="detail-label">Last Updated</span><span class="detail-val">${fmtDate(u.updatedAt)}</span></div>`;
+
+  // Plan picker
+  document.getElementById('udp-plan-picker').innerHTML = ['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`
+    <div class="plan-chip ${(u.targetPlans||[]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('');
+
+  document.getElementById('udp-notes').value = u.notes || '';
+  document.getElementById('upsell-detail-panel').classList.add('open');
+  document.getElementById('upsell-detail-overlay').classList.add('open');
+}
+
+function closeUpsellDetail() {
+  document.getElementById('upsell-detail-panel').classList.remove('open');
+  document.getElementById('upsell-detail-overlay').classList.remove('open');
+  activeUpsellId = null;
+}
+
+function setUpsellStage(id, stage) {
+  const u = data.upsells.find(x=>x.id===id);
+  if (!u) return;
+  u.stage = stage;
+  u.updatedAt = new Date().toISOString().split('T')[0];
+  saveData(); renderUpsell(); openUpsellDetail(id);
+  toast(`Moved to ${stage} ✓`);
+}
+
+function saveUpsellNote() {
+  const u = data.upsells.find(x=>x.id===activeUpsellId);
+  if (u) { u.notes = document.getElementById('udp-notes').value; u.updatedAt = new Date().toISOString().split('T')[0]; saveData(); renderUpsell(); toast('Note saved ✓'); }
+}
+
+function saveUpsellPlans() {
+  const u = data.upsells.find(x=>x.id===activeUpsellId);
+  if (!u) return;
+  u.targetPlans = [...document.querySelectorAll('#udp-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ',''));
+  u.updatedAt = new Date().toISOString().split('T')[0];
+  saveData(); renderUpsell();
+  document.getElementById('udp-plans').textContent = u.targetPlans.join(', ') + ' · ' + fmt(u.value);
+  toast('Plans updated ✓');
+}
+
+function markUpsellWon() {
+  const u = data.upsells.find(x=>x.id===activeUpsellId);
+  if (u) { u.stage='Won'; u.updatedAt=new Date().toISOString().split('T')[0]; saveData(); renderUpsell(); closeUpsellDetail(); toast('Opportunity marked as Won 🎉'); }
+}
+
+function deleteUpsell() {
+  if (!confirm('Delete this opportunity?')) return;
+  data.upsells = data.upsells.filter(x=>x.id!==activeUpsellId);
+  saveData(); renderUpsell(); closeUpsellDetail(); toast('Deleted ✓');
+}
+
+function openUpsellModal(defaultStage) {
+  const clientOpts = data.clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const stageOpts = UPSELL_STAGES.map(s=>`<option value="${s.key}" ${s.key===(defaultStage||'Identified')?'selected':''}>${s.label}</option>`).join('');
+  const body = `<div class="modal-title">New Upsell Opportunity</div>
+    <div class="form-grid">
+      <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="u-client">${clientOpts}</select></div>
+      <div class="form-group"><label class="form-label">Stage</label><select class="form-input" id="u-stage">${stageOpts}</select></div>
+      <div class="form-group"><label class="form-label">Est. Value ($)</label><input class="form-input" id="u-value" type="number" placeholder="0"></div>
+      <div class="form-group span2"><label class="form-label">Target Plans</label><div class="plan-picker" id="u-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
+      <div class="form-group span2"><label class="form-label">Notes</label><textarea class="form-input" id="u-notes" style="resize:vertical;min-height:70px" placeholder="Context, next steps…"></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUpsell()">Add Opportunity</button>
+    </div>`;
+  document.getElementById('modal-content').innerHTML = body;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function saveUpsell() {
+  const clientId = parseInt(document.getElementById('u-client').value);
+  const stage = document.getElementById('u-stage').value;
+  const value = parseFloat(document.getElementById('u-value').value)||0;
+  const notes = document.getElementById('u-notes').value;
+  const targetPlans = [...document.querySelectorAll('#u-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ',''));
+  if (!clientId) { toast('Please select a client ✗'); return; }
+  const today = new Date().toISOString().split('T')[0];
+  data.upsells.push({ id:++data.nextId, clientId, targetPlans, stage, value, notes, createdAt:today, updatedAt:today });
+  saveData(); closeModal(); renderUpsell(); toast('Opportunity added ✓');
+}
+
+(async()=>{
+  await loadData();
+  await loadEmailRecipients();
+  if (!data.upsells) data.upsells = [];
+  loadAutoAlertSettings();
+  updateFinanceLockBtn();
+  renderFinanceLockSettings();
+  autoUpdateStatuses();
+  renderDashboard();
+  updateBadges();
+  const urgentCount = buildAlertItems().length;
+  const eb = document.getElementById('email-badge');
+  if (eb) { eb.textContent = urgentCount; eb.style.display = urgentCount ? 'inline' : 'none'; }
+  const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
+  const ub = document.getElementById('upsell-badge');
+  if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
+})();
+</script>
+<!-- FINANCE LOCK MODAL -->
+<div id="finance-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)closeFinanceModal()">
+  <div style="background:var(--surface);border-radius:16px;padding:32px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div id="finance-modal-content"></div>
+  </div>
+</div>
+</body>
+</html>
