@@ -1619,14 +1619,14 @@ function renderReports() {
     <div style="padding:12px 0 4px">
       <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--text)">🏦 Bank Balances</div>
       ${accounts.map(a=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid var(--border-soft)">
-        <span>${a.name}${a.bank?' <span style="color:var(--text-muted);font-size:11px">· '+a.bank+'</span>':''}</span>
+        <span>${a.name}${a.bank ? ` <span style="color:var(--text-muted);font-size:11px">· ${a.bank}</span>` : ''}</span>
         <span style="font-family:monospace;font-weight:600">${a.currency} ${fmtF(a.balance)}</span>
       </div>`).join('')}
       <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:13px;font-weight:700">
         <span>Total Cash</span>
         <span style="font-family:monospace">${fmtF(accounts.reduce((s,a)=>s+a.balance,0))}</span>
       </div>
-    </div>` : '<div style="padding:10px 0;color:var(--text-soft);font-size:13px">No bank accounts added yet — <a style="color:var(--accent);cursor:pointer" onclick="navigate('bank-accounts')">add accounts →</a></div>';
+    </div>` : `<div style="padding:10px 0;color:var(--text-soft);font-size:13px">No bank accounts added yet — <a style="color:var(--accent);cursor:pointer" onclick="navigate('bank-accounts')">add accounts →</a></div>`
 
   document.getElementById('invoice-report-content').innerHTML =
     invoiceSection('🔴 Overdue', overdue, 'var(--red)', 'none') +
@@ -1846,8 +1846,7 @@ function buildRenewalReportText() {
 `;
   if (staleTotal) text += `_⚠️ ${staleTotal} renewal${staleTotal!==1?'s':''} with no recent contact_
 `;
-  text += '
-';
+  text += '\n';
   text += bucketLine('⚠️', 'Overdue', overdue);
   text += bucketLine('🔔', '0–30 days', d30);
   text += bucketLine('📅', '31–60 days', d60);
