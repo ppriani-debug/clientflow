@@ -1027,6 +1027,8 @@ let data = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let currentPage = 'dashboard';
 let renewalFilter = 'All', invoiceFilter = 'All';
 let clientSearch = '', renewalSearch = '', invoiceSearch = '';
+let renewalSort = { col: 'date', dir: 'asc' };
+let invoiceSort = { col: 'dueDate', dir: 'asc' };
 let detailClientId = null;
 
 // ─── PERSISTENCE ──────────────────────────────────────────────────────────────
@@ -1404,14 +1406,37 @@ function saveNote() {
 // ─── RENEWALS ────────────────────────────────────────────────────────────────
 function filterRenewals(q) { renewalSearch=q.toLowerCase(); renderRenewals(); }
 function setRenewalFilter(f) { renewalFilter=f; renderRenewals(); }
+function setRenewalSort(col) {
+  if (renewalSort.col === col) renewalSort.dir = renewalSort.dir === 'asc' ? 'desc' : 'asc';
+  else { renewalSort.col = col; renewalSort.dir = 'asc'; }
+  renderRenewals();
+}
 function renderRenewals() {
   document.getElementById('renewal-filters').innerHTML = ['All','Due Soon','Overdue','Upcoming','Renewed'].map(s=>
     `<button class="filter-btn ${renewalFilter===s?'active':''}" onclick="setRenewalFilter('${s}')">${s}</button>`).join('');
-  const rows = data.renewals.filter(r=>(renewalFilter==='All'||r.status===renewalFilter)&&(!renewalSearch||clientName(r.clientId).toLowerCase().includes(renewalSearch)||r.type.toLowerCase().includes(renewalSearch)));
 
-  // Update table header to include Last Contact
+  let rows = data.renewals.filter(r=>(renewalFilter==='All'||r.status===renewalFilter)&&(!renewalSearch||clientName(r.clientId).toLowerCase().includes(renewalSearch)||r.type.toLowerCase().includes(renewalSearch)));
+
+  // Sort
+  const sd = renewalSort.dir === 'asc' ? 1 : -1;
+  rows = rows.slice().sort((a,b) => {
+    if (renewalSort.col === 'client') return sd * clientName(a.clientId).localeCompare(clientName(b.clientId));
+    if (renewalSort.col === 'date') return sd * (new Date(a.date) - new Date(b.date));
+    if (renewalSort.col === 'amount') return sd * (a.amount - b.amount);
+    if (renewalSort.col === 'status') return sd * a.status.localeCompare(b.status);
+    if (renewalSort.col === 'lastContact') {
+      const da = a.lastContact ? new Date(a.lastContact) : new Date(0);
+      const db = b.lastContact ? new Date(b.lastContact) : new Date(0);
+      return sd * (da - db);
+    }
+    return 0;
+  });
+
+  const sortArrow = col => renewalSort.col === col ? (renewalSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
+  const th = (col, label) => `<th style="cursor:pointer;user-select:none" onclick="setRenewalSort('${col}')">${label}<span style="font-size:10px;color:var(--text-soft)">${sortArrow(col)}</span></th>`;
+
   const thead = document.querySelector('#page-renewals table thead tr');
-  if (thead) thead.innerHTML = '<th>Client</th><th>Type</th><th>Renewal Date</th><th>Amount</th><th>Last Contact</th><th>Status</th><th></th>';
+  if (thead) thead.innerHTML = th('client','Client') + th('type','Type') + th('date','Renewal Date') + th('amount','Amount') + th('lastContact','Last Contact') + th('status','Status') + '<th></th>';
 
   const isStale = r => {
     if (!r.lastContact) return true;
@@ -1466,7 +1491,24 @@ function renderInvoices() {
     <div class="aging-bucket b60"><div class="aging-label">31–60 Days</div><div class="aging-amount">${fmtF(b60.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b60.length} invoice${b60.length!==1?'s':''}</div></div>
     <div class="aging-bucket b90"><div class="aging-label">60+ Days</div><div class="aging-amount">${fmtF(b90.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b90.length} invoice${b90.length!==1?'s':''}</div></div>`;
 
-  const rows = data.invoices.filter(i=>(invoiceFilter==='All'||i.status===invoiceFilter)&&(!invoiceSearch||clientName(i.clientId).toLowerCase().includes(invoiceSearch)||i.number.toLowerCase().includes(invoiceSearch)));
+  let rows = data.invoices.filter(i=>(invoiceFilter==='All'||i.status===invoiceFilter)&&(!invoiceSearch||clientName(i.clientId).toLowerCase().includes(invoiceSearch)||i.number.toLowerCase().includes(invoiceSearch)));
+
+  // Sort
+  const sd = invoiceSort.dir === 'asc' ? 1 : -1;
+  rows = rows.slice().sort((a,b) => {
+    if (invoiceSort.col === 'number') return sd * a.number.localeCompare(b.number);
+    if (invoiceSort.col === 'client') return sd * clientName(a.clientId).localeCompare(clientName(b.clientId));
+    if (invoiceSort.col === 'dueDate') return sd * (new Date(a.dueDate) - new Date(b.dueDate));
+    if (invoiceSort.col === 'amount') return sd * (a.amount - b.amount);
+    if (invoiceSort.col === 'status') return sd * a.status.localeCompare(b.status);
+    return 0;
+  });
+
+  const sortArrow = col => invoiceSort.col === col ? (invoiceSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
+  const ith = (col, label) => `<th style="cursor:pointer;user-select:none" onclick="setInvoiceSort('${col}')">${label}<span style="font-size:10px;color:var(--text-soft)">${sortArrow(col)}</span></th>`;
+  const ithead = document.querySelector('#page-invoices table thead tr');
+  if (ithead) ithead.innerHTML = ith('number','Invoice #') + ith('client','Client') + ith('dueDate','Due Date') + ith('amount','Amount') + ith('status','Status') + '<th></th>';
+
   document.getElementById('invoices-tbody').innerHTML = rows.length
     ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
         <td class="mono" style="font-weight:500">${i.number}</td>
@@ -1483,6 +1525,12 @@ function renderInvoices() {
         </div></td>
       </tr>`).join('')
     : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">$</div><div class="empty-text">No invoices found</div></div></td></tr>`;
+}
+
+function setInvoiceSort(col) {
+  if (invoiceSort.col === col) invoiceSort.dir = invoiceSort.dir === 'asc' ? 'desc' : 'asc';
+  else { invoiceSort.col = col; invoiceSort.dir = 'asc'; }
+  renderInvoices();
 }
 function editInvoice(id,e) { e.stopPropagation(); openModal('invoice', data.invoices.find(x=>x.id===id)); }
 function markPaid(id,e) {
