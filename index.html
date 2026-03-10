@@ -516,28 +516,28 @@
           <tbody id="bank-tbody"></tbody>
         </table>
       </div>
-    </div>
 
-    <!-- BANK ACCOUNT MODAL -->
-    <div class="modal-overlay" id="bank-modal-overlay" onclick="closeBankModal()"></div>
-    <div class="modal" id="bank-modal" style="max-width:440px">
-      <div class="modal-header"><div class="modal-title" id="bank-modal-title">Add Account</div><button class="modal-close" onclick="closeBankModal()">✕</button></div>
-      <div class="modal-body">
-        <div class="form-group"><label>Account Name *</label><input id="bm-name" placeholder="e.g. Operations Account"></div>
-        <div class="form-group"><label>Bank</label><input id="bm-bank" placeholder="e.g. BBVA, Santander"></div>
-        <div class="form-row">
-          <div class="form-group" style="flex:1"><label>Balance *</label><input id="bm-balance" type="number" step="0.01" placeholder="0.00"></div>
-          <div class="form-group" style="flex:1"><label>Currency</label>
-            <select id="bm-currency">
-              <option value="MXN">MXN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
-            </select>
+      <!-- BANK ACCOUNT MODAL (scoped inside this page) -->
+      <div class="modal-overlay" id="bank-modal-overlay" onclick="closeBankModal()"></div>
+      <div class="modal" id="bank-modal" style="max-width:440px">
+        <div class="modal-header"><div class="modal-title" id="bank-modal-title">Add Account</div><button class="modal-close" onclick="closeBankModal()">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Account Name *</label><input id="bm-name" placeholder="e.g. Operations Account"></div>
+          <div class="form-group"><label>Bank</label><input id="bm-bank" placeholder="e.g. BBVA, Santander"></div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1"><label>Balance *</label><input id="bm-balance" type="number" step="0.01" placeholder="0.00"></div>
+            <div class="form-group" style="flex:1"><label>Currency</label>
+              <select id="bm-currency">
+                <option value="MXN">MXN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
+              </select>
+            </div>
           </div>
+          <div class="form-group"><label>Last Updated</label><input id="bm-updated" type="date"></div>
         </div>
-        <div class="form-group"><label>Last Updated</label><input id="bm-updated" type="date"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeBankModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveBankAccount()">Save Account</button>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeBankModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveBankAccount()">Save Account</button>
+        </div>
       </div>
     </div>
 
