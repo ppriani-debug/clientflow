@@ -1628,102 +1628,145 @@ function renderReports() {
   const monthName = now.toLocaleString('default',{month:'long',year:'numeric'});
   document.getElementById('invoice-report-date').textContent = `As of ${now.toLocaleDateString()} · Paid invoices show ${monthName} only`;
 
-  const invoiceSection = (title, items, color, emptyMsg) => {
-    if (!items.length) return `<div style="padding:10px 0 10px 16px;color:var(--text-soft);font-size:13px;border-bottom:1px solid var(--border-soft)">${title}: <em>${emptyMsg}</em></div>`;
-    const total = items.reduce((s,i)=>s+i.amount,0);
-    return `
-      <div style="border-bottom:1px solid var(--border-soft)">
-        <div style="display:flex;align-items:center;gap:10px;padding:12px 0 8px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-          <span style="font-weight:600;color:${color};min-width:120px">${title}</span>
-          <span class="badge" style="background:${color}22;color:${color};border:none">${items.length} invoice${items.length!==1?'s':''}</span>
-          <span style="margin-left:auto;font-weight:600;color:${color};font-family:monospace">${fmt(total)}</span>
-          <span style="font-size:11px;color:var(--text-muted)">▾</span>
-        </div>
-        <div style="padding-bottom:12px">
-          <table style="width:100%">
-            <thead><tr style="font-size:11px;color:var(--text-muted)"><th>Invoice #</th><th>Client</th><th>Due Date</th><th>Amount</th></tr></thead>
-            <tbody>${items.sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).map(i=>`
-              <tr style="cursor:pointer" onclick="navigate('invoices');setTimeout(()=>openInvoiceDetail(${i.id}),100)">
-                <td class="mono" style="font-size:12px">${i.number}</td>
-                <td style="font-size:12px">${clientName(i.clientId)}</td>
-                <td style="font-size:12px">${fmtDate(i.dueDate)}<div style="font-size:10px;color:var(--text-soft)">${daysLabel(i.dueDate)}</div></td>
-                <td class="mono" style="font-size:12px;font-weight:500">${fmtF(i.amount)}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>`;
+  const invoiceRow = i => {
+    const days = daysUntil(i.dueDate);
+    const dl = days < 0 ? `<span style="color:var(--red);font-size:10px">${Math.abs(days)}d overdue</span>` : days === 0 ? `<span style="color:var(--amber);font-size:10px">due today</span>` : `<span style="color:var(--text-soft);font-size:10px">in ${days}d</span>`;
+    return `<tr style="cursor:pointer" onclick="navigate('invoices');setTimeout(()=>openInvoiceDetail(${i.id}),100)">
+      <td class="mono" style="font-size:12px">${i.number}</td>
+      <td style="font-size:12px;font-weight:500">${clientName(i.clientId)}</td>
+      <td style="font-size:12px">${fmtDate(i.dueDate)}<br>${dl}</td>
+      <td class="mono" style="font-size:12px;font-weight:600">${fmtF(i.amount)}</td>
+    </tr>`;
   };
 
-  // Bank balances footer
-  const accounts = getBankAccounts();
-  const bankBlock = accounts.length ? `
-    <div style="padding:12px 0 4px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--text)">🏦 Bank Balances</div>
-      ${accounts.map(a=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid var(--border-soft)">
-        <span>${a.name}${a.bank ? ` <span style="color:var(--text-muted);font-size:11px">· ${a.bank}</span>` : ''}</span>
-        <span style="font-family:monospace;font-weight:600">${a.currency} ${fmtF(a.balance)}</span>
-      </div>`).join('')}
-      <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:13px;font-weight:700">
-        <span>Total Cash</span>
-        <span style="font-family:monospace">${fmtF(accounts.reduce((s,a)=>s+a.balance,0))}</span>
+  const sectionBlock = (icon, title, color, count, total, rows, note='') => `
+    <div style="border-bottom:1px solid var(--border-soft);margin-bottom:2px">
+      <div style="display:flex;align-items:center;gap:10px;padding:13px 0 9px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <span style="font-size:17px">${icon}</span>
+        <div style="flex:1">
+          <div style="font-weight:700;color:${color};font-size:13px">${title}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:1px">${count} invoice${count!==1?'s':''} · Total: <strong>${fmtF(total)}</strong>${note}</div>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">▾ details</span>
       </div>
-    </div>` : `<div style="padding:10px 0;color:var(--text-soft);font-size:13px">No bank accounts added yet — <a style="color:var(--accent);cursor:pointer" onclick="navigate('bank-accounts')">add accounts →</a></div>`
+      <div style="display:none;padding-bottom:14px">
+        ${rows.length ? `<table style="width:100%"><thead><tr style="font-size:11px;color:var(--text-muted)"><th>Invoice #</th><th>Client</th><th>Due Date</th><th>Amount</th></tr></thead><tbody>${rows.map(invoiceRow).join('')}</tbody></table>` : '<div style="padding:8px 0;color:var(--text-soft);font-size:13px">None</div>'}
+      </div>
+    </div>`;
+
+  const accounts = getBankAccounts();
+  const overdueSort = overdue.slice().sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const top5pending = pending.slice().sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,5);
+  const top10paid = paidThisMonth.slice().sort((a,b)=>b.amount-a.amount).slice(0,10);
+  const paidTotal = paidThisMonth.reduce((s,i)=>s+i.amount,0);
+
+  const bankBlock = accounts.length ? `
+    <div style="border-top:2px solid var(--border);padding:16px 0 4px;margin-top:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:17px">🏦</span>
+        <div style="font-weight:700;font-size:13px;color:var(--text)">Bank Balances</div>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:auto">Latest recorded balances</span>
+      </div>
+      ${accounts.map(a=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-soft)">
+          <div>
+            <div style="font-size:13px;font-weight:500">${a.name}</div>
+            ${a.bank?`<div style="font-size:11px;color:var(--text-muted)">${a.bank}${a.updated?' · updated '+fmtDate(a.updated):''}</div>`:''}
+          </div>
+          <div style="font-family:monospace;font-weight:700;font-size:14px">${a.currency} ${fmtF(a.balance)}</div>
+        </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-weight:700;font-size:13px">
+        <span>Total Cash Position</span>
+        <span style="font-family:monospace;color:var(--accent)">${fmtF(accounts.reduce((s,a)=>s+a.balance,0))}</span>
+      </div>
+    </div>` : `<div style="padding:12px 0;color:var(--text-soft);font-size:13px;border-top:1px solid var(--border-soft);margin-top:8px">No bank accounts — <a style="color:var(--accent);cursor:pointer" onclick="navigate('bank-accounts')">add accounts →</a></div>`;
 
   document.getElementById('invoice-report-content').innerHTML =
-    invoiceSection('🔴 Overdue', overdue, 'var(--red)', 'none') +
-    invoiceSection('🟡 Pending / Due Soon', pending, 'var(--amber)', 'none') +
-    invoiceSection('✅ Paid This Month', paidThisMonth, 'var(--green)', 'none') +
-    `<div style="padding:14px 0 4px">${bankBlock}</div>`;
+    sectionBlock('🔴', 'Overdue Invoices', 'var(--red)', overdue.length, overdue.reduce((s,i)=>s+i.amount,0), overdueSort) +
+    sectionBlock('🔔', 'Top 5 Due Invoices', 'var(--amber)', top5pending.length, pending.reduce((s,i)=>s+i.amount,0), top5pending, pending.length > 5 ? ` · showing top 5 of ${pending.length}` : '') +
+    sectionBlock('✅', `Paid This Month — ${monthName}`, 'var(--green)', paidThisMonth.length, paidTotal, top10paid, paidThisMonth.length > 10 ? ` · showing top 10 of ${paidThisMonth.length} by amount` : '') +
+    `<div>${bankBlock}</div>`;
 
   // ── RENEWAL REPORT ──
   const today = new Date(); today.setHours(0,0,0,0);
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - today) / 86400000);
 
-  const renewalBucket = (title, items, color, icon) => {
-    if (!items.length) return `<div style="padding:10px 0 10px 16px;color:var(--text-soft);font-size:13px;border-bottom:1px solid var(--border-soft)">${icon} ${title}: <em>none</em></div>`;
+  // Group by status first, then within each status group by day buckets
+  const statuses = ['Overdue','Due Soon','Upcoming','Renewed'];
+  const statusColors = { 'Overdue':'var(--red)', 'Due Soon':'var(--amber)', 'Upcoming':'var(--accent)', 'Renewed':'var(--green)' };
+  const statusIcons  = { 'Overdue':'⚠️', 'Due Soon':'🔔', 'Upcoming':'📅', 'Renewed':'✅' };
+
+  const renewalRow = r => {
+    const df = daysFrom(r);
+    const c = data.clients.find(x=>x.id===r.clientId);
+    const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+    const stale = r.status !== 'Renewed' && (!r.lastContact || lc > 7);
+    const dfLabel = df < 0 ? `<span style="color:var(--red);font-size:10px">${Math.abs(df)}d overdue</span>`
+      : df === 0 ? `<span style="color:var(--amber);font-size:10px">today</span>`
+      : `<span style="color:var(--text-soft);font-size:10px">in ${df}d</span>`;
+    const lcLabel = !r.lastContact ? '<span style="color:var(--red)">never ⚠</span>'
+      : lc === 0 ? 'today' : lc === 1 ? 'yesterday'
+      : `${lc}d ago${stale?' <span style="color:var(--red)">⚠</span>':''}`;
+    return `<tr style="cursor:pointer" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100)">
+      <td style="font-size:12px;font-weight:500">${c?.name||'Unknown'}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${r.type}</td>
+      <td style="font-size:12px">${fmtDate(r.date)}<br>${dfLabel}</td>
+      <td class="mono" style="font-size:12px;font-weight:600">${fmtF(r.amount)}</td>
+      <td style="font-size:12px">${lcLabel}</td>
+    </tr>`;
+  };
+
+  const dayBucket = (label, items, color) => {
+    if (!items.length) return '';
     const total = items.reduce((s,r)=>s+r.amount,0);
-    const staleCount = items.filter(r=>{ const d=r.lastContact?Math.round((new Date()-new Date(r.lastContact))/86400000):null; return !r.lastContact||d>7; }).length;
     return `
-      <div style="border-bottom:1px solid var(--border-soft)">
-        <div style="display:flex;align-items:center;gap:10px;padding:12px 0 8px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-          <span style="font-size:16px">${icon}</span>
-          <span style="font-weight:600;color:${color};min-width:150px">${title}</span>
-          <span class="badge" style="background:${color}22;color:${color};border:none">${items.length} renewal${items.length!==1?'s':''}</span>
-          ${staleCount?`<span class="badge" style="background:var(--red-light);color:var(--red);border:none">📵 ${staleCount} no contact</span>`:''}
-          <span style="margin-left:auto;font-weight:600;font-family:monospace">${fmt(total)}</span>
-          <span style="font-size:11px;color:var(--text-muted)">▾</span>
+      <div style="margin:6px 0 2px;padding:6px 10px;background:${color}11;border-left:3px solid ${color};border-radius:0 4px 4px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <span style="font-size:12px;font-weight:600;color:${color}">${label}</span>
+          <span style="font-size:11px;color:var(--text-muted)">${items.length} · ${fmtF(total)} ▾</span>
         </div>
-        <div style="display:none;padding-bottom:12px">
+        <div style="display:none;margin-top:6px">
           <table style="width:100%">
             <thead><tr style="font-size:11px;color:var(--text-muted)"><th>Client</th><th>Type</th><th>Date</th><th>Amount</th><th>Last Contact</th></tr></thead>
-            <tbody>${items.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(r=>{
-              const df = daysFrom(r);
-              const c = data.clients.find(x=>x.id===r.clientId);
-              const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
-              const stale = !r.lastContact || lc > 7;
-              return `<tr style="cursor:pointer" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100)">
-                <td style="font-size:12px"><div class="client-name">${c?.name||'Unknown'}</div></td>
-                <td style="font-size:12px;color:var(--text-muted)">${r.type}</td>
-                <td style="font-size:12px">${fmtDate(r.date)}<div style="font-size:10px;color:${df<0?'var(--red)':'var(--text-soft)'}">${daysLabel(r.date)}</div></td>
-                <td class="mono" style="font-size:12px">${fmtF(r.amount)}</td>
-                <td style="font-size:12px;color:${stale?'var(--red)':'var(--green)'}">
-                  ${r.lastContact?(lc===0?'today':lc===1?'yesterday':lc+'d ago'):'never'} ${stale?'⚠':''}
-                </td>
-              </tr>`;
-            }).join('')}
-            </tbody>
+            <tbody>${items.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(renewalRow).join('')}</tbody>
           </table>
         </div>
       </div>`;
   };
 
-  // ALL renewals bucketed by days from today (including Renewed)
-  const overduR = data.renewals.filter(r => daysFrom(r) < 0);
-  const d30 = data.renewals.filter(r => { const d=daysFrom(r); return d>=0 && d<=30; });
-  const d60 = data.renewals.filter(r => { const d=daysFrom(r); return d>30 && d<=60; });
-  const d90 = data.renewals.filter(r => { const d=daysFrom(r); return d>60 && d<=90; });
-  const d90p = data.renewals.filter(r => daysFrom(r) > 90);
+  const renewalStatusSection = (status) => {
+    const group = data.renewals.filter(r => r.status === status);
+    if (!group.length) return `<div style="padding:10px 0;color:var(--text-soft);font-size:13px;border-bottom:1px solid var(--border-soft)">${statusIcons[status]} <strong>${status}</strong> — none</div>`;
+    const color = statusColors[status];
+    const total = group.reduce((s,r)=>s+r.amount,0);
+    const staleCount = group.filter(r=>{ const lc=r.lastContact?Math.round((new Date()-new Date(r.lastContact))/86400000):null; return !r.lastContact||lc>7; }).length;
+    // Sub-buckets by days
+    const bOverdue = group.filter(r=>daysFrom(r)<0);
+    const b30 = group.filter(r=>{const d=daysFrom(r);return d>=0&&d<=30;});
+    const b60 = group.filter(r=>{const d=daysFrom(r);return d>30&&d<=60;});
+    const b90 = group.filter(r=>{const d=daysFrom(r);return d>60&&d<=90;});
+    const b90p = group.filter(r=>daysFrom(r)>90);
+    return `
+      <div style="border-bottom:1px solid var(--border-soft);margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:10px;padding:13px 0 9px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <span style="font-size:18px">${statusIcons[status]}</span>
+          <div style="flex:1">
+            <div style="font-weight:700;color:${color};font-size:13px">${status}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:1px">${group.length} renewal${group.length!==1?'s':''} · <strong>${fmtF(total)}</strong>${staleCount&&status!=='Renewed'?` · <span style="color:var(--red)">📵 ${staleCount} no contact</span>`:''}
+            </div>
+          </div>
+          <span style="font-size:11px;color:var(--text-muted)">▾ expand</span>
+        </div>
+        <div style="display:none;padding-bottom:14px">
+          ${dayBucket('Past due', bOverdue, 'var(--red)')}
+          ${dayBucket('0 – 30 days', b30, 'var(--amber)')}
+          ${dayBucket('31 – 60 days', b60, '#f97316')}
+          ${dayBucket('61 – 90 days', b90, 'var(--accent)')}
+          ${dayBucket('90+ days', b90p, 'var(--text-muted)')}
+        </div>
+      </div>`;
+  };
+
   const totalRenewals = data.renewals.length;
   const totalValue = data.renewals.reduce((s,r)=>s+r.amount,0);
   const staleCount = data.renewals.filter(r=>{ const lc=r.lastContact?Math.round((new Date()-new Date(r.lastContact))/86400000):null; return r.status!=='Renewed'&&(!r.lastContact||lc>7); }).length;
@@ -1732,11 +1775,7 @@ function renderReports() {
     `${totalRenewals} total · ${fmt(totalValue)} pipeline · as of ${today.toLocaleDateString()}${staleCount?' · ⚠️ '+staleCount+' no contact':''}`;
 
   document.getElementById('renewal-status-report').innerHTML =
-    renewalBucket('Overdue', overduR, 'var(--red)', '⚠️') +
-    renewalBucket('Due in 0–30 days', d30, 'var(--amber)', '🔔') +
-    renewalBucket('Due in 31–60 days', d60, '#f97316', '📅') +
-    renewalBucket('Due in 61–90 days', d90, 'var(--accent)', '🗓') +
-    renewalBucket('Due in 90+ days', d90p, 'var(--text-muted)', '📆');
+    statuses.map(s => renewalStatusSection(s)).join('');
 
   document.getElementById('payment-history').innerHTML = paid.length
     ? `<table><thead><tr><th>Invoice</th><th>Client</th><th>Amount</th></tr></thead><tbody>${paid.map(i=>`<tr><td class="mono">${i.number}</td><td>${clientName(i.clientId)}</td><td class="mono" style="color:var(--green)">${fmtF(i.amount)}</td></tr>`).join('')}</tbody></table>`
@@ -1820,111 +1859,145 @@ function buildInvoiceReportText() {
   const now = new Date();
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const monthName = now.toLocaleString('default',{month:'long',year:'numeric'});
+  const dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const paid = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;}).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const paidThisMonth = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;});
+  const top5pending = pending.slice(0,5);
+  const top10paid = paidThisMonth.slice().sort((a,b)=>b.amount-a.amount).slice(0,10);
   const accounts = getBankAccounts();
 
-  const invoiceLines = items => items.map(i => {
-    const days = daysUntil(i.dueDate);
-    const daysLabel = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'today' : `due in ${days}d`;
-    return `    • ${clientName(i.clientId)} | ${i.number} | ${fmtDate(i.dueDate)} (${daysLabel}) | ${fmt(i.amount)}`;
-  }).join('\n');
+  const divider = '─────────────────────────────────────';
 
-  let text = `📊 *Invoice Report — ${now.toLocaleDateString()}*
-`;
-  text += `_Generated: ${now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}_
+  let t = '';
+  t += `📋 INVOICE REPORT\n`;
+  t += `${dateStr}\n`;
+  t += `${divider}\n\n`;
 
-`;
-
-  text += `🔴 *OVERDUE — ${overdue.length} invoice${overdue.length!==1?'s':''} · Total: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))}*
-`;
-  text += overdue.length ? invoiceLines(overdue) + '\n' : '    (none)\n';
-
-  text += `
-🟡 *PENDING / DUE SOON — ${pending.length} invoice${pending.length!==1?'s':''} · Total: ${fmt(pending.reduce((s,i)=>s+i.amount,0))}*
-`;
-  text += pending.length ? invoiceLines(pending) + '\n' : '    (none)\n';
-
-  text += `
-✅ *PAID THIS MONTH (${monthName}) — ${paid.length} invoice${paid.length!==1?'s':''} · Total: ${fmt(paid.reduce((s,i)=>s+i.amount,0))}*
-`;
-  text += paid.length ? invoiceLines(paid) + '\n' : '    (none)\n';
-
-  if (accounts.length) {
-    const totalCash = accounts.reduce((s,a)=>s+a.balance,0);
-    text += `
-🏦 *BANK BALANCES*
-`;
-    accounts.forEach(a => {
-      const upd = a.updated ? ` — updated ${fmtDate(a.updated)}` : '';
-      text += `    • ${a.name}${a.bank ? ' ('+a.bank+')' : ''}: ${a.currency} ${fmt(a.balance)}${upd}
-`;
+  // Overdue
+  t += `🔴 OVERDUE INVOICES\n`;
+  if (overdue.length) {
+    t += `   Total: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))} | ${overdue.length} invoice${overdue.length!==1?'s':''}\n\n`;
+    overdue.forEach((i,idx) => {
+      const d = daysUntil(i.dueDate);
+      t += `   ${idx+1}. ${clientName(i.clientId)}\n`;
+      t += `      Invoice: ${i.number} | Due: ${fmtDate(i.dueDate)} (${Math.abs(d)}d overdue) | Amount: ${fmt(i.amount)}\n`;
     });
-    text += `    ─────────────────────
-`;
-    text += `    *Total Cash: ${fmt(totalCash)}*
-`;
+  } else {
+    t += `   No overdue invoices.\n`;
   }
-  return text;
+
+  t += `\n${divider}\n\n`;
+
+  // Top 5 pending
+  t += `🔔 UPCOMING DUE — TOP 5\n`;
+  if (top5pending.length) {
+    t += `   Showing ${top5pending.length} of ${pending.length} pending/due-soon | Total pending: ${fmt(pending.reduce((s,i)=>s+i.amount,0))}\n\n`;
+    top5pending.forEach((i,idx) => {
+      const d = daysUntil(i.dueDate);
+      const dl = d === 0 ? 'due today' : d === 1 ? 'due tomorrow' : `due in ${d}d`;
+      t += `   ${idx+1}. ${clientName(i.clientId)}\n`;
+      t += `      Invoice: ${i.number} | Due: ${fmtDate(i.dueDate)} (${dl}) | Amount: ${fmt(i.amount)}\n`;
+    });
+  } else {
+    t += `   No pending invoices.\n`;
+  }
+
+  t += `\n${divider}\n\n`;
+
+  // Paid this month
+  t += `✅ PAYMENTS RECEIVED — ${monthName.toUpperCase()}\n`;
+  t += `   Total collected: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))} | ${paidThisMonth.length} invoice${paidThisMonth.length!==1?'s':''}\n`;
+  if (top10paid.length) {
+    t += `   Showing top ${top10paid.length} by amount:\n\n`;
+    top10paid.forEach((i,idx) => {
+      t += `   ${idx+1}. ${clientName(i.clientId)} — ${fmt(i.amount)} (${i.number})\n`;
+    });
+  } else {
+    t += `   No payments recorded this month.\n`;
+  }
+
+  t += `\n${divider}\n\n`;
+
+  // Bank balances
+  t += `🏦 BANK BALANCES\n`;
+  if (accounts.length) {
+    accounts.forEach(a => {
+      const upd = a.updated ? ` | Updated: ${fmtDate(a.updated)}` : '';
+      t += `   • ${a.name}${a.bank?' ('+a.bank+')':''}: ${a.currency} ${fmt(a.balance)}${upd}\n`;
+    });
+    t += `   ${'─'.repeat(30)}\n`;
+    t += `   Total Cash Position: ${fmt(accounts.reduce((s,a)=>s+a.balance,0))}\n`;
+  } else {
+    t += `   No bank accounts configured.\n`;
+  }
+
+  t += `\n${divider}\n`;
+  t += `Report generated by ClientFlow`;
+  return t;
 }
 
 function buildRenewalReportText() {
   const now = new Date(); now.setHours(0,0,0,0);
+  const dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
 
-  const overdue = data.renewals.filter(r=>daysFrom(r)<0).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const d30     = data.renewals.filter(r=>{const d=daysFrom(r);return d>=0&&d<=30;}).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const d60     = data.renewals.filter(r=>{const d=daysFrom(r);return d>30&&d<=60;}).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const d90     = data.renewals.filter(r=>{const d=daysFrom(r);return d>60&&d<=90;}).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const d90p    = data.renewals.filter(r=>daysFrom(r)>90).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const statuses = ['Overdue','Due Soon','Upcoming','Renewed'];
+  const divider = '─────────────────────────────────────';
 
-  const renewalLines = items => items.map(r => {
+  const renewalEntry = (r, idx) => {
     const c = data.clients.find(x=>x.id===r.clientId);
     const df = daysFrom(r);
-    const dLabel = df < 0 ? `${Math.abs(df)}d overdue` : df === 0 ? 'today' : `in ${df}d`;
+    const dLabel = df < 0 ? `${Math.abs(df)}d overdue` : df === 0 ? 'today' : df === 1 ? 'tomorrow' : `in ${df}d`;
     const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
-    const lcLabel = !r.lastContact ? 'never contacted ⚠️' : lc === 0 ? 'contacted today' : lc === 1 ? '1d ago' : `${lc}d ago${lc>7?' ⚠️':''}`;
-    return `    • ${c?.name||'Unknown'} | ${r.type} | ${fmtDate(r.date)} (${dLabel}) | ${fmt(r.amount)} | contact: ${lcLabel}`;
-  }).join('\n');
+    const lcLabel = !r.lastContact ? 'never contacted ⚠️' : lc === 0 ? 'today' : lc === 1 ? 'yesterday' : `${lc}d ago${lc>7?' ⚠️':''}`;
+    return `   ${idx+1}. ${c?.name||'Unknown'} — ${r.type}\n      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
+  };
 
-  const pipeline = data.renewals.reduce((s,r)=>s+r.amount,0);
+  const dayGroup = (label, items) => {
+    if (!items.length) return '';
+    const total = items.reduce((s,r)=>s+r.amount,0);
+    let g = `   [ ${label} — ${items.length} renewal${items.length!==1?'s':''} · ${fmt(total)} ]\n`;
+    items.sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach((r,i) => { g += renewalEntry(r,i); });
+    return g + '\n';
+  };
+
+  const pipeline = data.renewals.filter(r=>r.status!=='Renewed').reduce((s,r)=>s+r.amount,0);
   const staleTotal = data.renewals.filter(r=>{const lc=r.lastContact?Math.round((new Date()-new Date(r.lastContact))/86400000):null;return r.status!=='Renewed'&&(!r.lastContact||lc>7);}).length;
 
-  let text = `🔄 *Renewal Report — ${now.toLocaleDateString()}*
-`;
-  text += `_Total pipeline: ${fmt(pipeline)} · ${data.renewals.length} renewals_
-`;
-  if (staleTotal) text += `_⚠️ ${staleTotal} renewal${staleTotal!==1?'s':''} with no recent contact_
-`;
-  text += '\n';
-  text += `⚠️ *OVERDUE — ${overdue.length} renewal${overdue.length!==1?'s':''} · ${fmt(overdue.reduce((s,r)=>s+r.amount,0))}*
-`;
-  text += overdue.length ? renewalLines(overdue) + '\n' : '    (none)\n';
+  let t = '';
+  t += `🔄 RENEWAL REPORT\n`;
+  t += `${dateStr}\n`;
+  t += `${divider}\n`;
+  t += `Active Pipeline: ${fmt(pipeline)} | Total renewals: ${data.renewals.length}`;
+  if (staleTotal) t += ` | ⚠️ ${staleTotal} with no recent contact`;
+  t += `\n\n`;
 
-  text += `
-🔔 *0–30 DAYS — ${d30.length} renewal${d30.length!==1?'s':''} · ${fmt(d30.reduce((s,r)=>s+r.amount,0))}*
-`;
-  text += d30.length ? renewalLines(d30) + '\n' : '    (none)\n';
+  statuses.forEach(status => {
+    const group = data.renewals.filter(r=>r.status===status);
+    const icons = {'Overdue':'🔴','Due Soon':'🟡','Upcoming':'🔵','Renewed':'✅'};
+    t += `${icons[status]} ${status.toUpperCase()}\n`;
+    if (!group.length) { t += `   None.\n\n${divider}\n\n`; return; }
+    const total = group.reduce((s,r)=>s+r.amount,0);
+    t += `   ${group.length} renewal${group.length!==1?'s':''} | Total: ${fmt(total)}\n\n`;
 
-  text += `
-📅 *31–60 DAYS — ${d60.length} renewal${d60.length!==1?'s':''} · ${fmt(d60.reduce((s,r)=>s+r.amount,0))}*
-`;
-  text += d60.length ? renewalLines(d60) + '\n' : '    (none)\n';
+    const bPast   = group.filter(r=>daysFrom(r)<0);
+    const b30     = group.filter(r=>{const d=daysFrom(r);return d>=0&&d<=30;});
+    const b60     = group.filter(r=>{const d=daysFrom(r);return d>30&&d<=60;});
+    const b90     = group.filter(r=>{const d=daysFrom(r);return d>60&&d<=90;});
+    const b90p    = group.filter(r=>daysFrom(r)>90);
 
-  text += `
-🗓 *61–90 DAYS — ${d90.length} renewal${d90.length!==1?'s':''} · ${fmt(d90.reduce((s,r)=>s+r.amount,0))}*
-`;
-  text += d90.length ? renewalLines(d90) + '\n' : '    (none)\n';
+    t += dayGroup('Past due', bPast);
+    t += dayGroup('0 – 30 days', b30);
+    t += dayGroup('31 – 60 days', b60);
+    t += dayGroup('61 – 90 days', b90);
+    t += dayGroup('90+ days', b90p);
+    t += `${divider}\n\n`;
+  });
 
-  text += `
-📆 *90+ DAYS — ${d90p.length} renewal${d90p.length!==1?'s':''} · ${fmt(d90p.reduce((s,r)=>s+r.amount,0))}*
-`;
-  text += d90p.length ? renewalLines(d90p) + '\n' : '    (none)\n';
-
-  return text;
+  t += `Report generated by ClientFlow`;
+  return t;
 }
-
 async function sendReportSlack(type) {
   const webhook = localStorage.getItem('slack-webhook') || '';
   if (!webhook) { toast('No Slack webhook configured — add it in Email Alerts → Settings'); return; }
