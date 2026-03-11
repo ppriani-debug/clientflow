@@ -1452,10 +1452,13 @@ function openDetail(id) {
   detailClientId = id;
   document.getElementById('dp-name').textContent = c.name;
   document.getElementById('dp-sub').textContent = (Array.isArray(c.plan)?c.plan:[c.plan]).join(', ') + ' · ' + c.status;
+  const legalNames = Array.isArray(c.legalNames) ? c.legalNames.filter(Boolean) : [];
   document.getElementById('dp-contact').innerHTML = `
-    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c.contact}</span></div>
-    <div class="detail-row"><span class="detail-label">Email</span><span class="detail-val">${c.email}</span></div>
-    <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-val">${c.phone}</span></div>
+    <div class="detail-row"><span class="detail-label">Commercial</span><span class="detail-val" style="font-weight:600">${c.name}</span></div>
+    ${legalNames.length ? legalNames.map((n,i)=>`<div class="detail-row"><span class="detail-label">${i===0?'Legal Name':'Legal '+(i+1)}</span><span class="detail-val" style="color:var(--accent)">${n}</span></div>`).join('') : ''}
+    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c.contact||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Email</span><span class="detail-val">${c.email||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-val">${c.phone||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Since</span><span class="detail-val">${fmtDate(c.since)}</span></div>`;
   const cR = data.renewals.filter(r=>r.clientId===id);
   document.getElementById('dp-renewals').innerHTML = cR.length
@@ -1588,7 +1591,7 @@ function renderInvoices() {
   document.getElementById('invoices-tbody').innerHTML = rows.length
     ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
         <td class="mono" style="font-weight:500">${i.number}</td>
-        <td class="client-name">${clientName(i.clientId)}</td>
+        <td><div class="client-name">${clientName(i.clientId)}</div>${i.billingName&&i.billingName!==clientName(i.clientId)?`<div style="font-size:11px;color:var(--text-muted)">Bill to: ${i.billingName}</div>`:''}</td>
         <td><div>${fmtDate(i.dueDate)}</div><div style="font-size:11px;color:var(--text-soft)">${daysLabel(i.dueDate)}</div></td>
         <td class="mono">${fmtF(i.amount)}</td>
         <td>${statusBadge(i.status)}</td>
@@ -2606,9 +2609,24 @@ function openModal(type, existing) {
   const isEdit=!!existing, T=type.charAt(0).toUpperCase()+type.slice(1);
   let body='';
   if(type==='client') {
+    const existingLegal = Array.isArray(existing?.legalNames) ? existing.legalNames : (existing?.legalNames ? [existing.legalNames] : []);
+    const legalRows = existingLegal.length
+      ? existingLegal.map((n,i)=>`<div class="legal-name-row" style="display:flex;gap:6px;margin-bottom:6px"><input class="form-input legal-name-input" value="${n}" placeholder="Legal name ${i+1}" style="flex:1"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.legal-name-row').remove()">✕</button></div>`).join('')
+      : '';
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Client</div>
       <div class="form-grid">
-        <div class="form-group span2"><label class="form-label">Company Name</label><input class="form-input" id="f-name" placeholder="Acme Corp" value="${existing?.name||''}"></div>
+        <div class="form-group span2">
+          <label class="form-label">Commercial Name <span style="font-size:11px;color:var(--text-muted)">(displayed everywhere)</span></label>
+          <input class="form-input" id="f-name" placeholder="e.g. Acme Corp" value="${existing?.name||''}">
+        </div>
+        <div class="form-group span2">
+          <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+            Legal Name(s) <span style="font-size:11px;color:var(--text-muted)">used on invoices</span>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addLegalNameRow()" style="font-size:11px;padding:2px 8px">＋ Add</button>
+          </label>
+          <div id="legal-names-container">${legalRows}</div>
+          ${!existingLegal.length?'<div style="font-size:12px;color:var(--text-soft);padding:4px 0">No legal names added yet</div>':''}
+        </div>
         <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="f-contact" placeholder="Jane Doe" value="${existing?.contact||''}"></div>
         <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" type="email" value="${existing?.email||''}"></div>
         <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="f-phone" value="${existing?.phone||''}"></div>
@@ -2631,9 +2649,16 @@ function openModal(type, existing) {
   } else if(type==='invoice') {
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
     const nextNum='INV-00'+(40+data.invoices.length+1);
+    // Build billing name options for the pre-selected client
+    const firstClient = existing ? data.clients.find(c=>c.id===existing.clientId) : data.clients[0];
+    const billingOpts = getBillingNameOptions(firstClient, existing?.billingName);
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Invoice</div>
       <div class="form-grid">
-        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
+        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client" onchange="updateBillingNameOptions(this)">${opts}</select></div>
+        <div class="form-group span2">
+          <label class="form-label">Bill To <span style="font-size:11px;color:var(--text-muted)">— commercial or legal name</span></label>
+          <select class="form-input" id="f-billing-name">${billingOpts}</select>
+        </div>
         <div class="form-group"><label class="form-label">Invoice #</label><input class="form-input" id="f-number" value="${existing?.number||nextNum}"></div>
         <div class="form-group"><label class="form-label">Due Date</label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
         <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
@@ -2647,9 +2672,21 @@ function openModal(type, existing) {
 function closeModal(e) { if(!e||e.target===document.getElementById('modal-overlay')) document.getElementById('modal-overlay').classList.remove('open'); }
 
 // ─── SAVE HANDLERS ───────────────────────────────────────────────────────────
+function addLegalNameRow() {
+  const container = document.getElementById('legal-names-container');
+  const row = document.createElement('div');
+  row.className = 'legal-name-row';
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+  const count = container.querySelectorAll('.legal-name-input').length + 1;
+  row.innerHTML = `<input class="form-input legal-name-input" placeholder="Legal name ${count}" style="flex:1"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.legal-name-row').remove()">✕</button>`;
+  container.appendChild(row);
+  row.querySelector('input').focus();
+}
+
 function saveClient(id) {
-  const obj={name:document.getElementById('f-name').value,contact:document.getElementById('f-contact').value,email:document.getElementById('f-email').value,phone:document.getElementById('f-phone').value,plan:[...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),status:document.getElementById('f-status').value,since:document.getElementById('f-since').value};
-  if(!obj.name){alert('Company name is required.');return;}
+  const legalNames = [...document.querySelectorAll('.legal-name-input')].map(i=>i.value.trim()).filter(Boolean);
+  const obj={name:document.getElementById('f-name').value.trim(),contact:document.getElementById('f-contact').value,email:document.getElementById('f-email').value,phone:document.getElementById('f-phone').value,plan:[...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),status:document.getElementById('f-status').value,since:document.getElementById('f-since').value,legalNames};
+  if(!obj.name){alert('Commercial name is required.');return;}
   if(id){const c=data.clients.find(c=>c.id===id);obj.notes=c.notes||'';Object.assign(c,obj);toast('Client updated ✓');}
   else{obj.id=++data.nextId;obj.notes='';data.clients.push(obj);toast('Client added ✓');}
   saveData();closeModal();renderPage(currentPage);updateBadges();
@@ -2661,8 +2698,24 @@ function saveRenewal(id) {
   else{obj.id=++data.nextId;data.renewals.push(obj);toast('Renewal added ✓');}
   saveData();closeModal();renderPage(currentPage);updateBadges();
 }
+function getBillingNameOptions(client, selected) {
+  if (!client) return '<option value="">—</option>';
+  const commercial = client.name;
+  const legals = Array.isArray(client.legalNames) ? client.legalNames.filter(Boolean) : [];
+  const allNames = [{ label: commercial + ' (Commercial)', value: commercial }, ...legals.map(n=>({ label: n + ' (Legal)', value: n }))];
+  return allNames.map(n=>`<option value="${n.value}" ${selected===n.value||(!selected&&n.value===commercial)?'selected':''}>${n.label}</option>`).join('');
+}
+
+function updateBillingNameOptions(sel) {
+  const clientId = parseInt(sel.value);
+  const client = data.clients.find(c=>c.id===clientId);
+  const bilSel = document.getElementById('f-billing-name');
+  if (bilSel) bilSel.innerHTML = getBillingNameOptions(client, null);
+}
+
 function saveInvoice(id) {
-  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true};
+  const billingNameEl = document.getElementById('f-billing-name');
+  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true,billingName:billingNameEl?billingNameEl.value:''};
   if(!obj.number||!obj.dueDate){alert('Invoice number and due date are required.');return;}
   if(id){Object.assign(data.invoices.find(i=>i.id===id),obj);toast('Invoice updated ✓');}
   else{obj.id=++data.nextId;data.invoices.push(obj);toast('Invoice added ✓');}
@@ -3248,6 +3301,7 @@ function openInvoiceDetail(id) {
 
   document.getElementById('idp-info').innerHTML = `
     <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
+    ${inv.billingName && inv.billingName !== c?.name ? `<div class="detail-row"><span class="detail-label">Bill To</span><span class="detail-val" style="font-weight:600;color:var(--accent)">${inv.billingName}</span></div>` : ''}
     <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Invoice #</span><span class="detail-val" style="font-family:var(--mono)">${inv.number}</span></div>
     <div class="detail-row"><span class="detail-label">Due Date</span><span class="detail-val">${fmtDate(inv.dueDate)}</span></div>
