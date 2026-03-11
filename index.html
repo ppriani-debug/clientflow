@@ -135,19 +135,25 @@
   .filter-btn:hover, .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
 
   /* AGING REPORT */
-  .aging-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; padding: 16px; }
+  .aging-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; padding: 16px; }
   .aging-bucket { border-radius: 8px; padding: 16px; text-align: center; }
+  .aging-bucket.btotal { background: #fef2f2; border: 2px solid var(--red); }
   .aging-bucket.b30 { background: var(--amber-light); }
   .aging-bucket.b60 { background: #fff7ed; border: 1px solid #fed7aa; }
   .aging-bucket.b90 { background: var(--red-light); }
+  .aging-bucket.bpre { background: #f0fdf4; border: 1px solid #86efac; }
   .aging-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .aging-bucket.btotal .aging-label { color: var(--red); }
   .aging-bucket.b30 .aging-label { color: var(--amber); }
   .aging-bucket.b60 .aging-label { color: #ea580c; }
   .aging-bucket.b90 .aging-label { color: var(--red); }
+  .aging-bucket.bpre .aging-label { color: #16a34a; }
   .aging-amount { font-size: 20px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; }
+  .aging-bucket.btotal .aging-amount { color: var(--red); font-size: 22px; }
   .aging-bucket.b30 .aging-amount { color: var(--amber); }
   .aging-bucket.b60 .aging-amount { color: #ea580c; }
   .aging-bucket.b90 .aging-amount { color: var(--red); }
+  .aging-bucket.bpre .aging-amount { color: #16a34a; }
   .aging-count { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 
   /* CLIENT DETAIL PANEL */
@@ -1138,7 +1144,7 @@ function autoUpdateStatuses() {
     if (next !== r.status) { r.status = next; changed = true; }
   });
   data.invoices.forEach(i => {
-    if (i.statusLocked || i.status === 'Paid' || i.status === 'Preinvoice') return;
+    if (i.statusLocked || i.status === 'Paid' || i.status === 'Pre-Invoice') return;
     const d = daysUntil(i.dueDate);
     const next = d < 0 ? 'Overdue' : d <= 14 ? 'Due Soon' : 'Pending';
     if (next !== i.status) { i.status = next; changed = true; }
@@ -1361,7 +1367,7 @@ function togglePlanChip(el, plan) {
 }
 
 function statusBadge(s) {
-  const m = {Active:'badge-green',Paid:'badge-green',Renewed:'badge-green',Pending:'badge-amber','Due Soon':'badge-amber',Upcoming:'badge-blue',Overdue:'badge-red','At Risk':'badge-red',Inactive:'badge-gray',Preinvoice:'badge-purple'};
+  const m = {Active:'badge-green',Paid:'badge-green',Renewed:'badge-green',Pending:'badge-amber','Due Soon':'badge-amber',Upcoming:'badge-blue',Overdue:'badge-red','At Risk':'badge-red',Inactive:'badge-gray','Pre-Invoice':'badge-purple'};
   return `<span class="badge ${m[s]||'badge-gray'}"><span class="badge-dot"></span>${s}</span>`;
 }
 
@@ -1399,7 +1405,7 @@ function renderDashboard() {
   document.getElementById('dash-greeting').textContent = greet();
   const active = data.clients.filter(c=>c.status==='Active').length;
   const pending = data.renewals.filter(r=>['Due Soon','Overdue','Upcoming'].includes(r.status)).length;
-  const outstanding = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Preinvoice').reduce((s,i)=>s+i.amount,0);
+  const outstanding = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Pre-Invoice').reduce((s,i)=>s+i.amount,0);
   const collected = data.invoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.amount,0);
   document.getElementById('dashboard-stats').innerHTML = `
     <div class="stat-card"><div class="stat-label">Active Clients</div><div class="stat-value">${active}</div><div class="stat-delta">${data.clients.length} total accounts</div></div>
@@ -1415,7 +1421,7 @@ function renderDashboard() {
   document.getElementById('dash-renewals-table').innerHTML = upR.length
     ? `<table><tbody>${upR.map(r=>`<tr style="cursor:pointer" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100)"><td><div class="client-name">${clientName(r.clientId)}</div><div class="client-email">${r.type}</div></td><td>${fmtDate(r.date)}</td><td>${statusBadge(r.status)}</td></tr>`).join('')}</tbody></table>`
     : `<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No overdue or due-soon renewals</div></div>`;
-  const ovI = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Preinvoice').slice(0,5);
+  const ovI = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Pre-Invoice').slice(0,5);
   document.getElementById('dash-invoice-count').textContent = fmtF(ovI.reduce((s,i)=>s+i.amount,0));
   document.getElementById('dash-invoices-table').innerHTML = ovI.length
     ? `<table><tbody>${ovI.map(i=>`<tr style="cursor:pointer" onclick="navigate('invoices')"><td><div class="client-name">${clientName(i.clientId)}</div><div class="client-email">${i.number}</div></td><td>${fmtDate(i.dueDate)}</td><td>${statusBadge(i.status)}</td></tr>`).join('')}</tbody></table>`
@@ -1559,18 +1565,23 @@ function duplicateRenewal(id,e) {
 function filterInvoices(q) { invoiceSearch=q.toLowerCase(); renderInvoices(); }
 function setInvoiceFilter(f) { invoiceFilter=f; renderInvoices(); }
 function renderInvoices() {
-  document.getElementById('invoice-filters').innerHTML = ['All','Preinvoice','Pending','Overdue','Paid'].map(s=>
+  document.getElementById('invoice-filters').innerHTML = ['All','Pre-Invoice','Pending','Overdue','Paid'].map(s=>
     `<button class="filter-btn ${invoiceFilter===s?'active':''}" onclick="setInvoiceFilter('${s}')">${s}</button>`).join('');
 
   // AGING
-  const ov = data.invoices.filter(i=>i.status==='Overdue');
+  const ov=data.invoices.filter(i=>i.status==='Overdue');
+  const pre=data.invoices.filter(i=>i.status==='Pre-Invoice');
   const b30=ov.filter(i=>daysUntil(i.dueDate)>=-30), b60=ov.filter(i=>daysUntil(i.dueDate)<-30&&daysUntil(i.dueDate)>=-60), b90=ov.filter(i=>daysUntil(i.dueDate)<-60);
+  const totalOverdue = ov.reduce((s,i)=>s+i.amount,0);
+  const totalPre = pre.reduce((s,i)=>s+i.amount,0);
   document.getElementById('aging-grid').innerHTML = `
+    <div class="aging-bucket btotal"><div class="aging-label">⚠ Total Overdue</div><div class="aging-amount">${fmtF(totalOverdue)}</div><div class="aging-count">${ov.length} invoice${ov.length!==1?'s':''}</div></div>
     <div class="aging-bucket b30"><div class="aging-label">1–30 Days</div><div class="aging-amount">${fmtF(b30.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b30.length} invoice${b30.length!==1?'s':''}</div></div>
     <div class="aging-bucket b60"><div class="aging-label">31–60 Days</div><div class="aging-amount">${fmtF(b60.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b60.length} invoice${b60.length!==1?'s':''}</div></div>
-    <div class="aging-bucket b90"><div class="aging-label">60+ Days</div><div class="aging-amount">${fmtF(b90.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b90.length} invoice${b90.length!==1?'s':''}</div></div>`;
+    <div class="aging-bucket b90"><div class="aging-label">60+ Days</div><div class="aging-amount">${fmtF(b90.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b90.length} invoice${b90.length!==1?'s':''}</div></div>
+    <div class="aging-bucket bpre"><div class="aging-label">📋 Pre-Invoice</div><div class="aging-amount">${fmtF(totalPre)}</div><div class="aging-count">${pre.length} invoice${pre.length!==1?'s':''}</div></div>`;
 
-  let rows = data.invoices.filter(i=>(invoiceFilter==='All'||i.status===invoiceFilter)&&(!invoiceSearch||clientName(i.clientId).toLowerCase().includes(invoiceSearch)||i.number.toLowerCase().includes(invoiceSearch)));
+  let rows = data.invoices.filter(i=>(invoiceFilter==='All'||i.status===invoiceFilter)&&(!invoiceSearch||clientName(i.clientId).toLowerCase().includes(invoiceSearch)||i.number.toLowerCase().includes(invoiceSearch)||(i.concept||'').toLowerCase().includes(invoiceSearch)));
 
   // Sort
   const sd = invoiceSort.dir === 'asc' ? 1 : -1;
@@ -1591,7 +1602,7 @@ function renderInvoices() {
   document.getElementById('invoices-tbody').innerHTML = rows.length
     ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
         <td class="mono" style="font-weight:500">${i.number}</td>
-        <td><div class="client-name">${clientName(i.clientId)}</div>${i.billingName&&i.billingName!==clientName(i.clientId)?`<div style="font-size:11px;color:var(--text-muted)">Bill to: ${i.billingName}</div>`:''}</td>
+        <td><div class="client-name">${clientName(i.clientId)}</div>${i.billingName&&i.billingName!==clientName(i.clientId)?`<div style="font-size:11px;color:var(--text-muted)">Bill to: ${i.billingName}</div>`:''} ${i.concept?`<div style="font-size:11px;color:var(--text-soft);font-style:italic">${i.concept}</div>`:''}</td>
         <td><div>${i.dueDate?fmtDate(i.dueDate):'<span style="color:var(--text-soft);font-size:12px">No due date</span>'}</div><div style="font-size:11px;color:var(--text-soft)">${i.dueDate?daysLabel(i.dueDate):''}</div></td>
         <td class="mono">${fmtF(i.amount)}</td>
         <td>${statusBadge(i.status)}</td>
@@ -1624,12 +1635,12 @@ function renderReports() {
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const paid = data.invoices.filter(i => i.status === 'Paid');
   const paidThisMonth = paid.filter(i => { const d = new Date(i.dueDate); return d.getMonth()===thisMonth && d.getFullYear()===thisYear; });
-  const preinvoice = data.invoices.filter(i => i.status === 'Preinvoice');
+  const preinvoice = data.invoices.filter(i => i.status === 'Pre-Invoice');
   const pending = data.invoices.filter(i => i.status === 'Pending' || i.status === 'Due Soon');
   const overdue = data.invoices.filter(i => i.status === 'Overdue');
 
   document.getElementById('report-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-label">Preinvoice</div><div class="stat-value" style="color:var(--purple,#7c3aed)">${fmtF(preinvoice.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${preinvoice.length} projected</div></div>
+    <div class="stat-card"><div class="stat-label">Pre-Invoice</div><div class="stat-value" style="color:var(--purple,#7c3aed)">${fmtF(preinvoice.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${preinvoice.length} projected</div></div>
     <div class="stat-card"><div class="stat-label">Pending / Due Soon</div><div class="stat-value amber">${fmtF(pending.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${pending.length} invoices</div></div>
     <div class="stat-card"><div class="stat-label">Overdue Balance</div><div class="stat-value red">${fmtF(overdue.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${overdue.length} invoices overdue</div></div>
     <div class="stat-card"><div class="stat-label">Paid This Month</div><div class="stat-value green">${fmtF(paidThisMonth.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${paidThisMonth.length} invoices</div></div>`;
@@ -1694,7 +1705,7 @@ function renderReports() {
 
   const preinvoiceSort = preinvoice.slice().sort((a,b)=>clientName(a.clientId).localeCompare(clientName(b.clientId)));
   document.getElementById('invoice-report-content').innerHTML =
-    sectionBlock('🟣', 'Preinvoice (Projected)', 'var(--purple,#7c3aed)', preinvoice.length, preinvoice.reduce((s,i)=>s+i.amount,0), preinvoiceSort) +
+    sectionBlock('🟣', 'Pre-Invoice (Projected)', 'var(--purple,#7c3aed)', preinvoice.length, preinvoice.reduce((s,i)=>s+i.amount,0), preinvoiceSort) +
     sectionBlock('🔴', 'Overdue Invoices', 'var(--red)', overdue.length, overdue.reduce((s,i)=>s+i.amount,0), overdueSort) +
     sectionBlock('🔔', 'Top 5 Due Invoices', 'var(--amber)', top5pending.length, pending.reduce((s,i)=>s+i.amount,0), top5pending, pending.length > 5 ? ` · showing top 5 of ${pending.length}` : '') +
     sectionBlock('✅', `Paid This Month — ${monthName}`, 'var(--green)', paidThisMonth.length, paidTotal, top10paid, paidThisMonth.length > 10 ? ` · showing top 10 of ${paidThisMonth.length} by amount` : '') +
@@ -1882,13 +1893,13 @@ function buildInvoiceReportText() {
 
   const divider = '─────────────────────────────────────';
 
-  const preinvoiceTxt = data.invoices.filter(i=>i.status==='Preinvoice').sort((a,b)=>clientName(a.clientId).localeCompare(clientName(b.clientId)));
+  const preinvoiceTxt = data.invoices.filter(i=>i.status==='Pre-Invoice').sort((a,b)=>clientName(a.clientId).localeCompare(clientName(b.clientId)));
   let t = '';
   t += `📋 INVOICE REPORT\n`;
   t += `${dateStr}\n`;
   t += `${divider}\n\n`;
 
-  // Preinvoice
+  // Pre-Invoice
   t += `🟣 PREINVOICE (PROJECTED)\n`;
   if (preinvoiceTxt.length) {
     t += `   Projected total: ${fmt(preinvoiceTxt.reduce((s,i)=>s+i.amount,0))} | ${preinvoiceTxt.length} item${preinvoiceTxt.length!==1?'s':''}\n\n`;
@@ -1908,7 +1919,7 @@ function buildInvoiceReportText() {
     t += `   Total: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))} | ${overdue.length} invoice${overdue.length!==1?'s':''}\n\n`;
     overdue.forEach((i,idx) => {
       const d = daysUntil(i.dueDate);
-      t += `   ${idx+1}. ${clientName(i.clientId)}\n`;
+      t += `   ${idx+1}. ${clientName(i.clientId)}${i.concept?' — '+i.concept:''}\n`;
       t += `      Invoice: ${i.number} | Due: ${fmtDate(i.dueDate)} (${Math.abs(d)}d overdue) | Amount: ${fmt(i.amount)}\n`;
     });
   } else {
@@ -1924,7 +1935,7 @@ function buildInvoiceReportText() {
     top5pending.forEach((i,idx) => {
       const d = daysUntil(i.dueDate);
       const dl = d === 0 ? 'due today' : d === 1 ? 'due tomorrow' : `due in ${d}d`;
-      t += `   ${idx+1}. ${clientName(i.clientId)}\n`;
+      t += `   ${idx+1}. ${clientName(i.clientId)}${i.concept?' — '+i.concept:''}\n`;
       t += `      Invoice: ${i.number} | Due: ${fmtDate(i.dueDate)} (${dl}) | Amount: ${fmt(i.amount)}\n`;
     });
   } else {
@@ -1939,7 +1950,7 @@ function buildInvoiceReportText() {
   if (top10paid.length) {
     t += `   Showing top ${top10paid.length} by amount:\n\n`;
     top10paid.forEach((i,idx) => {
-      t += `   ${idx+1}. ${clientName(i.clientId)} — ${fmt(i.amount)} (${i.number})\n`;
+      t += `   ${idx+1}. ${clientName(i.clientId)}${i.concept?' — '+i.concept:''} — ${fmt(i.amount)} (${i.number})\n`;
     });
   } else {
     t += `   No payments recorded this month.\n`;
@@ -2289,7 +2300,7 @@ function buildAlertItems() {
     const d = daysUntil(i.dueDate);
     const c = data.clients.find(x=>x.id===i.clientId);
     const latestComment = (i.comments||[]).slice(-1)[0]?.text || '';
-    if (i.status === 'Preinvoice') return;
+    if (i.status === 'Pre-Invoice') return;
     if (i.status === 'Overdue') {
       items.push({ type:'urgent', label:'Invoice Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} was due ${fmtDate(i.dueDate)} (${Math.abs(d)} days ago)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
     } else if (i.status === 'Pending' && d >= 0 && d <= 7) {
@@ -2679,9 +2690,10 @@ function openModal(type, existing) {
           <select class="form-input" id="f-billing-name">${billingOpts}</select>
         </div>
         <div class="form-group"><label class="form-label">Invoice #</label><input class="form-input" id="f-number" value="${existing?.number||nextNum}"></div>
-        <div class="form-group"><label class="form-label">Due Date <span style="font-size:11px;color:var(--text-muted)">(optional for Preinvoice)</span></label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
+        <div class="form-group"><label class="form-label">Due Date <span style="font-size:11px;color:var(--text-muted)">(optional for Pre-Invoice)</span></label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
+        <div class="form-group span2"><label class="form-label">Concept <span style="font-size:11px;color:var(--text-muted)">— what this invoice is for</span></label><input class="form-input" id="f-concept" placeholder="e.g. Monthly SaaS license — March 2026" value="${existing?.concept||''}"></div>
         <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
-        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Preinvoice'?'selected':''}>Preinvoice</option><option ${existing?.status==='Pending'?'selected':''}>Pending</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Paid'?'selected':''}>Paid</option></select></div>
+        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Pre-Invoice'?'selected':''}>Pre-Invoice</option><option ${existing?.status==='Pending'?'selected':''}>Pending</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Paid'?'selected':''}>Paid</option></select></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveInvoice(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Invoice'}</button></div>`;
   }
@@ -2734,9 +2746,10 @@ function updateBillingNameOptions(sel) {
 
 function saveInvoice(id) {
   const billingNameEl = document.getElementById('f-billing-name');
-  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true,billingName:billingNameEl?billingNameEl.value:''};
+  const conceptEl = document.getElementById('f-concept');
+  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true,billingName:billingNameEl?billingNameEl.value:'',concept:conceptEl?conceptEl.value.trim():''};
   if(!obj.number){alert('Invoice number is required.');return;}
-  if(!obj.dueDate && obj.status !== 'Preinvoice'){alert('Due date is required for non-Preinvoice invoices.');return;}
+  if(!obj.dueDate && obj.status !== 'Pre-Invoice'){alert('Due date is required for non-Pre-Invoice invoices.');return;}
   if(id){Object.assign(data.invoices.find(i=>i.id===id),obj);toast('Invoice updated ✓');}
   else{obj.id=++data.nextId;data.invoices.push(obj);toast('Invoice added ✓');}
   saveData();closeModal();renderPage(currentPage);updateBadges();
@@ -3322,6 +3335,7 @@ function openInvoiceDetail(id) {
   document.getElementById('idp-info').innerHTML = `
     <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
     ${inv.billingName && inv.billingName !== c?.name ? `<div class="detail-row"><span class="detail-label">Bill To</span><span class="detail-val" style="font-weight:600;color:var(--accent)">${inv.billingName}</span></div>` : ''}
+    ${inv.concept ? `<div class="detail-row"><span class="detail-label">Concept</span><span class="detail-val" style="font-style:italic;color:var(--text)">${inv.concept}</span></div>` : ''}
     <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Invoice #</span><span class="detail-val" style="font-family:var(--mono)">${inv.number}</span></div>
     <div class="detail-row"><span class="detail-label">Due Date</span><span class="detail-val">${fmtDate(inv.dueDate)}</span></div>
