@@ -1638,7 +1638,7 @@ function renderReports() {
   const now = new Date();
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const paid = data.invoices.filter(i => i.status === 'Paid');
-  const paidThisMonth = paid.filter(i => { const d = new Date(i.dueDate); return d.getMonth()===thisMonth && d.getFullYear()===thisYear; });
+  const paidThisMonth = paid.filter(i => { const d = new Date(i.paidDate || i.dueDate); return d.getMonth()===thisMonth && d.getFullYear()===thisYear; });
   const preinvoice = data.invoices.filter(i => i.status === 'Pre-Invoice');
   const pending = data.invoices.filter(i => i.status === 'Pending' || i.status === 'Due Soon');
   const overdue = data.invoices.filter(i => i.status === 'Overdue');
@@ -1890,7 +1890,7 @@ function buildInvoiceReportText() {
   const dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const paidThisMonth = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;});
+  const paidThisMonth = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.paidDate||i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;});
   const top5pending = pending.slice(0,5);
   const top10paid = paidThisMonth.slice().sort((a,b)=>b.amount-a.amount).slice(0,10);
   const accounts = getBankAccounts();
