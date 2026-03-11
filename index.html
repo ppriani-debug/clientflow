@@ -1926,74 +1926,73 @@ function buildInvoiceReportText() {
   const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const paidThisMonth = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.paidDate||i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;});
-  const top5pending = pending.slice(0,5);
-  const top10paid = paidThisMonth.slice().sort((a,b)=>b.amount-a.amount).slice(0,10);
+  const preinvoices = data.invoices.filter(i=>i.status==='Pre-Invoice');
   const accounts = getBankAccounts();
-
   const divider = '─────────────────────────────────────';
 
-  const preinvoiceTxt = data.invoices.filter(i=>i.status==='Pre-Invoice').sort((a,b)=>clientName(a.clientId).localeCompare(clientName(b.clientId)));
+  // Helper: group invoices by client, return sorted summary lines
+  const groupByClient = (invoices) => {
+    const map = {};
+    invoices.forEach(i => {
+      const cid = i.clientId;
+      if (!map[cid]) map[cid] = { name: clientName(cid), total: 0, invoices: [] };
+      map[cid].total += i.amount;
+      map[cid].invoices.push(i);
+    });
+    return Object.values(map).sort((a,b) => b.total - a.total);
+  };
+
+  const clientLines = (groups) => groups.map((g, idx) => {
+    const invNums = g.invoices.map(i => i.number).join(', ');
+    const concepts = [...new Set(g.invoices.map(i=>i.concept).filter(Boolean))].join('; ');
+    const oldest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
+    const daysOld = oldest?.dueDate ? Math.abs(daysUntil(oldest.dueDate)) : null;
+    const detail = g.invoices.length === 1
+      ? `${g.invoices[0].number}${g.invoices[0].dueDate?` | Due: ${fmtDate(g.invoices[0].dueDate)}`:''}${daysOld!==null?` (${daysOld}d)`:''}`
+      : `${g.invoices.length} invoices (${invNums}) | Oldest: ${fmtDate(oldest?.dueDate)}`;
+    return `   ${idx+1}. ${g.name}${concepts?' — '+concepts:''}\n      ${detail} | Total: ${fmt(g.total)}\n`;
+  }).join('');
+
   let t = '';
-  t += `📋 INVOICE REPORT\n`;
-  t += `${dateStr}\n`;
-  t += `${divider}\n\n`;
+  t += `📋 INVOICE REPORT\n${dateStr}\n${divider}\n\n`;
 
   // Pre-Invoice
-  t += `🟣 PREINVOICE (PROJECTED)\n`;
-  if (preinvoiceTxt.length) {
-    t += `   Projected total: ${fmt(preinvoiceTxt.reduce((s,i)=>s+i.amount,0))} | ${preinvoiceTxt.length} item${preinvoiceTxt.length!==1?'s':''}\n\n`;
-    preinvoiceTxt.forEach((i,idx) => {
-      t += `   ${idx+1}. ${clientName(i.clientId)}\n`;
-      t += `      Invoice: ${i.number} | No due date yet | Amount: ${fmt(i.amount)}\n`;
-    });
-  } else {
-    t += `   No preinvoices on file.\n`;
-  }
+  const preGroups = groupByClient(preinvoices);
+  t += `🟣 PRE-INVOICE (PROJECTED)\n`;
+  if (preGroups.length) {
+    t += `   Projected: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))} across ${preGroups.length} client${preGroups.length!==1?'s':''}\n\n`;
+    t += clientLines(preGroups);
+  } else { t += `   No pre-invoices on file.\n`; }
 
   t += `\n${divider}\n\n`;
 
   // Overdue
+  const overdueGroups = groupByClient(overdue);
   t += `🔴 OVERDUE INVOICES\n`;
-  if (overdue.length) {
-    t += `   Total: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))} | ${overdue.length} invoice${overdue.length!==1?'s':''}\n\n`;
-    overdue.forEach((i,idx) => {
-      const d = daysUntil(i.dueDate);
-      t += `   ${idx+1}. ${clientName(i.clientId)}${i.concept?' — '+i.concept:''}\n`;
-      t += `      Invoice: ${i.number} | Due: ${fmtDate(i.dueDate)} (${Math.abs(d)}d overdue) | Amount: ${fmt(i.amount)}\n`;
-    });
-  } else {
-    t += `   No overdue invoices.\n`;
-  }
+  if (overdueGroups.length) {
+    t += `   Total: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))} | ${overdueGroups.length} client${overdueGroups.length!==1?'s':''} · ${overdue.length} invoice${overdue.length!==1?'s':''}\n\n`;
+    t += clientLines(overdueGroups);
+  } else { t += `   No overdue invoices.\n`; }
 
   t += `\n${divider}\n\n`;
 
-  // Top 5 pending
-  t += `🔔 UPCOMING DUE — TOP 5\n`;
-  if (top5pending.length) {
-    t += `   Showing ${top5pending.length} of ${pending.length} pending/due-soon | Total pending: ${fmt(pending.reduce((s,i)=>s+i.amount,0))}\n\n`;
-    top5pending.forEach((i,idx) => {
-      const d = daysUntil(i.dueDate);
-      const dl = d === 0 ? 'due today' : d === 1 ? 'due tomorrow' : `due in ${d}d`;
-      t += `   ${idx+1}. ${clientName(i.clientId)}${i.concept?' — '+i.concept:''}\n`;
-      t += `      Invoice: ${i.number} | Due: ${fmtDate(i.dueDate)} (${dl}) | Amount: ${fmt(i.amount)}\n`;
-    });
-  } else {
-    t += `   No pending invoices.\n`;
-  }
+  // Pending / Due Soon
+  const pendingGroups = groupByClient(pending);
+  t += `🔔 UPCOMING DUE\n`;
+  if (pendingGroups.length) {
+    t += `   Total pending: ${fmt(pending.reduce((s,i)=>s+i.amount,0))} | ${pendingGroups.length} client${pendingGroups.length!==1?'s':''} · ${pending.length} invoice${pending.length!==1?'s':''}\n\n`;
+    t += clientLines(pendingGroups);
+  } else { t += `   No pending invoices.\n`; }
 
   t += `\n${divider}\n\n`;
 
   // Paid this month
+  const paidGroups = groupByClient(paidThisMonth);
   t += `✅ PAYMENTS RECEIVED — ${monthName.toUpperCase()}\n`;
-  t += `   Total collected: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))} | ${paidThisMonth.length} invoice${paidThisMonth.length!==1?'s':''}\n`;
-  if (top10paid.length) {
-    t += `   Showing top ${top10paid.length} by amount:\n\n`;
-    top10paid.forEach((i,idx) => {
-      t += `   ${idx+1}. ${clientName(i.clientId)}${i.concept?' — '+i.concept:''} — ${fmt(i.amount)} (${i.number})\n`;
-    });
-  } else {
-    t += `   No payments recorded this month.\n`;
-  }
+  if (paidGroups.length) {
+    t += `   Total collected: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))} | ${paidGroups.length} client${paidGroups.length!==1?'s':''} · ${paidThisMonth.length} invoice${paidThisMonth.length!==1?'s':''}\n\n`;
+    t += clientLines(paidGroups);
+  } else { t += `   No payments recorded this month.\n`; }
 
   t += `\n${divider}\n\n`;
 
@@ -2006,9 +2005,7 @@ function buildInvoiceReportText() {
     });
     t += `   ${'─'.repeat(30)}\n`;
     t += `   Total Cash Position: ${fmt(accounts.reduce((s,a)=>s+a.balance,0))}\n`;
-  } else {
-    t += `   No bank accounts configured.\n`;
-  }
+  } else { t += `   No bank accounts configured.\n`; }
 
   t += `\n${divider}\n`;
   t += `Report generated by ClientFlow`;
@@ -2020,11 +2017,10 @@ function buildRenewalReportText() {
   const dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
 
-  const statuses = ['Overdue','Due Soon','Upcoming','Renewed'];
+  const statuses = ['Overdue','Due Soon','Renewed'];
   const divider = '─────────────────────────────────────';
 
   const renewalEntry = (r, idx) => {
-    const c = data.clients.find(x=>x.id===r.clientId);
     const df = daysFrom(r);
     const dLabel = df < 0 ? `${Math.abs(df)}d overdue` : df === 0 ? 'today' : df === 1 ? 'tomorrow' : `in ${df}d`;
     const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
@@ -2053,7 +2049,7 @@ function buildRenewalReportText() {
 
   statuses.forEach(status => {
     const group = data.renewals.filter(r=>r.status===status);
-    const icons = {'Overdue':'🔴','Due Soon':'🟡','Upcoming':'🔵','Renewed':'✅'};
+    const icons = {'Overdue':'🔴','Due Soon':'🟡','Renewed':'✅'};
     t += `${icons[status]} ${status.toUpperCase()}\n`;
     if (!group.length) { t += `   None.\n\n${divider}\n\n`; return; }
     const total = group.reduce((s,r)=>s+r.amount,0);
