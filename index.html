@@ -982,6 +982,19 @@
   </div>
 
   <div class="detail-section">
+    <div id="idp-stale-alert" style="display:none;background:var(--red-light);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-weight:600;color:var(--red);font-size:13px">⚠ No recent contact</div>
+      <div style="font-size:12px;color:var(--red);margin-top:2px" id="idp-stale-sub"></div>
+    </div>
+    <div class="detail-section-title">Last Contact</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <input class="form-input" type="date" id="idp-last-contact" style="flex:1" onchange="saveInvoiceLastContact()">
+      <button class="btn btn-ghost btn-sm" onclick="setInvoiceContactToday()">Today</button>
+    </div>
+    <div id="idp-last-contact-label" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>
+  </div>
+
+  <div class="detail-section">
     <div class="detail-section-title">Send Follow-up</div>
     <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px">AI will draft a payment follow-up based on the invoice details.</div>
 
@@ -1047,6 +1060,18 @@
     <div style="margin-top:10px;display:flex;justify-content:flex-end">
       <button class="btn btn-primary btn-sm" onclick="saveUpsellPlans()">Save Plans</button>
     </div>
+  </div>
+  <div class="detail-section">
+    <div id="udp-stale-alert" style="display:none;background:var(--red-light);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-weight:600;color:var(--red);font-size:13px">⚠ No recent contact</div>
+      <div style="font-size:12px;color:var(--red);margin-top:2px" id="udp-stale-sub"></div>
+    </div>
+    <div class="detail-section-title">Last Contact</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <input class="form-input" type="date" id="udp-last-contact" style="flex:1" onchange="saveUpsellLastContact()">
+      <button class="btn btn-ghost btn-sm" onclick="setUpsellContactToday()">Today</button>
+    </div>
+    <div id="udp-last-contact-label" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>
   </div>
   <div class="detail-section">
     <div class="detail-section-title">Notes</div>
@@ -1591,13 +1616,14 @@ function renderInvoices() {
     if (invoiceSort.col === 'dueDate') return sd * (new Date(a.dueDate) - new Date(b.dueDate));
     if (invoiceSort.col === 'amount') return sd * (a.amount - b.amount);
     if (invoiceSort.col === 'status') return sd * a.status.localeCompare(b.status);
+    if (invoiceSort.col === 'lastContact') return sd * (new Date(a.lastContact||0) - new Date(b.lastContact||0));
     return 0;
   });
 
   const sortArrow = col => invoiceSort.col === col ? (invoiceSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
   const ith = (col, label) => `<th style="cursor:pointer;user-select:none" onclick="setInvoiceSort('${col}')">${label}<span style="font-size:10px;color:var(--text-soft)">${sortArrow(col)}</span></th>`;
   const ithead = document.querySelector('#page-invoices table thead tr');
-  if (ithead) ithead.innerHTML = ith('number','Invoice #') + ith('client','Client') + ith('dueDate','Due Date') + ith('amount','Amount') + ith('status','Status') + '<th></th>';
+  if (ithead) ithead.innerHTML = ith('number','Invoice #') + ith('client','Client') + ith('dueDate','Due Date') + ith('amount','Amount') + ith('status','Status') + ith('lastContact','Last Contact') + '<th></th>';
 
   document.getElementById('invoices-tbody').innerHTML = rows.length
     ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
@@ -1606,6 +1632,15 @@ function renderInvoices() {
         <td><div>${i.dueDate?fmtDate(i.dueDate):'<span style="color:var(--text-soft);font-size:12px">No due date</span>'}</div><div style="font-size:11px;color:var(--text-soft)">${i.dueDate?daysLabel(i.dueDate):''}</div></td>
         <td class="mono">${fmtF(i.amount)}</td>
         <td>${statusBadge(i.status)}${i.status==='Paid'&&i.paidDate?`<div style="font-size:11px;color:var(--green);margin-top:2px">paid ${fmtDate(i.paidDate)}</div>`:''}</td>
+        <td>${(()=>{
+          const lc=i.lastContact?Math.round((new Date()-new Date(i.lastContact))/86400000):null;
+          const stale=i.status!=='Paid'&&(!i.lastContact||lc>7);
+          if(!i.lastContact) return i.status!=='Paid'?'<span style="font-size:11px;color:var(--red);font-weight:500">⚠ No contact</span>':'<span style="font-size:11px;color:var(--text-soft)">—</span>';
+          const color=stale?'var(--red)':'var(--green)';
+          const weight=stale?'500':'400';
+          const label=stale?'⚠ Overdue':'✓ Recent';
+          return `<div style="font-size:13px">${fmtDate(i.lastContact)}</div><div style="font-size:11px;color:${color};font-weight:${weight}">${label}</div>`;
+        })()}</td>
         <td><div style="display:flex;gap:5px;align-items:center">
           ${i.status!=='Paid'?`<button class="invoice-paid-btn" onclick="markPaid(${i.id},event)" title="Mark as Paid">✓ Paid</button>`:'<span style="font-size:12px;color:var(--green);font-weight:500">✓ Paid</span>'}
           <div class="row-actions">
@@ -3355,6 +3390,10 @@ function openInvoiceDetail(id) {
   document.getElementById('idp-email-to').value = inv.followupTo || '';
   document.getElementById('idp-slack-webhook').value = localStorage.getItem('slack-webhook') || '';
 
+  // Last contact
+  document.getElementById('idp-last-contact').value = inv.lastContact || '';
+  updateInvoiceLastContactLabel(inv);
+
   // Reset message
   document.getElementById('idp-generated-msg').style.display = 'none';
   document.getElementById('idp-send-email-btn').style.display = 'none';
@@ -3366,6 +3405,41 @@ function openInvoiceDetail(id) {
 
   document.getElementById('idp-panel').classList.add('open');
   document.getElementById('idp-overlay').classList.add('open');
+}
+
+function updateInvoiceLastContactLabel(inv) {
+  const lc = inv.lastContact;
+  const days = lc ? Math.round((new Date() - new Date(lc)) / 86400000) : null;
+  const stale = inv.status !== 'Paid' && (!lc || days > 7);
+  const staleDiv = document.getElementById('idp-stale-alert');
+  const subDiv = document.getElementById('idp-stale-sub');
+  if (stale && inv.status !== 'Paid') {
+    staleDiv.style.display = 'block';
+    subDiv.textContent = days ? `Last contact was ${days} day${days!==1?'s':''} ago` : 'No contact has been recorded yet';
+  } else {
+    staleDiv.style.display = 'none';
+  }
+  const label = document.getElementById('idp-last-contact-label');
+  if (lc) {
+    label.textContent = days === 0 ? 'Contacted today' : days === 1 ? 'Contacted yesterday' : `Contacted ${days} days ago`;
+    label.style.color = stale ? 'var(--red)' : 'var(--green)';
+  } else {
+    label.textContent = '';
+  }
+}
+
+function saveInvoiceLastContact() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  if (!inv) return;
+  inv.lastContact = document.getElementById('idp-last-contact').value;
+  saveData(); renderInvoices();
+  updateInvoiceLastContactLabel(inv);
+  toast('Last contact saved ✓');
+}
+
+function setInvoiceContactToday() {
+  document.getElementById('idp-last-contact').value = new Date().toISOString().split('T')[0];
+  saveInvoiceLastContact();
 }
 
 function closeInvoiceDetail() {
@@ -3631,6 +3705,13 @@ function renderUpsell() {
             const c = data.clients.find(x=>x.id===u.clientId);
             return `<div class="upsell-card" onclick="openUpsellDetail(${u.id})">
               <div class="upsell-card-client">${c?.name||'Unknown Client'}</div>
+              ${(()=>{
+                if (u.stage==='Won'||u.stage==='Lost') return '';
+                const lc=u.lastContact?Math.round((new Date()-new Date(u.lastContact))/86400000):null;
+                const stale=!u.lastContact||lc>7;
+                if(stale) return `<div style="font-size:11px;color:var(--red);font-weight:500;margin-bottom:3px">⚠ ${u.lastContact?`${lc}d no contact`:'No contact'}</div>`;
+                return `<div style="font-size:11px;color:var(--green);margin-bottom:3px">✓ ${lc===0?'Today':lc===1?'Yesterday':`${lc}d ago`}</div>`;
+              })()}
               <div class="upsell-card-tags">${planTags(u.targetPlans)}</div>
               ${u.notes?`<div class="upsell-card-notes">${u.notes.substring(0,80)}${u.notes.length>80?'…':''}</div>`:''}
               <div class="upsell-card-meta">
@@ -3683,8 +3764,45 @@ function openUpsellDetail(id) {
     <div class="plan-chip ${(u.targetPlans||[]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('');
 
   document.getElementById('udp-notes').value = u.notes || '';
+  document.getElementById('udp-last-contact').value = u.lastContact || '';
+  updateUpsellLastContactLabel(u);
   document.getElementById('upsell-detail-panel').classList.add('open');
   document.getElementById('upsell-detail-overlay').classList.add('open');
+}
+
+function updateUpsellLastContactLabel(u) {
+  const lc = u.lastContact;
+  const days = lc ? Math.round((new Date() - new Date(lc)) / 86400000) : null;
+  const stale = u.stage !== 'Won' && u.stage !== 'Lost' && (!lc || days > 7);
+  const staleDiv = document.getElementById('udp-stale-alert');
+  const subDiv = document.getElementById('udp-stale-sub');
+  if (stale) {
+    staleDiv.style.display = 'block';
+    subDiv.textContent = days !== null ? `Last contact was ${days} day${days!==1?'s':''} ago` : 'No contact has been recorded yet';
+  } else {
+    staleDiv.style.display = 'none';
+  }
+  const label = document.getElementById('udp-last-contact-label');
+  if (lc) {
+    label.textContent = days === 0 ? 'Contacted today' : days === 1 ? 'Contacted yesterday' : `Contacted ${days} days ago`;
+    label.style.color = stale ? 'var(--red)' : 'var(--green)';
+  } else {
+    label.textContent = '';
+  }
+}
+
+function saveUpsellLastContact() {
+  const u = data.upsells.find(x=>x.id===activeUpsellId);
+  if (!u) return;
+  u.lastContact = document.getElementById('udp-last-contact').value;
+  saveData(); renderUpsell();
+  updateUpsellLastContactLabel(u);
+  toast('Last contact saved ✓');
+}
+
+function setUpsellContactToday() {
+  document.getElementById('udp-last-contact').value = new Date().toISOString().split('T')[0];
+  saveUpsellLastContact();
 }
 
 function closeUpsellDetail() {
