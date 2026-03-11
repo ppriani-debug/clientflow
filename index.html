@@ -349,7 +349,7 @@
     <div class="nav-item" onclick="navigate('upsell')"><span class="nav-icon">↑</span> Upsell <span class="nav-badge" id="upsell-badge" style="display:none">0</span></div>
     <div class="nav-section">Insights</div>
     <div class="nav-item" onclick="navigate('reports')"><span class="nav-icon">↗</span> Reports</div>
-    <div class="nav-item" onclick="navigate('bank-accounts')"><span class="nav-icon">🏦</span> Bank Accounts</div>
+    <div class="nav-item" id="nav-bank-accounts" onclick="navigate('bank-accounts')"><span class="nav-icon">🏦</span> Bank Accounts</div>
     <div class="nav-item" onclick="navigate('alerts')"><span class="nav-icon">⚡</span> Alerts</div>
     <div class="nav-item" onclick="navigate('email-alerts')"><span class="nav-icon">✉</span> Email Alerts <span class="nav-badge" id="email-badge" style="display:none">!</span></div>
     <div class="nav-section">Data</div>
@@ -1167,6 +1167,7 @@ function updateFinanceLockBtn() {
   const btn = document.getElementById('finance-lock-btn');
   const icon = document.getElementById('finance-lock-icon');
   const label = document.getElementById('finance-lock-label');
+  const bankNav = document.getElementById('nav-bank-accounts');
   if (!btn) return;
   const hasPin = !!getFinancePin();
   if (!hasPin) {
@@ -1174,6 +1175,7 @@ function updateFinanceLockBtn() {
     btn.style.pointerEvents = 'none';
     icon.textContent = '🔓';
     label.textContent = 'No PIN set';
+    if (bankNav) bankNav.style.display = '';
     return;
   }
   btn.style.opacity = '1';
@@ -1183,11 +1185,15 @@ function updateFinanceLockBtn() {
     label.textContent = 'Finances visible';
     btn.style.borderColor = 'var(--green)';
     btn.style.color = 'var(--green)';
+    if (bankNav) bankNav.style.display = '';
   } else {
     icon.textContent = '🔒';
     label.textContent = 'Finances hidden';
     btn.style.borderColor = 'var(--red)';
     btn.style.color = 'var(--red)';
+    if (bankNav) bankNav.style.display = 'none';
+    // If currently on bank-accounts page, redirect to dashboard
+    if (typeof currentPage !== 'undefined' && currentPage === 'bank-accounts') navigate('dashboard');
   }
 }
 
@@ -1660,7 +1666,8 @@ function renderReports() {
   const top10paid = paidThisMonth.slice().sort((a,b)=>b.amount-a.amount).slice(0,10);
   const paidTotal = paidThisMonth.reduce((s,i)=>s+i.amount,0);
 
-  const bankBlock = accounts.length ? `
+  const bankBlock = !financeUnlocked() ? `<div style="padding:12px 0;color:var(--text-soft);font-size:13px;border-top:1px solid var(--border-soft);margin-top:8px">🔒 Bank balances are hidden — unlock Finances to view.</div>`
+    : accounts.length ? `
     <div style="border-top:2px solid var(--border);padding:16px 0 4px;margin-top:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:17px">🏦</span>
