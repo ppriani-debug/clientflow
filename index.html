@@ -1171,7 +1171,8 @@ function getFirebaseConfig() {
     projectId: "client-flow-32ccc",
     storageBucket: "client-flow-32ccc.firebasestorage.app",
     messagingSenderId: "773423932471",
-    appId: "1:773423932471:web:131d37677f6b3a64d08bb2"
+    appId: "1:773423932471:web:131d37677f6b3a64d08bb2",
+    measurementId: "G-HKSP6L0Z10"
   };
 }
 
@@ -1202,9 +1203,8 @@ async function initFirebase() {
   const cfg = getFirebaseConfig();
   if (!cfg) { setSyncStatus('local'); return false; }
   try {
-    const base = 'https://www.gstatic.com/firebasejs/9.23.0/';
-    await loadScript(base + 'firebase-app-compat.js');
-    await loadScript(base + 'firebase-firestore-compat.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-app-compat.min.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-firestore-compat.min.js');
     if (!window.firebase) throw new Error('Firebase SDK not loaded');
     // Avoid duplicate app init
     let app;
