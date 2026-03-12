@@ -1219,9 +1219,13 @@ async function initFirebase() {
       if (!snap.exists) return;
       const remote = snap.data()?.payload;
       if (!remote) return;
-      if (_remoteWrite) { _remoteWrite = false; return; }
+      // Always update data from Firestore — this ensures all devices stay in sync
       try {
         const parsed = JSON.parse(remote);
+        // Skip if this is our own write and data is already current
+        if (_remoteWrite && !_importing) { _remoteWrite = false; return; }
+        _remoteWrite = false;
+        _importing = false;
         data = parsed;
         if (!data.upsells) data.upsells = [];
         autoUpdateStatuses();
@@ -1268,10 +1272,24 @@ async function loadData() {
       const snap = await _db.collection('clientflow').doc('data').get();
       if (snap.exists && snap.data()?.payload) {
         data = JSON.parse(snap.data().payload);
+        if (!data.upsells) data.upsells = [];
       }
     } catch(e) {
       console.error('Firestore load failed', e);
-      try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e2) {}
+      // Retry once after 2 seconds in case connection was still establishing
+      setTimeout(async () => {
+        try {
+          const snap2 = await _db.collection('clientflow').doc('data').get();
+          if (snap2.exists && snap2.data()?.payload) {
+            data = JSON.parse(snap2.data().payload);
+            if (!data.upsells) data.upsells = [];
+            autoUpdateStatuses();
+            rerenderCurrentPage();
+            updateBadges();
+            setSyncStatus('synced');
+          }
+        } catch(e2) { console.error('Firestore retry failed', e2); }
+      }, 2000);
     }
   } else {
     try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e) {}
