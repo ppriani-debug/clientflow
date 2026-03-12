@@ -1249,6 +1249,36 @@ function waitForFirebaseModules(timeout=5000) {
 
 const CF_SECRET = 'cf-ppriani-2026';
 
+const SETTINGS_KEYS = [
+  'finance-pin', 'finance-auth-emails', 'bank-accounts',
+  'anthropic-api-key', 'mailgun-api-key', 'mailgun-domain',
+  'mailgun-region', 'default-from-email', 'slack-webhook',
+  'auto-alert-enabled', 'auto-alert-time', 'auto-alert-days',
+  'auto-alert-selected-ids', 'auto-alert-status-filter'
+];
+
+async function saveSettings() {
+  const settings = {};
+  SETTINGS_KEYS.forEach(k => { const v = localStorage.getItem(k); if (v !== null) settings[k] = v; });
+  if (_db) {
+    try {
+      await _db.collection('clientflow').doc('settings').set({ payload: JSON.stringify(settings), updatedAt: Date.now(), secret: CF_SECRET });
+    } catch(e) { console.error('Settings save failed', e); }
+  }
+}
+
+async function loadSettings() {
+  if (_db) {
+    try {
+      const snap = await _db.collection('clientflow').doc('settings').get();
+      if (snap.exists && snap.data()?.payload) {
+        const settings = JSON.parse(snap.data().payload);
+        Object.entries(settings).forEach(([k, v]) => { if (v !== null) localStorage.setItem(k, v); });
+      }
+    } catch(e) { console.error('Settings load failed', e); }
+  }
+}
+
 async function saveData() {
   if (_db) {
     try {
@@ -1473,6 +1503,7 @@ function submitChangePinConfirm(newVal) {
   }
   // Old PIN correct — apply new PIN
   localStorage.setItem('finance-pin', newVal);
+  saveSettings();
   sessionStorage.setItem('finance-unlocked', '1');
   document.getElementById('finance-pin-input').value = '';
   closeFinanceModal();
@@ -1521,6 +1552,7 @@ function saveFinancePin() {
   }
   // No existing PIN — set freely
   localStorage.setItem('finance-pin', val);
+  saveSettings();
   sessionStorage.setItem('finance-unlocked', '1');
   document.getElementById('finance-pin-input').value = '';
   updateFinanceLockBtn();
@@ -1538,12 +1570,14 @@ function addFinanceAuthEmail() {
   localStorage.setItem('finance-auth-emails', JSON.stringify(list));
   input.value = '';
   renderFinanceLockSettings();
+  saveSettings();
   toast('Authorized email added ✓');
 }
 
 function removeFinanceAuthEmail(email) {
   const list = getFinanceAuthEmails().filter(e => e !== email);
   localStorage.setItem('finance-auth-emails', JSON.stringify(list));
+  saveSettings();
   renderFinanceLockSettings();
 }
 
@@ -1966,7 +2000,7 @@ function renderReports() {
 }
 // ─── BANK ACCOUNTS ──────────────────────────────────────────────────────────
 function getBankAccounts() { try { return JSON.parse(localStorage.getItem('bank-accounts') || '[]'); } catch(e) { return []; } }
-function saveBankAccounts(accounts) { localStorage.setItem('bank-accounts', JSON.stringify(accounts)); }
+function saveBankAccounts(accounts) { localStorage.setItem('bank-accounts', JSON.stringify(accounts)); saveSettings(); }
 
 let editingBankId = null;
 function openBankModal(id) {
@@ -2261,35 +2295,34 @@ function saveApiKey() {
   const val = document.getElementById('anthropic-api-key').value.trim();
   if (!val || val === '••••••••••••••••') { toast('Please enter an API key ✗'); return; }
   localStorage.setItem('anthropic-api-key', val);
-  restoreSettings(); toast('API key saved ✓');
+  saveSettings(); restoreSettings(); toast('API key saved ✓');
 }
 function saveMailgunKey() {
   const val = document.getElementById('mailgun-api-key').value.trim();
   if (!val || val === '••••••••••••••••') { toast('Please enter a Mailgun API key ✗'); return; }
   localStorage.setItem('mailgun-api-key', val);
-  restoreSettings(); toast('Mailgun key saved ✓');
+  saveSettings(); restoreSettings(); toast('Mailgun key saved ✓');
 }
 function saveMailgunDomain() {
   const val = document.getElementById('mailgun-domain').value.trim();
   localStorage.setItem('mailgun-domain', val);
-  restoreSettings(); toast('Mailgun domain saved ✓');
+  saveSettings(); restoreSettings(); toast('Mailgun domain saved ✓');
 }
 function saveMailgunRegion() {
   localStorage.setItem('mailgun-region', document.getElementById('mailgun-region').value);
-  restoreSettings(); toast('Mailgun region saved ✓');
+  saveSettings(); restoreSettings(); toast('Mailgun region saved ✓');
 }
 function saveFromEmail() {
   const val = document.getElementById('global-from-email').value.trim();
   localStorage.setItem('default-from-email', val);
-  // Sync to panel inputs
   ['rdp-email-from','idp-email-from'].forEach(id => { const el=document.getElementById(id); if(el) el.value=val; });
-  restoreSettings(); toast('From email saved ✓');
+  saveSettings(); restoreSettings(); toast('From email saved ✓');
 }
 function saveGlobalSlackWebhook() {
   const val = document.getElementById('global-slack-webhook').value.trim();
   localStorage.setItem('slack-webhook', val);
   ['rdp-slack-webhook','idp-slack-webhook'].forEach(id => { const el=document.getElementById(id); if(el) el.value=val; });
-  restoreSettings(); toast('Slack webhook saved ✓');
+  saveSettings(); restoreSettings(); toast('Slack webhook saved ✓');
 }
 
 function restoreSettings() {
@@ -2631,6 +2664,7 @@ function renderAutoAlertRenewalPicker() {
   // Save status filter
   const checkedStatuses = [...document.querySelectorAll('.auto-status-cb:checked')].map(cb => cb.value);
   localStorage.setItem('auto-alert-status-filter', JSON.stringify(checkedStatuses));
+  saveSettings();
 
   const selectedIds = getAutoAlertSelectedIds();
   const statusFilter = getAutoAlertStatusFilter();
@@ -2671,9 +2705,9 @@ function renderAutoAlertRenewalPicker() {
 function saveAutoAlertRenewalSelection() {
   const checked = [...document.querySelectorAll('.auto-renewal-cb:checked')].map(cb => parseInt(cb.value));
   const all = [...document.querySelectorAll('.auto-renewal-cb')].map(cb => parseInt(cb.value));
-  // If all are checked, store null (means "all") to auto-include new renewals
   const val = checked.length === all.length ? null : checked;
   localStorage.setItem('auto-alert-selected-ids', JSON.stringify(val));
+  saveSettings();
 }
 
 function autoAlertSelectAll() {
@@ -2690,6 +2724,7 @@ function saveAutoAlertSettings() {
   localStorage.setItem('auto-alert-days', document.getElementById('auto-alert-days')?.value || '7');
   if (autoAlertTimer) { clearInterval(autoAlertTimer); autoAlertTimer = null; }
   if (localStorage.getItem('auto-alert-enabled') === 'true') scheduleAutoAlert();
+  saveSettings();
   updateAutoAlertStatus();
 }
 
@@ -2698,6 +2733,7 @@ function toggleAutoAlert() {
   localStorage.setItem('auto-alert-enabled', enabled);
   if (autoAlertTimer) { clearInterval(autoAlertTimer); autoAlertTimer = null; }
   if (enabled) scheduleAutoAlert();
+  saveSettings();
   updateAutoAlertStatus();
   toast(enabled ? 'Auto-alerts enabled ✓' : 'Auto-alerts disabled');
 }
@@ -4031,6 +4067,7 @@ function saveUpsell() {
 (async()=>{
   // Always connect to Firebase with hardcoded config
   await initFirebase();
+  await loadSettings();
 
   await loadData();
   await loadEmailRecipients();
