@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ClientFlow — Renewals & Payable</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  window._firebaseModules = { initializeApp, getFirestore, doc, getDoc, setDoc, onSnapshot };
+</script>
 <style>
   :root {
     --bg: #f7f6f3; --surface: #ffffff; --border: #e8e5df; --border-soft: #f0ede8;
@@ -458,7 +464,6 @@
           <button class="btn btn-ghost" onclick="exportCSV()">↓ Export CSV</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('invoices')" title="Send Invoice Report to Slack">💬 Invoice Report</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('renewals')" title="Send Renewal Report to Slack">💬 Renewal Report</button>
-          <button class="btn btn-ghost" onclick="sendReportEmail('invoices')" title="Email Invoice Report">✉ Invoice Report</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('renewals')" title="Email Renewal Report">✉ Renewal Report</button>
         </div>
       </div>
@@ -466,17 +471,14 @@
 
       <!-- INVOICE REPORT -->
       <div class="card mb20">
-        <div class="card-header" style="align-items:flex-start;flex-direction:column;gap:6px">
-          <div style="display:flex;width:100%;align-items:center">
-            <div class="card-title">Invoice Report</div>
-            <div style="margin-left:auto;display:flex;gap:6px">
-              <button class="btn btn-ghost btn-sm" onclick="sendReportSlack('invoices')">💬 Slack</button>
-              <button class="btn btn-ghost btn-sm" onclick="sendReportEmail('invoices')">✉ Email</button>
-            </div>
+        <div class="card-header">
+          <div class="card-title">Invoice Report</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:12px;color:var(--text-muted)" id="invoice-report-date"></span>
+            <button class="btn btn-primary btn-sm" onclick="sendReportSlack('invoices')">💬 Send to Slack</button>
           </div>
-          <div id="invoice-report-date" style="font-size:12px;color:var(--text-muted)"></div>
         </div>
-        <div id="invoice-report-content"></div>
+        <div style="padding:16px;font-size:13px;color:var(--text-muted)">Invoice report is sent directly to Slack. Click <strong>Send to Slack</strong> to dispatch the latest summary.</div>
       </div>
 
       <!-- RENEWAL REPORT -->
@@ -575,6 +577,15 @@
       <!-- SETTINGS -->
       <div class="card mb20">
         <div class="card-header"><div class="card-title">⚙ Settings</div></div>
+        <div style="padding:4px 0 12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-soft)">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text)">🔥 Firebase Sync</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px" id="firebase-settings-status">Loading…</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="openFirebaseSettings()">Configure</button>
+          </div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
           <div class="form-group" style="margin:0">
             <label class="form-label">Anthropic API Key <span style="color:var(--red)">*</span></label>
@@ -1152,11 +1163,158 @@ const storage = {
   }
 };
 
-async function saveData() {
-  try { await storage.set('clientflow-data', JSON.stringify(data)); } catch(e) {}
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
+let _db = null;
+let _unsubscribe = null;
+let _remoteWrite = false; // flag to avoid re-processing our own writes
+
+function getFirebaseConfig() {
+  // Hardcoded config — no setup needed
+  return {
+    apiKey: "AIzaSyCjKnqOAhWJMsuQjH0rbNDwvZWMRCuzHWs",
+    authDomain: "client-flow-32ccc.firebaseapp.com",
+    projectId: "client-flow-32ccc",
+    storageBucket: "client-flow-32ccc.firebasestorage.app",
+    messagingSenderId: "773423932471",
+    appId: "1:773423932471:web:131d37677f6b3a64d08bb2"
+  };
 }
+
+function setSyncStatus(state) {
+  const ind = document.getElementById('sync-indicator');
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  if (!ind) return;
+  ind.style.display = 'flex';
+  if (state === 'synced')   { dot.style.background = '#86efac'; lbl.textContent = 'Synced'; }
+  if (state === 'saving')   { dot.style.background = '#fbbf24'; lbl.textContent = 'Saving…'; }
+  if (state === 'offline')  { dot.style.background = '#f87171'; lbl.textContent = 'Offline'; }
+  if (state === 'local')    { dot.style.background = '#d1d5db'; lbl.textContent = 'Local only'; ind.title = 'No Firebase — changes are not shared'; }
+}
+
+async function initFirebase() {
+  const cfg = getFirebaseConfig();
+  if (!cfg) { setSyncStatus('local'); return false; }
+  try {
+    const { initializeApp, getFirestore, doc, onSnapshot } = await waitForFirebaseModules();
+    const app = initializeApp(cfg, 'clientflow');
+    _db = getFirestore(app);
+    // Real-time listener — updates all users when data changes
+    const ref = doc(_db, 'clientflow', 'data');
+    _unsubscribe = onSnapshot(ref, snap => {
+      if (!snap.exists()) return;
+      const remote = snap.data().payload;
+      if (!remote) return;
+      if (_remoteWrite) { _remoteWrite = false; return; } // skip our own writes
+      try {
+        const parsed = JSON.parse(remote);
+        data = parsed;
+        if (!data.upsells) data.upsells = [];
+        autoUpdateStatuses();
+        rerenderCurrentPage();
+        updateBadges();
+        setSyncStatus('synced');
+      } catch(e) {}
+    }, err => { console.error('Firestore listener error', err); setSyncStatus('offline'); });
+    setSyncStatus('synced');
+    return true;
+  } catch(e) {
+    console.error('Firebase init failed', e);
+    setSyncStatus('offline');
+    return false;
+  }
+}
+
+function waitForFirebaseModules(timeout=5000) {
+  return new Promise((res, rej) => {
+    const start = Date.now();
+    const check = () => {
+      if (window._firebaseModules) return res(window._firebaseModules);
+      if (Date.now()-start > timeout) return rej(new Error('Firebase modules timed out'));
+      setTimeout(check, 50);
+    };
+    check();
+  });
+}
+
+async function saveData() {
+  if (_db) {
+    try {
+      setSyncStatus('saving');
+      const { doc, setDoc } = window._firebaseModules;
+      _remoteWrite = true;
+      await setDoc(doc(_db, 'clientflow', 'data'), { payload: JSON.stringify(data), updatedAt: Date.now() });
+      setSyncStatus('synced');
+    } catch(e) {
+      console.error('Firestore save failed', e);
+      setSyncStatus('offline');
+      // Fallback to local
+      try { await storage.set('clientflow-data', JSON.stringify(data)); } catch(e2) {}
+    }
+  } else {
+    try { await storage.set('clientflow-data', JSON.stringify(data)); } catch(e) {}
+  }
+}
+
 async function loadData() {
-  try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e) {}
+  if (_db) {
+    try {
+      const { doc, getDoc } = window._firebaseModules;
+      const snap = await getDoc(doc(_db, 'clientflow', 'data'));
+      if (snap.exists() && snap.data().payload) {
+        data = JSON.parse(snap.data().payload);
+      }
+    } catch(e) {
+      console.error('Firestore load failed', e);
+      // Fallback to local
+      try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e2) {}
+    }
+  } else {
+    try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e) {}
+  }
+}
+
+// Firebase config UI
+function showFirebaseSetup() {
+  const overlay = document.getElementById('firebase-setup-overlay');
+  overlay.style.display = 'flex';
+  const existing = getFirebaseConfig();
+  if (existing) document.getElementById('firebase-config-input').value = JSON.stringify(existing, null, 2);
+}
+
+function skipFirebase() {
+  localStorage.setItem('firebase-skipped', '1');
+  document.getElementById('firebase-setup-overlay').style.display = 'none';
+  setSyncStatus('local');
+}
+
+async function saveFirebaseConfig() {
+  const raw = document.getElementById('firebase-config-input').value.trim();
+  const errEl = document.getElementById('firebase-setup-error');
+  errEl.style.display = 'none';
+  try {
+    const cfg = JSON.parse(raw);
+    if (!cfg.apiKey || !cfg.projectId) throw new Error('Missing apiKey or projectId');
+    localStorage.setItem('firebase-config', JSON.stringify(cfg));
+    localStorage.removeItem('firebase-skipped');
+    document.getElementById('firebase-setup-overlay').style.display = 'none';
+    const ok = await initFirebase();
+    if (ok) { await loadData(); rerenderCurrentPage(); toast('Connected to Firebase ✓'); }
+    else { errEl.textContent = 'Could not connect. Check your config and Firestore rules.'; errEl.style.display = 'block'; }
+  } catch(e) {
+    errEl.textContent = 'Invalid JSON — ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function openFirebaseSettings() { showFirebaseSetup(); }
+
+function updateFirebaseStatusLabel() {
+  const el = document.getElementById('firebase-settings-status');
+  if (!el) return;
+  const cfg = getFirebaseConfig();
+  if (_db) { el.textContent = `Connected · project: ${cfg.projectId} · Real-time sync active`; el.style.color = 'var(--green)'; }
+  else { el.textContent = `Connecting to ${cfg.projectId}…`; el.style.color = 'var(--amber)'; }
 }
 
 // ─── AUTO-STATUS UPDATE ───────────────────────────────────────────────────────
@@ -1419,7 +1577,7 @@ function renderPage(p) {
   if(p==='reports') renderReports();
   if(p==='bank-accounts') renderBankAccounts();
   if(p==='alerts') renderAlerts();
-  if(p==='email-alerts') { renderEmailAlerts(); restoreSettings(); renderFinanceLockSettings(); }
+  if(p==='email-alerts') { renderEmailAlerts(); restoreSettings(); renderFinanceLockSettings(); updateFirebaseStatusLabel(); }
   if(p==='upsell') renderUpsell();
   if(p==='import') resetImport();
   updateBadges();
@@ -1684,72 +1842,6 @@ function renderReports() {
     <div class="stat-card"><div class="stat-label">Overdue Balance</div><div class="stat-value red">${fmtF(overdue.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${overdue.length} invoices overdue</div></div>
     <div class="stat-card"><div class="stat-label">Paid This Month</div><div class="stat-value green">${fmtF(paidThisMonth.reduce((s,i)=>s+i.amount,0))}</div><div class="stat-delta">${paidThisMonth.length} invoices</div></div>`;
 
-  // ── INVOICE REPORT ──
-  const monthName = now.toLocaleString('default',{month:'long',year:'numeric'});
-  document.getElementById('invoice-report-date').textContent = `As of ${now.toLocaleDateString()} · Paid invoices show ${monthName} only`;
-
-  const invoiceRow = i => {
-    const days = daysUntil(i.dueDate);
-    const dl = days < 0 ? `<span style="color:var(--red);font-size:10px">${Math.abs(days)}d overdue</span>` : days === 0 ? `<span style="color:var(--amber);font-size:10px">due today</span>` : `<span style="color:var(--text-soft);font-size:10px">in ${days}d</span>`;
-    return `<tr style="cursor:pointer" onclick="navigate('invoices');setTimeout(()=>openInvoiceDetail(${i.id}),100)">
-      <td class="mono" style="font-size:12px">${i.number}</td>
-      <td style="font-size:12px;font-weight:500">${clientName(i.clientId)}</td>
-      <td style="font-size:12px">${fmtDate(i.dueDate)}<br>${dl}</td>
-      <td class="mono" style="font-size:12px;font-weight:600">${fmtF(i.amount)}</td>
-    </tr>`;
-  };
-
-  const sectionBlock = (icon, title, color, count, total, rows, note='') => `
-    <div style="border-bottom:1px solid var(--border-soft);margin-bottom:2px">
-      <div style="display:flex;align-items:center;gap:10px;padding:13px 0 9px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-        <span style="font-size:17px">${icon}</span>
-        <div style="flex:1">
-          <div style="font-weight:700;color:${color};font-size:13px">${title}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:1px">${count} invoice${count!==1?'s':''} · Total: <strong>${fmtF(total)}</strong>${note}</div>
-        </div>
-        <span style="font-size:11px;color:var(--text-muted)">▾ details</span>
-      </div>
-      <div style="display:none;padding-bottom:14px">
-        ${rows.length ? `<table style="width:100%"><thead><tr style="font-size:11px;color:var(--text-muted)"><th>Invoice #</th><th>Client</th><th>Due Date</th><th>Amount</th></tr></thead><tbody>${rows.map(invoiceRow).join('')}</tbody></table>` : '<div style="padding:8px 0;color:var(--text-soft);font-size:13px">None</div>'}
-      </div>
-    </div>`;
-
-  const accounts = getBankAccounts();
-  const overdueSort = overdue.slice().sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const top5pending = pending.slice().sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,5);
-  const top10paid = paidThisMonth.slice().sort((a,b)=>b.amount-a.amount).slice(0,10);
-  const paidTotal = paidThisMonth.reduce((s,i)=>s+i.amount,0);
-
-  const bankBlock = !financeUnlocked() ? `<div style="padding:12px 0;color:var(--text-soft);font-size:13px;border-top:1px solid var(--border-soft);margin-top:8px">🔒 Bank balances are hidden — unlock Finances to view.</div>`
-    : accounts.length ? `
-    <div style="border-top:2px solid var(--border);padding:16px 0 4px;margin-top:8px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:17px">🏦</span>
-        <div style="font-weight:700;font-size:13px;color:var(--text)">Bank Balances</div>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:auto">Latest recorded balances</span>
-      </div>
-      ${accounts.map(a=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-soft)">
-          <div>
-            <div style="font-size:13px;font-weight:500">${a.name}</div>
-            ${a.bank?`<div style="font-size:11px;color:var(--text-muted)">${a.bank}${a.updated?' · updated '+fmtDate(a.updated):''}</div>`:''}
-          </div>
-          <div style="font-family:monospace;font-weight:700;font-size:14px">${a.currency} ${fmtF(a.balance)}</div>
-        </div>`).join('')}
-      <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-weight:700;font-size:13px">
-        <span>Total Cash Position</span>
-        <span style="font-family:monospace;color:var(--accent)">${fmtF(accounts.reduce((s,a)=>s+a.balance,0))}</span>
-      </div>
-    </div>` : `<div style="padding:12px 0;color:var(--text-soft);font-size:13px;border-top:1px solid var(--border-soft);margin-top:8px">No bank accounts — <a style="color:var(--accent);cursor:pointer" onclick="navigate('bank-accounts')">add accounts →</a></div>`;
-
-  const preinvoiceSort = preinvoice.slice().sort((a,b)=>clientName(a.clientId).localeCompare(clientName(b.clientId)));
-  document.getElementById('invoice-report-content').innerHTML =
-    sectionBlock('🟣', 'Pre-Invoice (Projected)', 'var(--purple,#7c3aed)', preinvoice.length, preinvoice.reduce((s,i)=>s+i.amount,0), preinvoiceSort) +
-    sectionBlock('🔴', 'Overdue Invoices', 'var(--red)', overdue.length, overdue.reduce((s,i)=>s+i.amount,0), overdueSort) +
-    sectionBlock('🔔', 'Top 5 Due Invoices', 'var(--amber)', top5pending.length, pending.reduce((s,i)=>s+i.amount,0), top5pending, pending.length > 5 ? ` · showing top 5 of ${pending.length}` : '') +
-    sectionBlock('✅', `Paid This Month — ${monthName}`, 'var(--green)', paidThisMonth.length, paidTotal, top10paid, paidThisMonth.length > 10 ? ` · showing top 10 of ${paidThisMonth.length} by amount` : '') +
-    `<div>${bankBlock}</div>`;
-
   // ── RENEWAL REPORT ──
   const today = new Date(); today.setHours(0,0,0,0);
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - today) / 86400000);
@@ -1921,94 +2013,91 @@ function renderBankAccounts() {
 function buildInvoiceReportText() {
   const now = new Date();
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
-  const monthName = now.toLocaleString('default',{month:'long',year:'numeric'});
-  const dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const monthName = now.toLocaleString('es-MX',{month:'long',year:'numeric'});
+  const dateStr = now.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const overdue     = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const pending     = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
   const paidThisMonth = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.paidDate||i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;});
   const preinvoices = data.invoices.filter(i=>i.status==='Pre-Invoice');
-  const accounts = getBankAccounts();
-  const divider = '─────────────────────────────────────';
+  const accounts    = getBankAccounts();
+  const divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
 
-  // Helper: group invoices by client, return sorted summary lines
   const groupByClient = (invoices) => {
     const map = {};
     invoices.forEach(i => {
-      const cid = i.clientId;
-      if (!map[cid]) map[cid] = { name: clientName(cid), total: 0, invoices: [] };
-      map[cid].total += i.amount;
-      map[cid].invoices.push(i);
+      if (!map[i.clientId]) map[i.clientId] = { name: clientName(i.clientId), total: 0, invoices: [] };
+      map[i.clientId].total += i.amount;
+      map[i.clientId].invoices.push(i);
     });
     return Object.values(map).sort((a,b) => b.total - a.total);
   };
 
-  const clientLines = (groups) => groups.map((g, idx) => {
-    const invNums = g.invoices.map(i => i.number).join(', ');
-    const concepts = [...new Set(g.invoices.map(i=>i.concept).filter(Boolean))].join('; ');
-    const oldest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
-    const daysOld = oldest?.dueDate ? Math.abs(daysUntil(oldest.dueDate)) : null;
-    const detail = g.invoices.length === 1
-      ? `${g.invoices[0].number}${g.invoices[0].dueDate?` | Due: ${fmtDate(g.invoices[0].dueDate)}`:''}${daysOld!==null?` (${daysOld}d)`:''}`
-      : `${g.invoices.length} invoices (${invNums}) | Oldest: ${fmtDate(oldest?.dueDate)}`;
-    return `   ${idx+1}. ${g.name}${concepts?' — '+concepts:''}\n      ${detail} | Total: ${fmt(g.total)}\n`;
-  }).join('');
-
   let t = '';
-  t += `📋 INVOICE REPORT\n${dateStr}\n${divider}\n\n`;
+  t += `*📊 Reporte Ejecutivo*\n`;
+  t += `Información al: ${dateStr}\n`;
+  t += `${divider}\n\n`;
 
-  // Pre-Invoice
-  const preGroups = groupByClient(preinvoices);
-  t += `🟣 PRE-INVOICE (PROJECTED)\n`;
-  if (preGroups.length) {
-    t += `   Projected: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))} across ${preGroups.length} client${preGroups.length!==1?'s':''}\n\n`;
-    t += clientLines(preGroups);
-  } else { t += `   No pre-invoices on file.\n`; }
-
-  t += `\n${divider}\n\n`;
-
-  // Overdue
-  const overdueGroups = groupByClient(overdue);
-  t += `🔴 OVERDUE INVOICES\n`;
-  if (overdueGroups.length) {
-    t += `   Total: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))} | ${overdueGroups.length} client${overdueGroups.length!==1?'s':''} · ${overdue.length} invoice${overdue.length!==1?'s':''}\n\n`;
-    t += clientLines(overdueGroups);
-  } else { t += `   No overdue invoices.\n`; }
-
-  t += `\n${divider}\n\n`;
-
-  // Pending / Due Soon
-  const pendingGroups = groupByClient(pending);
-  t += `🔔 UPCOMING DUE\n`;
-  if (pendingGroups.length) {
-    t += `   Total pending: ${fmt(pending.reduce((s,i)=>s+i.amount,0))} | ${pendingGroups.length} client${pendingGroups.length!==1?'s':''} · ${pending.length} invoice${pending.length!==1?'s':''}\n\n`;
-    t += clientLines(pendingGroups);
-  } else { t += `   No pending invoices.\n`; }
-
-  t += `\n${divider}\n\n`;
-
-  // Paid this month
-  const paidGroups = groupByClient(paidThisMonth);
-  t += `✅ PAYMENTS RECEIVED — ${monthName.toUpperCase()}\n`;
-  if (paidGroups.length) {
-    t += `   Total collected: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))} | ${paidGroups.length} client${paidGroups.length!==1?'s':''} · ${paidThisMonth.length} invoice${paidThisMonth.length!==1?'s':''}\n\n`;
-    t += clientLines(paidGroups);
-  } else { t += `   No payments recorded this month.\n`; }
-
-  t += `\n${divider}\n\n`;
-
-  // Bank balances
-  t += `🏦 BANK BALANCES\n`;
+  // Bank balances first
   if (accounts.length) {
-    accounts.forEach(a => {
-      const upd = a.updated ? ` | Updated: ${fmtDate(a.updated)}` : '';
-      t += `   • ${a.name}${a.bank?' ('+a.bank+')':''}: ${a.currency} ${fmt(a.balance)}${upd}\n`;
+    t += `*🏦 Disponibilidad en Bancos*\n`;
+    accounts.forEach(a => t += `   ${a.name}${a.bank?' ('+a.bank+')':''}: *${a.currency} ${fmt(a.balance)}*\n`);
+    t += `   ${'─'.repeat(34)}\n`;
+    t += `   *TOTAL DISPONIBLE: ${fmt(accounts.reduce((s,a)=>s+a.balance,0))}*\n`;
+    t += `\n${divider}\n\n`;
+  }
+
+  // Top debtors (pending/due soon) sorted by amount desc
+  const pendingGroups = groupByClient(pending);
+  t += `*🔔 Top Clientes por Cobrar*\n`;
+  if (pendingGroups.length) {
+    t += `_${pendingGroups.length} cliente${pendingGroups.length!==1?'s':''} · Total: ${fmt(pending.reduce((s,i)=>s+i.amount,0))}_\n\n`;
+    pendingGroups.forEach((g, idx) => {
+      const soonest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
+      const d = soonest?.dueDate ? daysUntil(soonest.dueDate) : null;
+      const dLabel = d===null?'—':d===0?'hoy':d===1?'mañana':`${d}d`;
+      t += `   ${idx+1}. *${g.name}*  |  Vence: ${soonest?.dueDate?fmtDate(soonest.dueDate):'—'} (${dLabel})  |  *${fmt(g.total)}*\n`;
     });
-    t += `   ${'─'.repeat(30)}\n`;
-    t += `   Total Cash Position: ${fmt(accounts.reduce((s,a)=>s+a.balance,0))}\n`;
-  } else { t += `   No bank accounts configured.\n`; }
+  } else { t += `   _Sin facturas pendientes._\n`; }
+
+  t += `\n${divider}\n\n`;
+
+  // Pre-invoices (only if any)
+  const preGroups = groupByClient(preinvoices);
+  if (preGroups.length) {
+    t += `*🟣 Pre-Facturas (Proyectadas)*\n`;
+    t += `_${preGroups.length} cliente${preGroups.length!==1?'s':''} · Total proyectado: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))}_\n\n`;
+    preGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}*  |  *${fmt(g.total)}*\n`);
+    t += `\n${divider}\n\n`;
+  }
+
+  // Overdue — with days past due, total at bottom
+  const overdueGroups = groupByClient(overdue);
+  t += `*⚠️ Facturas Vencidas Acumuladas*\n`;
+  if (overdueGroups.length) {
+    t += `\n`;
+    overdueGroups.forEach((g, idx) => {
+      const oldest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
+      const days = oldest?.dueDate ? Math.abs(daysUntil(oldest.dueDate)) : null;
+      t += `   ${idx+1}. *${g.name}*  |  Atraso: ${days!==null?days+' día'+(days!==1?'s':''):'—'}  |  *${fmt(g.total)}*\n`;
+    });
+    t += `   ${'─'.repeat(34)}\n`;
+    t += `   *TOTAL VENCIDO GENERAL: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))}*\n`;
+  } else { t += `   _Sin facturas vencidas. ✅_\n`; }
+
+  t += `\n${divider}\n\n`;
+
+  // Payments this month
+  const paidGroups = groupByClient(paidThisMonth);
+  t += `*✅ Pagos Recibidos — ${monthName}*\n`;
+  if (paidGroups.length) {
+    t += `\n`;
+    paidGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}*  |  *${fmt(g.total)}*\n`);
+    t += `   ${'─'.repeat(34)}\n`;
+    t += `   *TOTAL RECIBIDO: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))}*\n`;
+  } else { t += `   _No hay pagos este mes._\n`; }
 
   t += `\n${divider}\n`;
-  t += `Report generated by ClientFlow`;
+  t += `_Reporte generado por ClientFlow_`;
   return t;
 }
 
@@ -3874,6 +3963,9 @@ function saveUpsell() {
 }
 
 (async()=>{
+  // Always connect to Firebase with hardcoded config
+  await initFirebase();
+
   await loadData();
   await loadEmailRecipients();
   if (!data.upsells) data.upsells = [];
@@ -3896,6 +3988,40 @@ function saveUpsell() {
   <div style="background:var(--surface);border-radius:16px;padding:32px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div id="finance-modal-content"></div>
   </div>
+</div>
+
+<!-- FIREBASE SETUP MODAL -->
+<div id="firebase-setup-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;padding:32px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:32px;margin-bottom:8px">🔥</div>
+      <div style="font-size:18px;font-weight:700;color:#1a1916">Connect to Firebase</div>
+      <div style="font-size:13px;color:#8a8580;margin-top:6px">To sync data between all users, paste your Firebase project config below.</div>
+    </div>
+    <div style="background:#f0f4ff;border-radius:8px;padding:12px 14px;font-size:12px;color:#2563eb;margin-bottom:20px;line-height:1.6">
+      <strong>How to get your config:</strong><br>
+      1. Go to <a href="https://console.firebase.google.com" target="_blank" style="color:#2563eb">console.firebase.google.com</a><br>
+      2. Create a project → Add Web App<br>
+      3. Copy the <code>firebaseConfig</code> object<br>
+      4. Enable Firestore in Build → Firestore Database<br>
+      5. Set rules to allow read/write (for team use)
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:#1a1916;display:block;margin-bottom:6px">Firebase Config (JSON)</label>
+      <textarea id="firebase-config-input" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}' style="width:100%;height:120px;border:1px solid #e8e5df;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box"></textarea>
+    </div>
+    <div id="firebase-setup-error" style="display:none;color:#c0392b;font-size:12px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="saveFirebaseConfig()" style="flex:1;background:#2563eb;color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer">Connect</button>
+      <button onclick="skipFirebase()" style="background:#f0ede8;color:#8a8580;border:none;border-radius:8px;padding:12px 16px;font-size:13px;cursor:pointer">Use Local Only</button>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC STATUS INDICATOR -->
+<div id="sync-indicator" style="position:fixed;bottom:16px;right:16px;background:white;border:1px solid #e8e5df;border-radius:20px;padding:6px 12px;font-size:11px;color:#8a8580;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);z-index:100;display:none">
+  <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#86efac;display:inline-block"></span>
+  <span id="sync-label">Synced</span>
 </div>
 </body>
 </html>
