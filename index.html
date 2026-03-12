@@ -1242,12 +1242,14 @@ function waitForFirebaseModules(timeout=5000) {
   return Promise.resolve(); // no longer needed with compat SDK
 }
 
+const CF_SECRET = 'cf-ppriani-2026';
+
 async function saveData() {
   if (_db) {
     try {
       setSyncStatus('saving');
       _remoteWrite = true;
-      await _db.collection('clientflow').doc('data').set({ payload: JSON.stringify(data), updatedAt: Date.now() });
+      await _db.collection('clientflow').doc('data').set({ payload: JSON.stringify(data), updatedAt: Date.now(), secret: CF_SECRET });
       setSyncStatus('synced');
     } catch(e) {
       console.error('Firestore save failed', e);
