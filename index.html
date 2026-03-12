@@ -5,12 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ClientFlow — Renewals & Payable</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<!-- Firebase SDK -->
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-  window._firebaseModules = { initializeApp, getFirestore, doc, getDoc, setDoc, onSnapshot };
-</script>
+<!-- Firebase SDK (compat — loads as globals) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg: #f7f6f3; --surface: #ffffff; --border: #e8e5df; --border-soft: #f0ede8;
@@ -755,7 +752,7 @@
     <!-- IMPORT -->
     <div class="page" id="page-import">
       <div class="page-header">
-        <div><div class="page-title">Import Data</div><div class="page-subtitle">Upload a CSV or Excel file to import clients or invoices</div></div>
+        <div><div class="page-title">Import Data</div><div class="page-subtitle">Upload a CSV, Excel, or JSON backup file</div></div>
       </div>
 
       <div class="import-tabs">
@@ -779,14 +776,14 @@
           ondrop="handleFileDrop(event)">
           <div class="drop-icon">⇪</div>
           <div class="drop-title">Drop your file here or click to browse</div>
-          <div class="drop-sub">Supports CSV and Excel files. Download a template below to get started.</div>
+          <div class="drop-sub">Supports CSV, Excel, and JSON backup files.</div>
           <div class="drop-formats">
             <span class="format-tag">.csv</span>
             <span class="format-tag">.xlsx</span>
             <span class="format-tag">.xls</span>
           </div>
         </div>
-        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(this)">
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.json" style="display:none" onchange="handleFileSelect(this)">
 
         <div style="margin-top:20px">
           <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text-muted)">↓ Download Templates</div>
@@ -1196,16 +1193,17 @@ async function initFirebase() {
   const cfg = getFirebaseConfig();
   if (!cfg) { setSyncStatus('local'); return false; }
   try {
-    const { initializeApp, getFirestore, doc, onSnapshot } = await waitForFirebaseModules();
-    const app = initializeApp(cfg, 'clientflow');
-    _db = getFirestore(app);
-    // Real-time listener — updates all users when data changes
-    const ref = doc(_db, 'clientflow', 'data');
-    _unsubscribe = onSnapshot(ref, snap => {
-      if (!snap.exists()) return;
-      const remote = snap.data().payload;
+    // compat SDK uses firebase global
+    if (!window.firebase) throw new Error('Firebase SDK not loaded');
+    const app = firebase.initializeApp(cfg, 'clientflow');
+    _db = firebase.firestore(app);
+    // Real-time listener
+    const ref = _db.collection('clientflow').doc('data');
+    _unsubscribe = ref.onSnapshot(snap => {
+      if (!snap.exists) return;
+      const remote = snap.data()?.payload;
       if (!remote) return;
-      if (_remoteWrite) { _remoteWrite = false; return; } // skip our own writes
+      if (_remoteWrite) { _remoteWrite = false; return; }
       try {
         const parsed = JSON.parse(remote);
         data = parsed;
@@ -1226,29 +1224,19 @@ async function initFirebase() {
 }
 
 function waitForFirebaseModules(timeout=5000) {
-  return new Promise((res, rej) => {
-    const start = Date.now();
-    const check = () => {
-      if (window._firebaseModules) return res(window._firebaseModules);
-      if (Date.now()-start > timeout) return rej(new Error('Firebase modules timed out'));
-      setTimeout(check, 50);
-    };
-    check();
-  });
+  return Promise.resolve(); // no longer needed with compat SDK
 }
 
 async function saveData() {
   if (_db) {
     try {
       setSyncStatus('saving');
-      const { doc, setDoc } = window._firebaseModules;
       _remoteWrite = true;
-      await setDoc(doc(_db, 'clientflow', 'data'), { payload: JSON.stringify(data), updatedAt: Date.now() });
+      await _db.collection('clientflow').doc('data').set({ payload: JSON.stringify(data), updatedAt: Date.now() });
       setSyncStatus('synced');
     } catch(e) {
       console.error('Firestore save failed', e);
       setSyncStatus('offline');
-      // Fallback to local
       try { await storage.set('clientflow-data', JSON.stringify(data)); } catch(e2) {}
     }
   } else {
@@ -1259,14 +1247,12 @@ async function saveData() {
 async function loadData() {
   if (_db) {
     try {
-      const { doc, getDoc } = window._firebaseModules;
-      const snap = await getDoc(doc(_db, 'clientflow', 'data'));
-      if (snap.exists() && snap.data().payload) {
+      const snap = await _db.collection('clientflow').doc('data').get();
+      if (snap.exists && snap.data()?.payload) {
         data = JSON.parse(snap.data().payload);
       }
     } catch(e) {
       console.error('Firestore load failed', e);
-      // Fallback to local
       try { const r = await storage.get('clientflow-data'); if (r?.value) data = JSON.parse(r.value); } catch(e2) {}
     }
   } else {
@@ -2968,8 +2954,44 @@ function processFile(file) {
     const reader = new FileReader();
     reader.onload = e => parseXLSX(e.target.result);
     reader.readAsArrayBuffer(file);
+  } else if (name.endsWith('.json')) {
+    const reader = new FileReader();
+    reader.onload = e => importJSON(e.target.result);
+    reader.readAsText(file);
   } else {
-    toast('Unsupported file type. Use .csv or .xlsx ✗');
+    toast('Unsupported file type. Use .csv, .xlsx or .json ✗');
+  }
+}
+
+async function importJSON(text) {
+  try {
+    const parsed = JSON.parse(text);
+    // Accept either a direct data object or a localStorage backup {key: value}
+    let newData = null;
+    if (parsed.clients && parsed.renewals) {
+      // Direct data object
+      newData = parsed;
+    } else if (parsed['clientflow-data']) {
+      // localStorage backup format
+      newData = JSON.parse(parsed['clientflow-data']);
+    } else {
+      // Try finding clientflow-data key anywhere in the object
+      const val = Object.values(parsed).find(v => { try { const p = JSON.parse(v); return p.clients && p.renewals; } catch(e) { return false; }});
+      if (val) newData = JSON.parse(val);
+    }
+    if (!newData || !newData.clients) {
+      toast('Could not find ClientFlow data in this JSON file ✗');
+      return;
+    }
+    if (!confirm(`Import ${newData.clients.length} clients, ${newData.renewals?.length||0} renewals, ${newData.invoices?.length||0} invoices?\n\nThis will REPLACE all current data.`)) return;
+    data = newData;
+    if (!data.upsells) data.upsells = [];
+    await saveData();
+    renderPage(currentPage);
+    updateBadges();
+    toast(`Data imported successfully ✓ — ${data.clients.length} clients loaded`);
+  } catch(e) {
+    toast('Invalid JSON file ✗ — ' + e.message);
   }
 }
 
