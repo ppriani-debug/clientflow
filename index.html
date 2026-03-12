@@ -1161,7 +1161,8 @@ const storage = {
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 let _db = null;
 let _unsubscribe = null;
-let _remoteWrite = false; // flag to avoid re-processing our own writes
+let _remoteWrite = false; // flag to avoid re-processing our own saves
+let _importing = false;  // flag to allow snapshot during imports
 
 function getFirebaseConfig() {
   // Hardcoded config — no setup needed
@@ -3000,13 +3001,21 @@ async function importJSON(text) {
       toast('Could not find ClientFlow data in this JSON file ✗');
       return;
     }
-    if (!confirm(`Import ${newData.clients.length} clients, ${newData.renewals?.length||0} renewals, ${newData.invoices?.length||0} invoices?\n\nThis will REPLACE all current data.`)) return;
+    if (!confirm(`Import ${newData.clients.length} clients, ${newData.renewals?.length||0} renewals, ${newData.invoices?.length||0} invoices, ${newData.upsells?.length||0} upsells?\n\nThis will REPLACE all current data.`)) return;
     data = newData;
     if (!data.upsells) data.upsells = [];
+    _importing = true;
     await saveData();
+    autoUpdateStatuses();
     renderPage(currentPage);
     updateBadges();
-    toast(`Data imported successfully ✓ — ${data.clients.length} clients loaded`);
+    const urgentCount = buildAlertItems().length;
+    const eb = document.getElementById('email-badge');
+    if (eb) { eb.textContent = urgentCount; eb.style.display = urgentCount ? 'inline' : 'none'; }
+    const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
+    const ub = document.getElementById('upsell-badge');
+    if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
+    toast(`✓ Imported ${data.clients.length} clients, ${data.renewals?.length||0} renewals, ${data.invoices?.length||0} invoices, ${data.upsells?.length||0} upsells`);
   } catch(e) {
     toast('Invalid JSON file ✗ — ' + e.message);
   }
