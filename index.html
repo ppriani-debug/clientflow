@@ -1061,6 +1061,13 @@
     <div id="udp-details"></div>
   </div>
   <div class="detail-section">
+    <div class="detail-section-title">Est. Value</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="form-input" type="number" id="udp-value" placeholder="0" min="0" style="flex:1">
+      <button class="btn btn-primary btn-sm" onclick="saveUpsellValue()">Save</button>
+    </div>
+  </div>
+  <div class="detail-section">
     <div class="detail-section-title">Target Plans</div>
     <div class="plan-picker" id="udp-plan-picker" style="padding:4px 0"></div>
     <div style="margin-top:10px;display:flex;justify-content:flex-end">
@@ -1165,7 +1172,6 @@ let _remoteWrite = false; // flag to avoid re-processing our own saves
 let _importing = false;  // flag to allow snapshot during imports
 
 function getFirebaseConfig() {
-  // Hardcoded config — no setup needed
   return {
     apiKey: "AIzaSyCjKnqOAhWJMsuQjH0rbNDwvZWMRCuzHWs",
     authDomain: "client-flow-32ccc.firebaseapp.com",
@@ -3951,6 +3957,7 @@ function openUpsellDetail(id) {
     <div class="plan-chip ${(u.targetPlans||[]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('');
 
   document.getElementById('udp-notes').value = u.notes || '';
+  document.getElementById('udp-value').value = u.value || '';
   document.getElementById('udp-last-contact').value = u.lastContact || '';
   updateUpsellLastContactLabel(u);
   document.getElementById('upsell-detail-panel').classList.add('open');
@@ -4007,7 +4014,21 @@ function setUpsellStage(id, stage) {
   toast(`Moved to ${stage} ✓`);
 }
 
-function saveUpsellNote() {
+function saveUpsellValue() {
+  const u = data.upsells.find(x=>x.id===activeUpsellId);
+  if (!u) return;
+  const val = parseFloat(document.getElementById('udp-value').value) || 0;
+  u.value = val;
+  u.updatedAt = new Date().toISOString().split('T')[0];
+  saveData();
+  // Refresh detail and card
+  document.getElementById('udp-plans').textContent = (u.targetPlans||[]).join(', ') + ' · ' + fmt(u.value);
+  document.getElementById('udp-details').querySelector('.detail-val[style*="green"]').textContent = fmtF(u.value);
+  renderUpsell();
+  toast('Est. value updated ✓');
+}
+
+
   const u = data.upsells.find(x=>x.id===activeUpsellId);
   if (u) { u.notes = document.getElementById('udp-notes').value; u.updatedAt = new Date().toISOString().split('T')[0]; saveData(); renderUpsell(); toast('Note saved ✓'); }
 }
