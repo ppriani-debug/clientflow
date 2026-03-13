@@ -4021,14 +4021,13 @@ function saveUpsellValue() {
   u.value = val;
   u.updatedAt = new Date().toISOString().split('T')[0];
   saveData();
-  // Refresh detail and card
   document.getElementById('udp-plans').textContent = (u.targetPlans||[]).join(', ') + ' · ' + fmt(u.value);
   document.getElementById('udp-details').querySelector('.detail-val[style*="green"]').textContent = fmtF(u.value);
   renderUpsell();
   toast('Est. value updated ✓');
 }
 
-
+function saveUpsellNote() {
   const u = data.upsells.find(x=>x.id===activeUpsellId);
   if (u) { u.notes = document.getElementById('udp-notes').value; u.updatedAt = new Date().toISOString().split('T')[0]; saveData(); renderUpsell(); toast('Note saved ✓'); }
 }
