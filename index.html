@@ -514,8 +514,9 @@
           <div class="card-title">Accounts</div>
           <div id="bank-total" style="font-size:13px;font-weight:600;color:var(--accent)"></div>
         </div>
+        <div id="fx-rates-container" style="padding:16px 20px;border-bottom:1px solid var(--border-soft);display:none"></div>
         <table>
-          <thead><tr><th>Account Name</th><th>Bank</th><th>Currency</th><th>Balance</th><th>Last Updated</th><th></th></tr></thead>
+          <thead><tr><th>Account Name</th><th>Bank</th><th>Currency</th><th>Balance</th><th>In MXN</th><th>Last Updated</th><th></th></tr></thead>
           <tbody id="bank-tbody"></tbody>
         </table>
       </div>
@@ -1256,7 +1257,7 @@ function waitForFirebaseModules(timeout=5000) {
 const CF_SECRET = 'cf-ppriani-2026';
 
 const SETTINGS_KEYS = [
-  'finance-pin', 'finance-auth-emails', 'bank-accounts',
+  'finance-pin', 'finance-auth-emails', 'bank-accounts', 'fx-rates',
   'anthropic-api-key', 'mailgun-api-key', 'mailgun-domain',
   'mailgun-region', 'default-from-email', 'slack-webhook',
   'auto-alert-enabled', 'auto-alert-time', 'auto-alert-days',
@@ -2005,6 +2006,15 @@ function renderReports() {
     : `<div class="empty-state"><div class="empty-icon">↗</div><div class="empty-text">No data yet</div></div>`;
 }
 // ─── BANK ACCOUNTS ──────────────────────────────────────────────────────────
+function getFxRates() { try { return JSON.parse(localStorage.getItem('fx-rates') || '{}'); } catch(e) { return {}; } }
+function saveFxRate(currency, rate) {
+  const rates = getFxRates();
+  rates[currency] = parseFloat(rate);
+  localStorage.setItem('fx-rates', JSON.stringify(rates));
+  saveSettings();
+  renderBankAccounts();
+  toast(`1 ${currency} = ${rate} MXN saved ✓`);
+}
 function getBankAccounts() { try { return JSON.parse(localStorage.getItem('bank-accounts') || '[]'); } catch(e) { return []; } }
 function saveBankAccounts(accounts) { localStorage.setItem('bank-accounts', JSON.stringify(accounts)); saveSettings(); }
 
@@ -2051,24 +2061,74 @@ function deleteBankAccount(id) {
 }
 function renderBankAccounts() {
   const accounts = getBankAccounts();
-  const total = accounts.reduce((s,a)=>s+a.balance, 0);
+  const rates = getFxRates();
+
+  // Convert each account balance to MXN for the total
+  const toMXN = (balance, currency) => {
+    if (currency === 'MXN') return balance;
+    const rate = parseFloat(rates[currency] || 0);
+    return rate ? balance * rate : null; // null = rate not set
+  };
+
+  const mxnValues = accounts.map(a => toMXN(a.balance, a.currency));
+  const allRatesSet = mxnValues.every(v => v !== null);
+  const totalMXN = allRatesSet ? mxnValues.reduce((s,v) => s+v, 0) : null;
+
   const totalEl = document.getElementById('bank-total');
-  if (totalEl) totalEl.textContent = accounts.length ? `Total: ${fmt(total)}` : '';
+  if (totalEl) {
+    if (!accounts.length) { totalEl.innerHTML = ''; }
+    else if (totalMXN !== null) { totalEl.innerHTML = `Total: <strong>${fmt(totalMXN)} MXN</strong>`; }
+    else { totalEl.innerHTML = `Total: <span style="color:var(--amber)">⚠ Set exchange rates below</span>`; }
+  }
+
+  // FX rate inputs for any non-MXN currencies
+  const foreignCurrencies = [...new Set(accounts.filter(a=>a.currency!=='MXN').map(a=>a.currency))];
+  const fxContainer = document.getElementById('fx-rates-container');
+  if (fxContainer) {
+    if (foreignCurrencies.length) {
+      fxContainer.style.display = '';
+      fxContainer.innerHTML = `
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.4px">💱 Exchange Rates to MXN</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          ${foreignCurrencies.map(cur => `
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;font-weight:600">1 ${cur} =</span>
+              <input class="form-input" type="number" id="fx-input-${cur}" placeholder="e.g. 17.50"
+                value="${rates[cur] || ''}" step="0.01" min="0"
+                style="width:110px" onchange="saveFxRate('${cur}', this.value)">
+              <span style="font-size:13px">MXN</span>
+              ${rates[cur] ? `<span style="font-size:11px;color:var(--green);font-weight:500">✓ ${parseFloat(rates[cur]).toFixed(2)}</span>` : ''}
+            </div>`).join('')}
+        </div>`;
+    } else {
+      fxContainer.style.display = 'none';
+    }
+  }
+
   const tbody = document.getElementById('bank-tbody');
   if (!tbody) return;
-  tbody.innerHTML = accounts.length ? accounts.map(a=>`
-    <tr>
+  tbody.innerHTML = accounts.length ? accounts.map((a, i) => {
+    const mxn = mxnValues[i];
+    const isForeign = a.currency !== 'MXN';
+    const mxnCell = isForeign
+      ? mxn !== null
+        ? `<td class="mono" style="color:var(--green);font-weight:600">${fmt(mxn)}<div style="font-size:10px;color:var(--text-soft)">@ ${parseFloat(rates[a.currency]).toFixed(2)}</div></td>`
+        : `<td style="color:var(--amber);font-size:12px">⚠ Rate not set</td>`
+      : `<td style="color:var(--text-soft);font-size:12px">—</td>`;
+    return `<tr>
       <td style="font-weight:500">${a.name}</td>
       <td style="color:var(--text-muted)">${a.bank||'—'}</td>
       <td><span class="badge badge-blue">${a.currency}</span></td>
       <td class="mono" style="font-weight:600">${fmt(a.balance)}</td>
+      ${mxnCell}
       <td style="font-size:12px;color:var(--text-muted)">${a.updated ? fmtDate(a.updated) : '—'}</td>
       <td><div class="row-actions">
         <button class="btn btn-ghost btn-sm" onclick="openBankModal(${a.id})">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteBankAccount(${a.id})">✕</button>
       </div></td>
-    </tr>`).join('')
-  : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏦</div><div class="empty-text">No accounts yet — click Add Account</div></div></td></tr>`;
+    </tr>`;
+  }).join('')
+  : `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏦</div><div class="empty-text">No accounts yet — click Add Account</div></div></td></tr>`;
 }
 
 // ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
@@ -2172,11 +2232,12 @@ function buildRenewalReportText() {
   const divider = '─────────────────────────────────────';
 
   const renewalEntry = (r, idx) => {
+    const rc = data.clients.find(x=>x.id===r.clientId);
     const df = daysFrom(r);
     const dLabel = df < 0 ? `${Math.abs(df)}d overdue` : df === 0 ? 'today' : df === 1 ? 'tomorrow' : `in ${df}d`;
     const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
     const lcLabel = !r.lastContact ? 'never contacted ⚠️' : lc === 0 ? 'today' : lc === 1 ? 'yesterday' : `${lc}d ago${lc>7?' ⚠️':''}`;
-    return `   ${idx+1}. ${c?.name||'Unknown'} — ${r.type}\n      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
+    return `   ${idx+1}. ${rc?.name||'Unknown'} — ${r.type}\n      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
   };
 
   const dayGroup = (label, items) => {
