@@ -359,6 +359,7 @@
     <div class="nav-item" id="nav-bank-accounts" onclick="navigate('bank-accounts')"><span class="nav-icon">🏦</span> Bank Accounts</div>
     <div class="nav-item" onclick="navigate('alerts')"><span class="nav-icon">⚡</span> Alerts</div>
     <div class="nav-item" onclick="navigate('email-alerts')"><span class="nav-icon">✉</span> Email Alerts <span class="nav-badge" id="email-badge" style="display:none">!</span></div>
+    <div class="nav-item" onclick="navigate('scheduled-alerts')"><span class="nav-icon">🕐</span> Scheduled Alerts <span class="nav-badge" id="sched-badge" style="display:none">0</span></div>
     <div class="nav-section">Data</div>
     <div class="nav-item" onclick="navigate('import')"><span class="nav-icon">⇪</span> Import</div>
   </aside>
@@ -745,6 +746,23 @@
           <div style="font-weight:500;margin-bottom:4px">No alerts generated yet</div>
           <div style="font-size:12px">Click "Generate All Alerts" to create AI-drafted emails for all outstanding items.</div>
         </div>
+      </div>
+    </div>
+
+    <!-- SCHEDULED ALERTS -->
+    <div class="page" id="page-scheduled-alerts">
+      <div class="page-header">
+        <div><div class="page-title">Scheduled Alerts</div><div class="page-subtitle">Automated alerts that run on a schedule and repeat until resolved</div></div>
+        <button class="btn btn-primary" onclick="openSchedModal()">＋ New Alert Rule</button>
+      </div>
+
+      <!-- RULES LIST -->
+      <div id="sched-rules-list"></div>
+
+      <!-- RUN LOG -->
+      <div style="margin-top:28px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px">Recent Run Log</div>
+        <div id="sched-run-log" style="display:flex;flex-direction:column;gap:6px"></div>
       </div>
     </div>
 
@@ -1257,11 +1275,12 @@ function waitForFirebaseModules(timeout=5000) {
 const CF_SECRET = 'cf-ppriani-2026';
 
 const SETTINGS_KEYS = [
-  'finance-pin', 'finance-auth-emails', 'bank-accounts', 'fx-rates',
+  'finance-pin', 'finance-auth-emails', 'bank-accounts',
   'anthropic-api-key', 'mailgun-api-key', 'mailgun-domain',
   'mailgun-region', 'default-from-email', 'slack-webhook',
   'auto-alert-enabled', 'auto-alert-time', 'auto-alert-days',
-  'auto-alert-selected-ids', 'auto-alert-status-filter'
+  'auto-alert-selected-ids', 'auto-alert-status-filter',
+  'scheduled-rules', 'sched-run-log'
 ];
 
 async function saveSettings() {
@@ -1642,6 +1661,7 @@ function renderPage(p) {
   if(p==='alerts') renderAlerts();
   if(p==='email-alerts') { renderEmailAlerts(); restoreSettings(); renderFinanceLockSettings(); updateFirebaseStatusLabel(); }
   if(p==='upsell') renderUpsell();
+  if(p==='scheduled-alerts') renderScheduledAlerts();
   if(p==='import') resetImport();
   updateBadges();
 }
@@ -2062,49 +2082,37 @@ function deleteBankAccount(id) {
 function renderBankAccounts() {
   const accounts = getBankAccounts();
   const rates = getFxRates();
-
-  // Convert each account balance to MXN for the total
   const toMXN = (balance, currency) => {
     if (currency === 'MXN') return balance;
     const rate = parseFloat(rates[currency] || 0);
-    return rate ? balance * rate : null; // null = rate not set
+    return rate ? balance * rate : null;
   };
-
   const mxnValues = accounts.map(a => toMXN(a.balance, a.currency));
   const allRatesSet = mxnValues.every(v => v !== null);
   const totalMXN = allRatesSet ? mxnValues.reduce((s,v) => s+v, 0) : null;
-
   const totalEl = document.getElementById('bank-total');
   if (totalEl) {
-    if (!accounts.length) { totalEl.innerHTML = ''; }
-    else if (totalMXN !== null) { totalEl.innerHTML = `Total: <strong>${fmt(totalMXN)} MXN</strong>`; }
-    else { totalEl.innerHTML = `Total: <span style="color:var(--amber)">⚠ Set exchange rates below</span>`; }
+    if (!accounts.length) totalEl.innerHTML = '';
+    else if (totalMXN !== null) totalEl.innerHTML = `Total: <strong>${fmt(totalMXN)} MXN</strong>`;
+    else totalEl.innerHTML = `Total: <span style="color:var(--amber)">⚠ Set exchange rates below</span>`;
   }
-
-  // FX rate inputs for any non-MXN currencies
   const foreignCurrencies = [...new Set(accounts.filter(a=>a.currency!=='MXN').map(a=>a.currency))];
   const fxContainer = document.getElementById('fx-rates-container');
   if (fxContainer) {
     if (foreignCurrencies.length) {
       fxContainer.style.display = '';
-      fxContainer.innerHTML = `
-        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.4px">💱 Exchange Rates to MXN</div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          ${foreignCurrencies.map(cur => `
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:13px;font-weight:600">1 ${cur} =</span>
-              <input class="form-input" type="number" id="fx-input-${cur}" placeholder="e.g. 17.50"
-                value="${rates[cur] || ''}" step="0.01" min="0"
-                style="width:110px" onchange="saveFxRate('${cur}', this.value)">
-              <span style="font-size:13px">MXN</span>
-              ${rates[cur] ? `<span style="font-size:11px;color:var(--green);font-weight:500">✓ ${parseFloat(rates[cur]).toFixed(2)}</span>` : ''}
-            </div>`).join('')}
-        </div>`;
+      fxContainer.innerHTML = `<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.4px">💱 Exchange Rates to MXN</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">${foreignCurrencies.map(cur => `
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;font-weight:600">1 ${cur} =</span>
+            <input class="form-input" type="number" id="fx-input-${cur}" placeholder="e.g. 17.50" value="${rates[cur]||''}" step="0.01" min="0" style="width:110px" onchange="saveFxRate('${cur}', this.value)">
+            <span style="font-size:13px">MXN</span>
+            ${rates[cur] ? `<span style="font-size:11px;color:var(--green);font-weight:500">✓ ${parseFloat(rates[cur]).toFixed(2)}</span>` : ''}
+          </div>`).join('')}</div>`;
     } else {
       fxContainer.style.display = 'none';
     }
   }
-
   const tbody = document.getElementById('bank-tbody');
   if (!tbody) return;
   tbody.innerHTML = accounts.length ? accounts.map((a, i) => {
@@ -4154,6 +4162,8 @@ function saveUpsell() {
   await loadEmailRecipients();
   if (!data.upsells) data.upsells = [];
   loadAutoAlertSettings();
+  startSchedTimer();
+  updateSchedBadge();
   updateFinanceLockBtn();
   renderFinanceLockSettings();
   autoUpdateStatuses();
@@ -4165,6 +4175,467 @@ function saveUpsell() {
   const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
   const ub = document.getElementById('upsell-badge');
   if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
+// ─── SCHEDULED ALERTS ─────────────────────────────────────────────────────────
+// Rule schema:
+// { id, name, enabled, trigger, statusFilter[], repeatEveryDays, sendTime,
+//   channels: { email: bool, slack: bool },
+//   emailTo, lastRunDates: { [itemKey]: isoDate } }
+//
+// trigger options:
+//   'invoice-overdue'  — fires for each overdue invoice, repeats every N days until paid
+//   'renewal-overdue'  — fires for each overdue renewal
+//   'renewal-due-soon' — fires for renewals due within X days
+//   'stale-contact'    — fires for renewals with no contact in X days
+
+function getSchedRules() {
+  try { return JSON.parse(localStorage.getItem('scheduled-rules') || '[]'); } catch(e) { return []; }
+}
+function saveSchedRules(rules) {
+  localStorage.setItem('scheduled-rules', JSON.stringify(rules));
+  saveSettings();
+  renderScheduledAlerts();
+  updateSchedBadge();
+}
+function getSchedLog() {
+  try { return JSON.parse(localStorage.getItem('sched-run-log') || '[]'); } catch(e) { return []; }
+}
+function addSchedLog(entry) {
+  const log = getSchedLog();
+  log.unshift({ ...entry, ts: new Date().toISOString() });
+  if (log.length > 50) log.splice(50);
+  localStorage.setItem('sched-run-log', JSON.stringify(log));
+  saveSettings();
+}
+function updateSchedBadge() {
+  const rules = getSchedRules();
+  const active = rules.filter(r => r.enabled).length;
+  const el = document.getElementById('sched-badge');
+  if (el) { el.textContent = active; el.style.display = active ? 'inline' : 'none'; }
+}
+
+const SCHED_TRIGGERS = [
+  { key:'invoice-overdue',  label:'Invoice Overdue',       desc:'Fires for each overdue invoice, repeats until paid' },
+  { key:'renewal-overdue',  label:'Renewal Overdue',       desc:'Fires for each overdue renewal' },
+  { key:'renewal-due-soon', label:'Renewal Due Soon',      desc:'Fires when renewal is within N days' },
+  { key:'stale-contact',    label:'Stale Contact',         desc:'Fires when renewal has no contact in N days' },
+];
+
+function renderScheduledAlerts() {
+  const rules = getSchedRules();
+  const container = document.getElementById('sched-rules-list');
+  if (!container) return;
+
+  if (!rules.length) {
+    container.innerHTML = `<div class="no-alerts-msg">
+      <div style="font-size:28px;margin-bottom:8px;opacity:0.3">🕐</div>
+      <div style="font-weight:500;margin-bottom:4px">No alert rules yet</div>
+      <div style="font-size:12px">Create a rule to automatically send alerts on a schedule.</div>
+    </div>`;
+  } else {
+    container.innerHTML = rules.map(rule => {
+      const triggerLabel = SCHED_TRIGGERS.find(t=>t.key===rule.trigger)?.label || rule.trigger;
+      const channels = [rule.channels?.email ? '✉ Email' : '', rule.channels?.slack ? '💬 Slack' : ''].filter(Boolean).join(' · ');
+      const lastRunDates = rule.lastRunDates || {};
+      const lastRuns = Object.values(lastRunDates);
+      const mostRecent = lastRuns.length ? lastRuns.sort().reverse()[0] : null;
+      const pendingCount = countPendingForRule(rule);
+      return `<div class="card mb20">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
+            <div>
+              <div style="font-weight:600;font-size:14px">${rule.name}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                ${triggerLabel} · Every ${rule.repeatEveryDays}d · ${rule.sendTime || 'any time'} · ${channels || 'no channel set'}
+              </div>
+            </div>
+            ${pendingCount ? `<span class="badge badge-amber">⏳ ${pendingCount} pending</span>` : '<span class="badge badge-green">✓ Up to date</span>'}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+              <input type="checkbox" ${rule.enabled?'checked':''} onchange="toggleSchedRule(${rule.id}, this.checked)" style="cursor:pointer">
+              ${rule.enabled ? '<span style="color:var(--green)">On</span>' : '<span style="color:var(--text-muted)">Off</span>'}
+            </label>
+            <button class="btn btn-ghost btn-sm" onclick="runSchedRuleNow(${rule.id})">▶ Run Now</button>
+            <button class="btn btn-ghost btn-sm" onclick="openSchedModal(${rule.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSchedRule(${rule.id})">✕</button>
+          </div>
+        </div>
+        <div style="padding:12px 20px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border-soft);display:flex;gap:20px;flex-wrap:wrap">
+          <span>Last run: ${mostRecent ? fmtDate(mostRecent.split('T')[0]) : 'Never'}</span>
+          ${rule.emailTo ? `<span>To: ${rule.emailTo}</span>` : ''}
+          ${rule.trigger==='invoice-overdue'||rule.trigger==='renewal-due-soon'||rule.trigger==='stale-contact'
+            ? `<span>Threshold: ${rule.thresholdDays || rule.repeatEveryDays} days</span>` : ''}
+          <span>${Object.keys(lastRunDates).length} items tracked</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Run log
+  const logEl = document.getElementById('sched-run-log');
+  if (logEl) {
+    const log = getSchedLog();
+    logEl.innerHTML = log.length
+      ? log.slice(0,15).map(e => `
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px">
+            <span style="color:${e.success?'var(--green)':'var(--red)'};font-size:14px">${e.success?'✓':'✗'}</span>
+            <div style="flex:1">
+              <span style="font-weight:500">${e.ruleName}</span>
+              <span style="color:var(--text-muted)"> — ${e.message}</span>
+            </div>
+            <span style="color:var(--text-soft);white-space:nowrap">${fmtDate(e.ts.split('T')[0])} ${e.ts.split('T')[1].slice(0,5)}</span>
+          </div>`).join('')
+      : `<div style="font-size:13px;color:var(--text-soft);padding:8px 0">No runs yet.</div>`;
+  }
+}
+
+function countPendingForRule(rule) {
+  if (!rule.enabled) return 0;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const lastRunDates = rule.lastRunDates || {};
+  const isDue = (itemKey) => {
+    const last = lastRunDates[itemKey];
+    if (!last) return true;
+    const daysSince = Math.round((now - new Date(last)) / 86400000);
+    return daysSince >= rule.repeatEveryDays;
+  };
+
+  if (rule.trigger === 'invoice-overdue') {
+    return data.invoices.filter(i => i.status === 'Overdue' && isDue('inv-'+i.id)).length;
+  }
+  if (rule.trigger === 'renewal-overdue') {
+    return data.renewals.filter(r => r.status === 'Overdue' && isDue('ren-'+r.id)).length;
+  }
+  if (rule.trigger === 'renewal-due-soon') {
+    const threshold = rule.thresholdDays || 14;
+    return data.renewals.filter(r => {
+      const d = daysUntil(r.date);
+      return d >= 0 && d <= threshold && r.status !== 'Renewed' && isDue('ren-'+r.id);
+    }).length;
+  }
+  if (rule.trigger === 'stale-contact') {
+    const threshold = rule.thresholdDays || 7;
+    return data.renewals.filter(r => {
+      if (r.status === 'Renewed') return false;
+      const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : 999;
+      return lc >= threshold && isDue('ren-'+r.id);
+    }).length;
+  }
+  return 0;
+}
+
+function toggleSchedRule(id, enabled) {
+  const rules = getSchedRules();
+  const rule = rules.find(r=>r.id===id);
+  if (rule) { rule.enabled = enabled; saveSchedRules(rules); toast(enabled ? 'Rule enabled ✓' : 'Rule disabled'); }
+}
+
+function deleteSchedRule(id) {
+  if (!confirm('Delete this alert rule?')) return;
+  saveSchedRules(getSchedRules().filter(r=>r.id!==id));
+  toast('Rule deleted ✓');
+}
+
+async function runSchedRuleNow(id) {
+  const rules = getSchedRules();
+  const rule = rules.find(r=>r.id===id);
+  if (!rule) return;
+  toast(`Running "${rule.name}"…`);
+  await executeSchedRule(rule, true); // force=true ignores repeat interval
+  saveSchedRules(rules);
+}
+
+async function runAllSchedRules() {
+  const rules = getSchedRules().filter(r=>r.enabled);
+  if (!rules.length) return;
+  for (const rule of rules) await executeSchedRule(rule, false);
+  saveSchedRules(rules);
+}
+
+async function executeSchedRule(rule, force = false) {
+  const now = new Date(); now.setHours(0,0,0,0);
+  if (!rule.lastRunDates) rule.lastRunDates = {};
+
+  const isDue = (itemKey) => {
+    if (force) return true;
+    const last = rule.lastRunDates[itemKey];
+    if (!last) return true;
+    const daysSince = Math.round((now - new Date(last)) / 86400000);
+    return daysSince >= rule.repeatEveryDays;
+  };
+
+  const markSent = (itemKey) => {
+    rule.lastRunDates[itemKey] = now.toISOString();
+  };
+
+  let items = [];
+
+  if (rule.trigger === 'invoice-overdue') {
+    items = data.invoices
+      .filter(i => i.status === 'Overdue' && isDue('inv-'+i.id))
+      .map(i => {
+        const c = data.clients.find(x=>x.id===i.clientId);
+        return {
+          key: 'inv-'+i.id,
+          subject: `⚠️ Overdue Invoice ${i.number} — ${c?.name}`,
+          body: `Invoice ${i.number} for ${c?.name} is OVERDUE.
+Amount: ${fmt(i.amount)}
+Due date: ${fmtDate(i.dueDate)} (${Math.abs(daysUntil(i.dueDate))} days ago)
+
+Please arrange payment as soon as possible.
+
+— ClientFlow`,
+          slackMsg: `⚠️ *Overdue Invoice — ${c?.name}*
+Invoice *${i.number}* · *${fmt(i.amount)}* · due ${fmtDate(i.dueDate)} (${Math.abs(daysUntil(i.dueDate))}d overdue)
+_Sent by scheduled alert: ${rule.name}_`
+        };
+      });
+  } else if (rule.trigger === 'renewal-overdue') {
+    items = data.renewals
+      .filter(r => r.status === 'Overdue' && isDue('ren-'+r.id))
+      .map(r => {
+        const c = data.clients.find(x=>x.id===r.clientId);
+        return {
+          key: 'ren-'+r.id,
+          subject: `🔴 Overdue Renewal — ${c?.name}`,
+          body: `${c?.name}'s ${r.type} renewal is OVERDUE.
+Renewal date: ${fmtDate(r.date)} (${Math.abs(daysUntil(r.date))} days ago)
+Amount: ${fmt(r.amount)}
+
+— ClientFlow`,
+          slackMsg: `🔴 *Overdue Renewal — ${c?.name}*
+${r.type} · *${fmt(r.amount)}* · was due ${fmtDate(r.date)} (${Math.abs(daysUntil(r.date))}d overdue)`
+        };
+      });
+  } else if (rule.trigger === 'renewal-due-soon') {
+    const threshold = rule.thresholdDays || 14;
+    items = data.renewals
+      .filter(r => { const d=daysUntil(r.date); return d>=0&&d<=threshold&&r.status!=='Renewed'&&isDue('ren-'+r.id); })
+      .map(r => {
+        const c = data.clients.find(x=>x.id===r.clientId);
+        const d = daysUntil(r.date);
+        return {
+          key: 'ren-'+r.id,
+          subject: `🔔 Renewal Due Soon — ${c?.name} (${d}d)`,
+          body: `${c?.name}'s ${r.type} renewal is due in ${d} days.
+Renewal date: ${fmtDate(r.date)}
+Amount: ${fmt(r.amount)}
+
+— ClientFlow`,
+          slackMsg: `🔔 *Renewal Due Soon — ${c?.name}*
+${r.type} · *${fmt(r.amount)}* · due ${fmtDate(r.date)} (in ${d}d)`
+        };
+      });
+  } else if (rule.trigger === 'stale-contact') {
+    const threshold = rule.thresholdDays || 7;
+    items = data.renewals
+      .filter(r => {
+        if (r.status==='Renewed') return false;
+        const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : 999;
+        return lc >= threshold && isDue('ren-'+r.id);
+      })
+      .map(r => {
+        const c = data.clients.find(x=>x.id===r.clientId);
+        const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+        return {
+          key: 'ren-'+r.id,
+          subject: `📵 No Contact — ${c?.name}`,
+          body: `${c?.name} has not been contacted${lc ? ' in '+lc+' days' : ' yet'}.
+${r.type} renews ${fmtDate(r.date)}
+Amount: ${fmt(r.amount)}
+
+— ClientFlow`,
+          slackMsg: `📵 *No Contact — ${c?.name}*
+${r.type} · renews ${fmtDate(r.date)} · last contact: ${r.lastContact ? lc+'d ago' : 'never'}`
+        };
+      });
+  }
+
+  if (!items.length) {
+    addSchedLog({ ruleName: rule.name, message: 'No matching items to send', success: true });
+    renderScheduledAlerts();
+    return;
+  }
+
+  const webhook = localStorage.getItem('slack-webhook') || '';
+  const fromEmail = getFromEmail();
+  const toEmail = rule.emailTo || emailRecipients.join(',');
+  let sent = 0, failed = 0;
+
+  for (const item of items) {
+    try {
+      if (rule.channels?.email && toEmail && fromEmail) {
+        await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body });
+      }
+      if (rule.channels?.slack && webhook) {
+        await slackSend(webhook, item.slackMsg);
+      }
+      markSent(item.key);
+      sent++;
+    } catch(e) {
+      console.error('Sched rule send failed', e);
+      failed++;
+    }
+  }
+
+  addSchedLog({
+    ruleName: rule.name,
+    message: `${sent} sent${failed ? ', '+failed+' failed' : ''} (${items.length} items)`,
+    success: failed === 0
+  });
+  renderScheduledAlerts();
+  if (sent) toast(`${rule.name}: ${sent} alert${sent!==1?'s':''} sent ✓`);
+  if (failed) toast(`${rule.name}: ${failed} failed ✗`);
+}
+
+// ── Scheduled alert scheduler (checks every minute like auto-alert) ──
+let schedTimer = null;
+function startSchedTimer() {
+  if (schedTimer) clearInterval(schedTimer);
+  schedTimer = setInterval(async () => {
+    const rules = getSchedRules().filter(r => r.enabled);
+    if (!rules.length) return;
+    const now = new Date();
+    for (const rule of rules) {
+      if (!rule.sendTime) continue;
+      const [h, m] = rule.sendTime.split(':').map(Number);
+      // Only fire at the configured time
+      if (now.getHours() !== h || now.getMinutes() !== m) continue;
+      // Don't fire twice in the same minute
+      const lastFire = rule._lastFiredMinute;
+      const thisMinute = now.toISOString().slice(0,16);
+      if (lastFire === thisMinute) continue;
+      rule._lastFiredMinute = thisMinute;
+      await executeSchedRule(rule, false);
+    }
+    saveSchedRules(rules);
+  }, 60000);
+}
+
+// ── Modal ──
+let editingSchedId = null;
+function openSchedModal(id) {
+  editingSchedId = id || null;
+  const rules = getSchedRules();
+  const rule = id ? rules.find(r=>r.id===id) : null;
+
+  const triggerOpts = SCHED_TRIGGERS.map(t =>
+    `<option value="${t.key}" ${rule?.trigger===t.key?'selected':''}>${t.label}</option>`
+  ).join('');
+
+  const body = `
+    <div class="modal-title">${rule ? 'Edit' : 'New'} Alert Rule</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">Rule Name *</label>
+        <input class="form-input" id="sr-name" placeholder="e.g. Overdue Invoice Nudge" value="${rule?.name||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Trigger</label>
+        <select class="form-input" id="sr-trigger" onchange="updateSchedModalHints()">${triggerOpts}</select>
+        <div id="sr-trigger-hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px"></div>
+      </div>
+      <div class="form-group" id="sr-threshold-group">
+        <label class="form-label" id="sr-threshold-label">Threshold (days)</label>
+        <input class="form-input" type="number" id="sr-threshold" min="1" max="90" value="${rule?.thresholdDays||7}">
+        <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px" id="sr-threshold-hint"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Send Time</label>
+          <input class="form-input" type="time" id="sr-time" value="${rule?.sendTime||'09:00'}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Repeat Every (days)</label>
+          <input class="form-input" type="number" id="sr-repeat" min="1" max="30" value="${rule?.repeatEveryDays||2}">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Re-sends until item is resolved</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Send Via</label>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
+            <input type="checkbox" id="sr-ch-email" ${rule?.channels?.email||!rule?'checked':''} style="cursor:pointer"> ✉ Email
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
+            <input type="checkbox" id="sr-ch-slack" ${rule?.channels?.slack?'checked':''} style="cursor:pointer"> 💬 Slack
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Recipients (override)</label>
+        <input class="form-input" id="sr-email-to" placeholder="Leave blank to use global recipients" value="${rule?.emailTo||''}">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
+          Global recipients: ${emailRecipients.length ? emailRecipients.join(', ') : '⚠ None set — add in Email Alerts settings'}
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSchedRule()">Save Rule</button>
+    </div>`;
+
+  document.getElementById('modal-content').innerHTML = body;
+  document.getElementById('modal-overlay').classList.add('open');
+  updateSchedModalHints();
+}
+
+function updateSchedModalHints() {
+  const trigger = document.getElementById('sr-trigger')?.value;
+  const hintEl = document.getElementById('sr-trigger-hint');
+  const threshEl = document.getElementById('sr-threshold-group');
+  const threshLabel = document.getElementById('sr-threshold-label');
+  const threshHint = document.getElementById('sr-threshold-hint');
+  const repeatInput = document.getElementById('sr-repeat');
+  if (!trigger) return;
+
+  const t = SCHED_TRIGGERS.find(x=>x.key===trigger);
+  if (hintEl) hintEl.textContent = t?.desc || '';
+
+  if (trigger === 'invoice-overdue') {
+    if (threshEl) threshEl.style.display = 'none';
+    if (repeatInput) { repeatInput.value = repeatInput.value || 2; }
+  } else if (trigger === 'renewal-overdue') {
+    if (threshEl) threshEl.style.display = 'none';
+  } else if (trigger === 'renewal-due-soon') {
+    if (threshEl) threshEl.style.display = '';
+    if (threshLabel) threshLabel.textContent = 'Alert when due within (days)';
+    if (threshHint) threshHint.textContent = 'e.g. 14 = alert when renewal is 14 or fewer days away';
+  } else if (trigger === 'stale-contact') {
+    if (threshEl) threshEl.style.display = '';
+    if (threshLabel) threshLabel.textContent = 'No contact threshold (days)';
+    if (threshHint) threshHint.textContent = 'e.g. 7 = alert when last contact was 7+ days ago';
+  }
+}
+
+function saveSchedRule() {
+  const name = document.getElementById('sr-name').value.trim();
+  if (!name) { toast('Rule name is required ✗'); return; }
+  const trigger = document.getElementById('sr-trigger').value;
+  const sendTime = document.getElementById('sr-time').value;
+  const repeatEveryDays = parseInt(document.getElementById('sr-repeat').value) || 2;
+  const thresholdDays = parseInt(document.getElementById('sr-threshold')?.value) || 7;
+  const emailTo = document.getElementById('sr-email-to').value.trim();
+  const channels = {
+    email: document.getElementById('sr-ch-email').checked,
+    slack: document.getElementById('sr-ch-slack').checked
+  };
+
+  const rules = getSchedRules();
+  if (editingSchedId) {
+    const idx = rules.findIndex(r=>r.id===editingSchedId);
+    if (idx >= 0) {
+      rules[idx] = { ...rules[idx], name, trigger, sendTime, repeatEveryDays, thresholdDays, emailTo, channels };
+    }
+    toast('Rule updated ✓');
+  } else {
+    rules.push({ id: Date.now(), name, trigger, sendTime, repeatEveryDays, thresholdDays, emailTo, channels, enabled: true, lastRunDates: {} });
+    toast('Rule created ✓');
+  }
+  saveSchedRules(rules);
+  closeModal();
+}
+
 })();
 </script>
 <!-- FINANCE LOCK MODAL -->
