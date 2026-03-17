@@ -4520,60 +4520,44 @@ function openSchedModal(id) {
   const rule = id ? rules.find(r=>r.id===id) : null;
 
   const triggerOpts = SCHED_TRIGGERS.map(t =>
-    `<option value="${t.key}" ${rule?.trigger===t.key?'selected':''}>${t.label}</option>`
+    '<option value="' + t.key + '" ' + (rule?.trigger===t.key?'selected':'') + '>' + t.label + '</option>'
   ).join('');
 
-  const body = `
-    <div class="modal-title">${rule ? 'Edit' : 'New'} Alert Rule</div>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="form-group">
-        <label class="form-label">Rule Name *</label>
-        <input class="form-input" id="sr-name" placeholder="e.g. Overdue Invoice Nudge" value="${rule?.name||''}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Trigger</label>
-        <select class="form-input" id="sr-trigger" onchange="updateSchedModalHints()">${triggerOpts}</select>
-        <div id="sr-trigger-hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px"></div>
-      </div>
-      <div class="form-group" id="sr-threshold-group">
-        <label class="form-label" id="sr-threshold-label">Threshold (days)</label>
-        <input class="form-input" type="number" id="sr-threshold" min="1" max="90" value="${rule?.thresholdDays||7}">
-        <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px" id="sr-threshold-hint"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group">
-          <label class="form-label">Send Time</label>
-          <input class="form-input" type="time" id="sr-time" value="${rule?.sendTime||'09:00'}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Repeat Every (days)</label>
-          <input class="form-input" type="number" id="sr-repeat" min="1" max="30" value="${rule?.repeatEveryDays||2}">
-          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Re-sends until item is resolved</div>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Send Via</label>
-        <div style="display:flex;gap:12px;margin-top:4px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
-            <input type="checkbox" id="sr-ch-email" ${rule?.channels?.email||!rule?'checked':''} style="cursor:pointer"> ✉ Email
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
-            <input type="checkbox" id="sr-ch-slack" ${rule?.channels?.slack?'checked':''} style="cursor:pointer"> 💬 Slack
-          </label>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Email Recipients (override)</label>
-        <input class="form-input" id="sr-email-to" placeholder="Leave blank to use global recipients" value="${rule?.emailTo||''}">
-        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
-          Global recipients: ${emailRecipients.length ? emailRecipients.join(', ') : '⚠ None set — add in Email Alerts settings'}
-        </div>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSchedRule()">Save Rule</button>
-    </div>`;
+  const recipientHint = emailRecipients.length
+    ? 'Global recipients: ' + emailRecipients.join(', ')
+    : 'No global recipients set — add them in Email Alerts settings';
+
+  const body = '<div class="modal-title">' + (rule ? 'Edit' : 'New') + ' Alert Rule</div>'
+    + '<div style="display:flex;flex-direction:column;gap:14px">'
+    + '<div class="form-group"><label class="form-label">Rule Name *</label>'
+    + '<input class="form-input" id="sr-name" placeholder="e.g. Overdue Invoice Nudge" value="' + (rule?.name||'') + '"></div>'
+    + '<div class="form-group"><label class="form-label">Trigger</label>'
+    + '<select class="form-input" id="sr-trigger" onchange="updateSchedModalHints()">' + triggerOpts + '</select>'
+    + '<div id="sr-trigger-hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px"></div></div>'
+    + '<div class="form-group" id="sr-threshold-group"><label class="form-label" id="sr-threshold-label">Threshold (days)</label>'
+    + '<input class="form-input" type="number" id="sr-threshold" min="1" max="90" value="' + (rule?.thresholdDays||7) + '">'
+    + '<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px" id="sr-threshold-hint"></div></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    + '<div class="form-group"><label class="form-label">Send Time</label>'
+    + '<input class="form-input" type="time" id="sr-time" value="' + (rule?.sendTime||'09:00') + '"></div>'
+    + '<div class="form-group"><label class="form-label">Repeat Every (days)</label>'
+    + '<input class="form-input" type="number" id="sr-repeat" min="1" max="30" value="' + (rule?.repeatEveryDays||2) + '">'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Re-sends until item is resolved</div></div></div>'
+    + '<div class="form-group"><label class="form-label">Send Via</label>'
+    + '<div style="display:flex;gap:12px;margin-top:4px">'
+    + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">'
+    + '<input type="checkbox" id="sr-ch-email" ' + (rule?.channels?.email||!rule?'checked':'') + ' style="cursor:pointer"> Email</label>'
+    + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">'
+    + '<input type="checkbox" id="sr-ch-slack" ' + (rule?.channels?.slack?'checked':'') + ' style="cursor:pointer"> Slack</label>'
+    + '</div></div>'
+    + '<div class="form-group"><label class="form-label">Email Recipients (override)</label>'
+    + '<input class="form-input" id="sr-email-to" placeholder="Leave blank to use global recipients" value="' + (rule?.emailTo||'') + '">'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + recipientHint + '</div></div>'
+    + '</div>'
+    + '<div class="modal-actions">'
+    + '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="saveSchedRule()">Save Rule</button>'
+    + '</div>';
 
   document.getElementById('modal-content').innerHTML = body;
   document.getElementById('modal-overlay').classList.add('open');
