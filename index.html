@@ -4153,28 +4153,6 @@ function saveUpsell() {
   saveData(); closeModal(); renderUpsell(); toast('Opportunity added ✓');
 }
 
-(async()=>{
-  // Always connect to Firebase with hardcoded config
-  await initFirebase();
-  await loadSettings();
-
-  await loadData();
-  await loadEmailRecipients();
-  if (!data.upsells) data.upsells = [];
-  loadAutoAlertSettings();
-  startSchedTimer();
-  updateSchedBadge();
-  updateFinanceLockBtn();
-  renderFinanceLockSettings();
-  autoUpdateStatuses();
-  renderDashboard();
-  updateBadges();
-  const urgentCount = buildAlertItems().length;
-  const eb = document.getElementById('email-badge');
-  if (eb) { eb.textContent = urgentCount; eb.style.display = urgentCount ? 'inline' : 'none'; }
-  const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
-  const ub = document.getElementById('upsell-badge');
-  if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
 // ─── SCHEDULED ALERTS ─────────────────────────────────────────────────────────
 // Rule schema:
 // { id, name, enabled, trigger, statusFilter[], repeatEveryDays, sendTime,
@@ -4620,6 +4598,29 @@ function saveSchedRule() {
   closeModal();
 }
 
+
+(async()=>{
+  // Always connect to Firebase with hardcoded config
+  await initFirebase();
+  await loadSettings();
+
+  await loadData();
+  await loadEmailRecipients();
+  if (!data.upsells) data.upsells = [];
+  loadAutoAlertSettings();
+  startSchedTimer();
+  updateSchedBadge();
+  updateFinanceLockBtn();
+  renderFinanceLockSettings();
+  autoUpdateStatuses();
+  renderDashboard();
+  updateBadges();
+  const urgentCount = buildAlertItems().length;
+  const eb = document.getElementById('email-badge');
+  if (eb) { eb.textContent = urgentCount; eb.style.display = urgentCount ? 'inline' : 'none'; }
+  const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
+  const ub = document.getElementById('upsell-badge');
+  if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
 })();
 </script>
 <!-- FINANCE LOCK MODAL -->
