@@ -4192,10 +4192,13 @@ function updateSchedBadge() {
 }
 
 const SCHED_TRIGGERS = [
-  { key:'invoice-overdue',  label:'Invoice Overdue',       desc:'Fires for each overdue invoice, repeats until paid' },
-  { key:'renewal-overdue',  label:'Renewal Overdue',       desc:'Fires for each overdue renewal' },
-  { key:'renewal-due-soon', label:'Renewal Due Soon',      desc:'Fires when renewal is within N days' },
-  { key:'stale-contact',    label:'Stale Contact',         desc:'Fires when renewal has no contact in N days' },
+  { key:'invoice-overdue',    label:'Invoice Overdue (Internal)',      desc:'Notify your team about each overdue invoice, repeats until paid', client:false },
+  { key:'invoice-overdue-client', label:'Invoice Overdue → Client',   desc:'Send payment reminder directly to the client, repeats until paid', client:true },
+  { key:'renewal-overdue',    label:'Renewal Overdue (Internal)',      desc:'Notify your team about each overdue renewal', client:false },
+  { key:'renewal-overdue-client', label:'Renewal Overdue → Client',   desc:'Send renewal notice directly to the client', client:true },
+  { key:'renewal-due-soon',   label:'Renewal Due Soon (Internal)',     desc:'Alert your team when renewal is within N days', client:false },
+  { key:'renewal-due-soon-client', label:'Renewal Due Soon → Client', desc:'Remind the client their renewal is coming up', client:true },
+  { key:'stale-contact',      label:'Stale Contact',                  desc:'Alert your team when a renewal has no contact in N days', client:false },
 ];
 
 function renderScheduledAlerts() {
@@ -4211,17 +4214,22 @@ function renderScheduledAlerts() {
     </div>`;
   } else {
     container.innerHTML = rules.map(rule => {
-      const triggerLabel = SCHED_TRIGGERS.find(t=>t.key===rule.trigger)?.label || rule.trigger;
+      const triggerDef = SCHED_TRIGGERS.find(t=>t.key===rule.trigger);
+      const triggerLabel = triggerDef?.label || rule.trigger;
+      const isClientTrigger = triggerDef?.client || false;
       const channels = [rule.channels?.email ? '✉ Email' : '', rule.channels?.slack ? '💬 Slack' : ''].filter(Boolean).join(' · ');
       const lastRunDates = rule.lastRunDates || {};
       const lastRuns = Object.values(lastRunDates);
       const mostRecent = lastRuns.length ? lastRuns.sort().reverse()[0] : null;
       const pendingCount = countPendingForRule(rule);
+      const clientBadge = isClientTrigger
+        ? '<span style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600;margin-left:4px">→ Client</span>'
+        : '<span style="background:var(--accent-light);color:var(--accent);border:1px solid #bfdbfe;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600;margin-left:4px">Internal</span>';
       return `<div class="card mb20">
         <div class="card-header">
           <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
             <div>
-              <div style="font-weight:600;font-size:14px">${rule.name}</div>
+              <div style="font-weight:600;font-size:14px">${rule.name}${clientBadge}</div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
                 ${triggerLabel} · Every ${rule.repeatEveryDays}d · ${rule.sendTime || 'any time'} · ${channels || 'no channel set'}
               </div>
@@ -4238,11 +4246,11 @@ function renderScheduledAlerts() {
             <button class="btn btn-danger btn-sm" onclick="deleteSchedRule(${rule.id})">✕</button>
           </div>
         </div>
-        <div style="padding:12px 20px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border-soft);display:flex;gap:20px;flex-wrap:wrap">
+        ${rule.messageBody ? `<div style="padding:10px 20px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border-soft);font-style:italic;background:var(--bg)">📝 ${rule.messageBody.slice(0,120)}${rule.messageBody.length>120?'…':''}</div>` : ''}
+        <div style="padding:10px 20px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border-soft);display:flex;gap:20px;flex-wrap:wrap">
           <span>Last run: ${mostRecent ? fmtDate(mostRecent.split('T')[0]) : 'Never'}</span>
-          ${rule.emailTo ? `<span>To: ${rule.emailTo}</span>` : ''}
-          ${rule.trigger==='invoice-overdue'||rule.trigger==='renewal-due-soon'||rule.trigger==='stale-contact'
-            ? `<span>Threshold: ${rule.thresholdDays || rule.repeatEveryDays} days</span>` : ''}
+          ${isClientTrigger ? '<span style="color:var(--green);font-weight:500">Sends to client email</span>' : (rule.emailTo ? `<span>To: ${rule.emailTo}</span>` : '')}
+          ${rule.thresholdDays && !rule.trigger.includes('overdue') ? `<span>Threshold: ${rule.thresholdDays} days</span>` : ''}
           <span>${Object.keys(lastRunDates).length} items tracked</span>
         </div>
       </div>`;
@@ -4308,6 +4316,47 @@ function toggleSchedRule(id, enabled) {
   if (rule) { rule.enabled = enabled; saveSchedRules(rules); toast(enabled ? 'Rule enabled ✓' : 'Rule disabled'); }
 }
 
+async function generateSchedMessage() {
+  const trigger = document.getElementById('sr-trigger')?.value;
+  const ruleName = document.getElementById('sr-name')?.value || 'Alert';
+  const triggerDef = SCHED_TRIGGERS.find(t=>t.key===trigger);
+  const isClient = triggerDef?.client || false;
+  const btn = document.getElementById('sr-ai-btn');
+  const textarea = document.getElementById('sr-message-body');
+  if (!btn || !textarea) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating…';
+
+  const context = {
+    'invoice-overdue': 'overdue invoice payment reminder',
+    'invoice-overdue-client': 'polite but firm payment reminder sent directly to the client for an overdue invoice',
+    'renewal-overdue': 'internal alert about an overdue renewal',
+    'renewal-overdue-client': 'renewal notice sent directly to the client whose contract is overdue',
+    'renewal-due-soon': 'internal alert about an upcoming renewal',
+    'renewal-due-soon-client': 'friendly renewal reminder sent directly to the client',
+    'stale-contact': 'internal reminder that a client has not been contacted recently',
+  };
+
+  const audience = isClient ? 'the client (professional, polite, clear)' : 'your internal team (concise, direct)';
+  const promptText = 'Write a short, professional message for a scheduled alert rule called "' + ruleName + '".'
+    + ' This is a ' + (context[trigger] || trigger) + '.'
+    + ' The message is addressed to ' + audience + '.'
+    + ' Use these placeholders where appropriate: {{client}} for client name, {{contact}} for contact person, {{amount}} for the amount, {{date}} for the relevant date, {{days}} for number of days, {{type}} for renewal/invoice type, {{number}} for invoice number.'
+    + ' Keep it under 80 words. Do not use placeholders in the subject line. Only write the message body, no subject line, no sign-off needed.';
+
+  try {
+    const msg = await claudeFetch(promptText, 300);
+    textarea.value = msg.trim();
+    toast('Message generated ✓');
+  } catch(e) {
+    toast('AI generate failed: ' + e.message + ' ✗');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ AI Generate';
+}
+
 function deleteSchedRule(id) {
   if (!confirm('Delete this alert rule?')) return;
   saveSchedRules(getSchedRules().filter(r=>r.id!==id));
@@ -4330,103 +4379,101 @@ async function runAllSchedRules() {
   saveSchedRules(rules);
 }
 
+// Apply custom message template placeholders
+function applyMsgTemplate(template, vars) {
+  if (!template) return null;
+  return template
+    .replace(/{{client}}/g, vars.client || '')
+    .replace(/{{amount}}/g, vars.amount || '')
+    .replace(/{{date}}/g, vars.date || '')
+    .replace(/{{days}}/g, String(vars.days || ''))
+    .replace(/{{type}}/g, vars.type || '')
+    .replace(/{{number}}/g, vars.number || '')
+    .replace(/{{contact}}/g, vars.contact || '');
+}
+
 async function executeSchedRule(rule, force = false) {
   const now = new Date(); now.setHours(0,0,0,0);
   if (!rule.lastRunDates) rule.lastRunDates = {};
+  const triggerDef = SCHED_TRIGGERS.find(t=>t.key===rule.trigger);
+  const isClientTrigger = triggerDef?.client || false;
 
   const isDue = (itemKey) => {
     if (force) return true;
     const last = rule.lastRunDates[itemKey];
     if (!last) return true;
-    const daysSince = Math.round((now - new Date(last)) / 86400000);
-    return daysSince >= rule.repeatEveryDays;
+    return Math.round((now - new Date(last)) / 86400000) >= rule.repeatEveryDays;
   };
+  const markSent = (itemKey) => { rule.lastRunDates[itemKey] = now.toISOString(); };
 
-  const markSent = (itemKey) => {
-    rule.lastRunDates[itemKey] = now.toISOString();
+  const makeItem = (key, vars, defaultSubject, defaultBody, defaultSlack, clientEmail) => {
+    const customBody = rule.messageBody ? applyMsgTemplate(rule.messageBody, vars) : null;
+    return {
+      key,
+      subject: customBody ? (rule.name + ' — ' + (vars.client||'')) : defaultSubject,
+      body: customBody || defaultBody,
+      slackMsg: customBody ? ('*' + rule.name + ' — ' + (vars.client||'') + '*\n' + customBody) : defaultSlack,
+      clientEmail
+    };
   };
 
   let items = [];
 
-  if (rule.trigger === 'invoice-overdue') {
-    items = data.invoices
-      .filter(i => i.status === 'Overdue' && isDue('inv-'+i.id))
-      .map(i => {
-        const c = data.clients.find(x=>x.id===i.clientId);
-        return {
-          key: 'inv-'+i.id,
-          subject: `⚠️ Overdue Invoice ${i.number} — ${c?.name}`,
-          body: `Invoice ${i.number} for ${c?.name} is OVERDUE.
-Amount: ${fmt(i.amount)}
-Due date: ${fmtDate(i.dueDate)} (${Math.abs(daysUntil(i.dueDate))} days ago)
+  if (rule.trigger === 'invoice-overdue' || rule.trigger === 'invoice-overdue-client') {
+    data.invoices.filter(i => i.status === 'Overdue' && isDue('inv-'+i.id)).forEach(i => {
+      const c = data.clients.find(x=>x.id===i.clientId);
+      const daysOver = Math.abs(daysUntil(i.dueDate));
+      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(i.amount), date: fmtDate(i.dueDate), days: daysOver, number: i.number, type: 'invoice' };
+      const subj = isClientTrigger ? 'Payment Reminder: Invoice ' + i.number : '⚠️ Overdue Invoice ' + i.number + ' — ' + (c?.name||'');
+      const body = isClientTrigger
+        ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nThis is a reminder that invoice ' + i.number + ' for ' + fmt(i.amount) + ' was due on ' + fmtDate(i.dueDate) + ' (' + daysOver + ' days ago) and remains unpaid.\n\nPlease arrange payment at your earliest convenience.\n\nBest regards'
+        : 'Invoice ' + i.number + ' for ' + (c?.name||'') + ' is OVERDUE.\nAmount: ' + fmt(i.amount) + '\nDue: ' + fmtDate(i.dueDate) + ' (' + daysOver + 'd ago)\n\n— ClientFlow';
+      const slack = '⚠️ *Overdue Invoice — ' + (c?.name||'') + '*\nInvoice *' + i.number + '* · *' + fmt(i.amount) + '* · ' + daysOver + 'd overdue';
+      items.push(makeItem('inv-'+i.id, vars, subj, body, slack, c?.email));
+    });
 
-Please arrange payment as soon as possible.
+  } else if (rule.trigger === 'renewal-overdue' || rule.trigger === 'renewal-overdue-client') {
+    data.renewals.filter(r => r.status === 'Overdue' && isDue('ren-'+r.id)).forEach(r => {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      const daysOver = Math.abs(daysUntil(r.date));
+      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: daysOver, type: r.type };
+      const subj = isClientTrigger ? 'Action Required: ' + r.type + ' Renewal Overdue' : '🔴 Overdue Renewal — ' + (c?.name||'');
+      const body = isClientTrigger
+        ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nYour ' + r.type + ' renewal was due on ' + fmtDate(r.date) + ' (' + daysOver + ' days ago). Please contact us to renew.\n\nBest regards'
+        : (c?.name||'') + "'s " + r.type + ' renewal is OVERDUE.\nDue: ' + fmtDate(r.date) + ' (' + daysOver + 'd ago)\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
+      const slack = '🔴 *Overdue Renewal — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · ' + daysOver + 'd overdue';
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email));
+    });
 
-— ClientFlow`,
-          slackMsg: `⚠️ *Overdue Invoice — ${c?.name}*
-Invoice *${i.number}* · *${fmt(i.amount)}* · due ${fmtDate(i.dueDate)} (${Math.abs(daysUntil(i.dueDate))}d overdue)
-_Sent by scheduled alert: ${rule.name}_`
-        };
-      });
-  } else if (rule.trigger === 'renewal-overdue') {
-    items = data.renewals
-      .filter(r => r.status === 'Overdue' && isDue('ren-'+r.id))
-      .map(r => {
-        const c = data.clients.find(x=>x.id===r.clientId);
-        return {
-          key: 'ren-'+r.id,
-          subject: `🔴 Overdue Renewal — ${c?.name}`,
-          body: `${c?.name}'s ${r.type} renewal is OVERDUE.
-Renewal date: ${fmtDate(r.date)} (${Math.abs(daysUntil(r.date))} days ago)
-Amount: ${fmt(r.amount)}
-
-— ClientFlow`,
-          slackMsg: `🔴 *Overdue Renewal — ${c?.name}*
-${r.type} · *${fmt(r.amount)}* · was due ${fmtDate(r.date)} (${Math.abs(daysUntil(r.date))}d overdue)`
-        };
-      });
-  } else if (rule.trigger === 'renewal-due-soon') {
+  } else if (rule.trigger === 'renewal-due-soon' || rule.trigger === 'renewal-due-soon-client') {
     const threshold = rule.thresholdDays || 14;
-    items = data.renewals
-      .filter(r => { const d=daysUntil(r.date); return d>=0&&d<=threshold&&r.status!=='Renewed'&&isDue('ren-'+r.id); })
-      .map(r => {
-        const c = data.clients.find(x=>x.id===r.clientId);
-        const d = daysUntil(r.date);
-        return {
-          key: 'ren-'+r.id,
-          subject: `🔔 Renewal Due Soon — ${c?.name} (${d}d)`,
-          body: `${c?.name}'s ${r.type} renewal is due in ${d} days.
-Renewal date: ${fmtDate(r.date)}
-Amount: ${fmt(r.amount)}
+    data.renewals.filter(r => { const d=daysUntil(r.date); return d>=0&&d<=threshold&&r.status!=='Renewed'&&isDue('ren-'+r.id); }).forEach(r => {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      const d = daysUntil(r.date);
+      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: d, type: r.type };
+      const subj = isClientTrigger ? 'Upcoming Renewal: ' + r.type + ' — ' + fmtDate(r.date) : '🔔 Renewal Due Soon — ' + (c?.name||'') + ' (' + d + 'd)';
+      const body = isClientTrigger
+        ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nThis is a reminder that your ' + r.type + ' is due for renewal on ' + fmtDate(r.date) + ' (' + d + ' days from now).\n\nAmount: ' + fmt(r.amount) + '\n\nPlease do not hesitate to contact us with any questions.\n\nBest regards'
+        : (c?.name||'') + "'s " + r.type + ' renewal is due in ' + d + ' days.\nDate: ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
+      const slack = '🔔 *Renewal Due Soon — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · in ' + d + 'd';
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email));
+    });
 
-— ClientFlow`,
-          slackMsg: `🔔 *Renewal Due Soon — ${c?.name}*
-${r.type} · *${fmt(r.amount)}* · due ${fmtDate(r.date)} (in ${d}d)`
-        };
-      });
   } else if (rule.trigger === 'stale-contact') {
     const threshold = rule.thresholdDays || 7;
-    items = data.renewals
-      .filter(r => {
-        if (r.status==='Renewed') return false;
-        const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : 999;
-        return lc >= threshold && isDue('ren-'+r.id);
-      })
-      .map(r => {
-        const c = data.clients.find(x=>x.id===r.clientId);
-        const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
-        return {
-          key: 'ren-'+r.id,
-          subject: `📵 No Contact — ${c?.name}`,
-          body: `${c?.name} has not been contacted${lc ? ' in '+lc+' days' : ' yet'}.
-${r.type} renews ${fmtDate(r.date)}
-Amount: ${fmt(r.amount)}
-
-— ClientFlow`,
-          slackMsg: `📵 *No Contact — ${c?.name}*
-${r.type} · renews ${fmtDate(r.date)} · last contact: ${r.lastContact ? lc+'d ago' : 'never'}`
-        };
-      });
+    data.renewals.filter(r => {
+      if (r.status==='Renewed') return false;
+      const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : 999;
+      return lc >= threshold && isDue('ren-'+r.id);
+    }).forEach(r => {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
+      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: lc||'unknown', type: r.type };
+      const subj = '📵 No Contact — ' + (c?.name||'');
+      const body = (c?.name||'') + ' has not been contacted' + (lc ? ' in '+lc+' days' : ' yet') + '.\n' + r.type + ' renews ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
+      const slack = '📵 *No Contact — ' + (c?.name||'') + '*\n' + r.type + ' · renews ' + fmtDate(r.date);
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null));
+    });
   }
 
   if (!items.length) {
@@ -4437,10 +4484,12 @@ ${r.type} · renews ${fmtDate(r.date)} · last contact: ${r.lastContact ? lc+'d 
 
   const webhook = localStorage.getItem('slack-webhook') || '';
   const fromEmail = getFromEmail();
-  const toEmail = rule.emailTo || emailRecipients.join(',');
   let sent = 0, failed = 0;
 
   for (const item of items) {
+    const toEmail = isClientTrigger
+      ? item.clientEmail
+      : (rule.emailTo || emailRecipients.join(','));
     try {
       if (rule.channels?.email && toEmail && fromEmail) {
         await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body });
@@ -4458,12 +4507,12 @@ ${r.type} · renews ${fmtDate(r.date)} · last contact: ${r.lastContact ? lc+'d 
 
   addSchedLog({
     ruleName: rule.name,
-    message: `${sent} sent${failed ? ', '+failed+' failed' : ''} (${items.length} items)`,
+    message: sent + ' sent' + (failed ? ', ' + failed + ' failed' : '') + ' (' + items.length + ' items)',
     success: failed === 0
   });
   renderScheduledAlerts();
-  if (sent) toast(`${rule.name}: ${sent} alert${sent!==1?'s':''} sent ✓`);
-  if (failed) toast(`${rule.name}: ${failed} failed ✗`);
+  if (sent) toast(rule.name + ': ' + sent + ' alert' + (sent!==1?'s':'') + ' sent ✓');
+  if (failed) toast(rule.name + ': ' + failed + ' failed ✗');
 }
 
 // ── Scheduled alert scheduler (checks every minute like auto-alert) ──
@@ -4501,26 +4550,37 @@ function openSchedModal(id) {
     '<option value="' + t.key + '" ' + (rule?.trigger===t.key?'selected':'') + '>' + t.label + '</option>'
   ).join('');
 
+  const isClient = rule ? SCHED_TRIGGERS.find(t=>t.key===rule.trigger)?.client : false;
   const recipientHint = emailRecipients.length
     ? 'Global recipients: ' + emailRecipients.join(', ')
     : 'No global recipients set — add them in Email Alerts settings';
 
   const body = '<div class="modal-title">' + (rule ? 'Edit' : 'New') + ' Alert Rule</div>'
     + '<div style="display:flex;flex-direction:column;gap:14px">'
+
+    // Name
     + '<div class="form-group"><label class="form-label">Rule Name *</label>'
-    + '<input class="form-input" id="sr-name" placeholder="e.g. Overdue Invoice Nudge" value="' + (rule?.name||'') + '"></div>'
+    + '<input class="form-input" id="sr-name" placeholder="e.g. Overdue Invoice Reminder" value="' + (rule?.name||'') + '"></div>'
+
+    // Trigger
     + '<div class="form-group"><label class="form-label">Trigger</label>'
     + '<select class="form-input" id="sr-trigger" onchange="updateSchedModalHints()">' + triggerOpts + '</select>'
     + '<div id="sr-trigger-hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px"></div></div>'
+
+    // Threshold (shown/hidden by updateSchedModalHints)
     + '<div class="form-group" id="sr-threshold-group"><label class="form-label" id="sr-threshold-label">Threshold (days)</label>'
     + '<input class="form-input" type="number" id="sr-threshold" min="1" max="90" value="' + (rule?.thresholdDays||7) + '">'
     + '<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px" id="sr-threshold-hint"></div></div>'
+
+    // Time + Repeat
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     + '<div class="form-group"><label class="form-label">Send Time</label>'
     + '<input class="form-input" type="time" id="sr-time" value="' + (rule?.sendTime||'09:00') + '"></div>'
     + '<div class="form-group"><label class="form-label">Repeat Every (days)</label>'
     + '<input class="form-input" type="number" id="sr-repeat" min="1" max="30" value="' + (rule?.repeatEveryDays||2) + '">'
     + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Re-sends until item is resolved</div></div></div>'
+
+    // Channels
     + '<div class="form-group"><label class="form-label">Send Via</label>'
     + '<div style="display:flex;gap:12px;margin-top:4px">'
     + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">'
@@ -4528,9 +4588,22 @@ function openSchedModal(id) {
     + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">'
     + '<input type="checkbox" id="sr-ch-slack" ' + (rule?.channels?.slack?'checked':'') + ' style="cursor:pointer"> Slack</label>'
     + '</div></div>'
-    + '<div class="form-group"><label class="form-label">Email Recipients (override)</label>'
+
+    // Recipients — hidden for client triggers (auto-uses client email)
+    + '<div class="form-group" id="sr-recipients-group"><label class="form-label">Email Recipients (override)</label>'
     + '<input class="form-input" id="sr-email-to" placeholder="Leave blank to use global recipients" value="' + (rule?.emailTo||'') + '">'
     + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + recipientHint + '</div></div>'
+
+    // Message body
+    + '<div class="form-group">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+    + '<label class="form-label" style="margin:0">Message Body</label>'
+    + '<button class="btn btn-ghost btn-sm" onclick="generateSchedMessage()" id="sr-ai-btn">⚡ AI Generate</button>'
+    + '</div>'
+    + '<textarea class="form-input" id="sr-message-body" placeholder="Leave blank to use the default message. Use {{client}}, {{amount}}, {{date}}, {{days}} as placeholders." style="min-height:100px;resize:vertical;line-height:1.5">' + (rule?.messageBody||'') + '</textarea>'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Placeholders: <code>{{client}}</code> <code>{{amount}}</code> <code>{{date}}</code> <code>{{days}}</code> <code>{{type}}</code> — leave blank to use default message</div>'
+    + '</div>'
+
     + '</div>'
     + '<div class="modal-actions">'
     + '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
@@ -4548,25 +4621,38 @@ function updateSchedModalHints() {
   const threshEl = document.getElementById('sr-threshold-group');
   const threshLabel = document.getElementById('sr-threshold-label');
   const threshHint = document.getElementById('sr-threshold-hint');
-  const repeatInput = document.getElementById('sr-repeat');
+  const recipientsGroup = document.getElementById('sr-recipients-group');
   if (!trigger) return;
 
   const t = SCHED_TRIGGERS.find(x=>x.key===trigger);
-  if (hintEl) hintEl.textContent = t?.desc || '';
+  if (hintEl) {
+    hintEl.innerHTML = (t?.desc || '') + (t?.client
+      ? ' <span style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600">→ Client</span>'
+      : ' <span style="background:var(--accent-light);color:var(--accent);border:1px solid #bfdbfe;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600">Internal</span>');
+  }
 
-  if (trigger === 'invoice-overdue') {
+  // Client triggers send to client email — hide internal recipients field
+  if (recipientsGroup) {
+    recipientsGroup.style.display = t?.client ? 'none' : '';
+    if (t?.client) {
+      recipientsGroup.querySelector && (recipientsGroup.style.display = 'none');
+    }
+  }
+
+  const isOverdue = trigger.includes('overdue');
+  const isSoon = trigger.includes('due-soon');
+  const isStale = trigger.includes('stale');
+
+  if (isOverdue) {
     if (threshEl) threshEl.style.display = 'none';
-    if (repeatInput) { repeatInput.value = repeatInput.value || 2; }
-  } else if (trigger === 'renewal-overdue') {
-    if (threshEl) threshEl.style.display = 'none';
-  } else if (trigger === 'renewal-due-soon') {
+  } else if (isSoon) {
     if (threshEl) threshEl.style.display = '';
     if (threshLabel) threshLabel.textContent = 'Alert when due within (days)';
-    if (threshHint) threshHint.textContent = 'e.g. 14 = alert when renewal is 14 or fewer days away';
-  } else if (trigger === 'stale-contact') {
+    if (threshHint) threshHint.textContent = 'e.g. 14 = fires when renewal is 14 or fewer days away';
+  } else if (isStale) {
     if (threshEl) threshEl.style.display = '';
     if (threshLabel) threshLabel.textContent = 'No contact threshold (days)';
-    if (threshHint) threshHint.textContent = 'e.g. 7 = alert when last contact was 7+ days ago';
+    if (threshHint) threshHint.textContent = 'e.g. 7 = fires when last contact was 7+ days ago';
   }
 }
 
@@ -4577,7 +4663,8 @@ function saveSchedRule() {
   const sendTime = document.getElementById('sr-time').value;
   const repeatEveryDays = parseInt(document.getElementById('sr-repeat').value) || 2;
   const thresholdDays = parseInt(document.getElementById('sr-threshold')?.value) || 7;
-  const emailTo = document.getElementById('sr-email-to').value.trim();
+  const emailTo = document.getElementById('sr-email-to')?.value.trim() || '';
+  const messageBody = document.getElementById('sr-message-body')?.value.trim() || '';
   const channels = {
     email: document.getElementById('sr-ch-email').checked,
     slack: document.getElementById('sr-ch-slack').checked
@@ -4587,11 +4674,11 @@ function saveSchedRule() {
   if (editingSchedId) {
     const idx = rules.findIndex(r=>r.id===editingSchedId);
     if (idx >= 0) {
-      rules[idx] = { ...rules[idx], name, trigger, sendTime, repeatEveryDays, thresholdDays, emailTo, channels };
+      rules[idx] = { ...rules[idx], name, trigger, sendTime, repeatEveryDays, thresholdDays, emailTo, messageBody, channels };
     }
     toast('Rule updated ✓');
   } else {
-    rules.push({ id: Date.now(), name, trigger, sendTime, repeatEveryDays, thresholdDays, emailTo, channels, enabled: true, lastRunDates: {} });
+    rules.push({ id: Date.now(), name, trigger, sendTime, repeatEveryDays, thresholdDays, emailTo, messageBody, channels, enabled: true, lastRunDates: {} });
     toast('Rule created ✓');
   }
   saveSchedRules(rules);
