@@ -459,6 +459,7 @@
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost" onclick="exportCSV()">↓ Export CSV</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('invoices')" title="Send Invoice Report to Slack">💬 Invoice Report</button>
+          <button class="btn btn-ghost" onclick="sendReportEmail('invoices')" title="Email Invoice Report">✉ Invoice Report</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('renewals')" title="Send Renewal Report to Slack">💬 Renewal Report</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('renewals')" title="Email Renewal Report">✉ Renewal Report</button>
         </div>
@@ -471,10 +472,11 @@
           <div class="card-title">Invoice Report</div>
           <div style="display:flex;gap:6px;align-items:center">
             <span style="font-size:12px;color:var(--text-muted)" id="invoice-report-date"></span>
-            <button class="btn btn-primary btn-sm" onclick="sendReportSlack('invoices')">💬 Send to Slack</button>
+            <button class="btn btn-ghost btn-sm" onclick="sendReportSlack('invoices')">💬 Slack</button>
+            <button class="btn btn-primary btn-sm" onclick="sendReportEmail('invoices')">✉ Email</button>
           </div>
         </div>
-        <div style="padding:16px;font-size:13px;color:var(--text-muted)">Invoice report is sent directly to Slack. Click <strong>Send to Slack</strong> to dispatch the latest summary.</div>
+        <div style="padding:16px;font-size:13px;color:var(--text-muted)">Send the executive invoice report via Slack or email.</div>
       </div>
 
       <!-- RENEWAL REPORT -->
