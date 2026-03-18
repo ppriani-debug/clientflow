@@ -625,6 +625,14 @@
             <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Must match a verified Mailgun sender address.</div>
           </div>
           <div class="form-group" style="margin:0">
+            <label class="form-label">Sender Display Name</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-input" id="global-from-name" placeholder="e.g. Aleph RI" style="flex:1;font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveFromName()">Save</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Shown as "Aleph RI &lt;alerts@yourdomain.com&gt;" — improves deliverability.</div>
+          </div>
+          <div class="form-group" style="margin:0">
             <label class="form-label">Mailgun Region</label>
             <div style="display:flex;gap:8px">
               <select class="form-input" id="mailgun-region" style="flex:1">
@@ -1283,7 +1291,7 @@ const SETTINGS_KEYS = [
   'mailgun-region', 'default-from-email', 'slack-webhook',
   'auto-alert-enabled', 'auto-alert-time', 'auto-alert-days',
   'auto-alert-selected-ids', 'auto-alert-status-filter',
-  'scheduled-rules', 'sched-run-log'
+  'scheduled-rules', 'sched-run-log', 'from-name'
 ];
 
 async function saveSettings() {
@@ -2368,6 +2376,12 @@ function getMailgunKey() { return localStorage.getItem('mailgun-api-key') || '';
 function getMailgunDomain() { return localStorage.getItem('mailgun-domain') || ''; }
 function getMailgunRegion() { return localStorage.getItem('mailgun-region') || 'us'; }
 function getFromEmail() { return localStorage.getItem('default-from-email') || ''; }
+function getFromName() { return localStorage.getItem('from-name') || ''; }
+function getFormattedFrom() {
+  const email = getFromEmail();
+  const name = getFromName();
+  return (name && email) ? name + ' <' + email + '>' : email;
+}
 
 function saveApiKey() {
   const val = document.getElementById('anthropic-api-key').value.trim();
@@ -2396,6 +2410,11 @@ function saveFromEmail() {
   ['rdp-email-from','idp-email-from'].forEach(id => { const el=document.getElementById(id); if(el) el.value=val; });
   saveSettings(); restoreSettings(); toast('From email saved ✓');
 }
+function saveFromName() {
+  const val = document.getElementById('global-from-name').value.trim();
+  localStorage.setItem('from-name', val);
+  saveSettings(); restoreSettings(); toast('Sender name saved ✓');
+}
 function saveGlobalSlackWebhook() {
   const val = document.getElementById('global-slack-webhook').value.trim();
   localStorage.setItem('slack-webhook', val);
@@ -2417,6 +2436,7 @@ function restoreSettings() {
   if (s('mailgun-domain')) s('mailgun-domain').value = mgDomain;
   if (s('mailgun-region')) s('mailgun-region').value = mgRegion;
   if (s('global-from-email')) s('global-from-email').value = fromEmail;
+  if (s('global-from-name')) s('global-from-name').value = getFromName();
   if (s('global-slack-webhook')) s('global-slack-webhook').value = webhook;
   if (s('rdp-email-from')) s('rdp-email-from').value = fromEmail;
   if (s('idp-email-from')) s('idp-email-from').value = fromEmail;
@@ -2472,6 +2492,38 @@ async function sendTestEmail() {
   if (btn) { btn.disabled = false; btn.textContent = '📧 Send Test Email'; }
 }
 
+// Build HTML version of email for better deliverability
+function buildHtmlEmail(subject, text, fromName) {
+  const escaped = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\n/g,'<br>');
+  const org = fromName || 'ClientFlow';
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f4f4f5;margin:0;padding:0}
+  .wrap{max-width:560px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+  .header{background:#1a1916;padding:20px 28px;color:white}
+  .header-title{font-size:16px;font-weight:600;color:white;margin:0}
+  .header-sub{font-size:12px;color:#a1a09a;margin-top:3px}
+  .body{padding:28px;color:#1a1916;font-size:14px;line-height:1.6}
+  .footer{padding:16px 28px;background:#f7f6f3;font-size:11px;color:#8a8580;border-top:1px solid #e8e5df}
+  .footer a{color:#2563eb;text-decoration:none}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="header-title">${org}</div>
+    <div class="header-sub">${subject}</div>
+  </div>
+  <div class="body">${escaped}</div>
+  <div class="footer">
+    Sent by ${org} via ClientFlow &mdash; <a href="mailto:${getFromEmail()}">Contact us</a>
+  </div>
+</div>
+</body></html>`;
+}
+
 async function mailgunSend({ to, from, subject, text }) {
   const key = getMailgunKey();
   const domain = getMailgunDomain();
@@ -2481,14 +2533,25 @@ async function mailgunSend({ to, from, subject, text }) {
   if (!from) throw new Error('No From email set — go to Email Alerts → Settings');
   if (!to) throw new Error('No recipient email specified');
 
+  // Use display name if set: "Aleph RI <alerts@domain.com>"
+  const fromName = getFromName();
+  const formattedFrom = (fromName && !from.includes('<')) ? fromName + ' <' + from + '>' : from;
+
   const base = region === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
   const url = `${base}/v3/${domain}/messages`;
 
+  const html = buildHtmlEmail(subject, text, fromName);
+
   const body = new FormData();
-  body.append('from', from);
+  body.append('from', formattedFrom);
   body.append('to', to);
   body.append('subject', subject);
   body.append('text', text);
+  body.append('html', html);
+  // Tracking helps deliverability signals
+  body.append('o:tracking', 'yes');
+  body.append('o:tracking-clicks', 'no');
+  body.append('o:tracking-opens', 'yes');
 
   const res = await fetch(url, {
     method: 'POST',
