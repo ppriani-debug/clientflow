@@ -4242,6 +4242,7 @@ function renderScheduledAlerts() {
               ${rule.enabled ? '<span style="color:var(--green)">On</span>' : '<span style="color:var(--text-muted)">Off</span>'}
             </label>
             <button class="btn btn-ghost btn-sm" onclick="runSchedRuleNow(${rule.id})">▶ Run Now</button>
+            <button class="btn btn-ghost btn-sm" onclick="resetSchedRuleHistory(${rule.id})" title="Clear run history — lets rule fire again immediately">↺ Reset</button>
             <button class="btn btn-ghost btn-sm" onclick="openSchedModal(${rule.id})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="deleteSchedRule(${rule.id})">✕</button>
           </div>
@@ -4419,9 +4420,23 @@ function schedPickerSelectNone() {
 function updateSchedItemPicker() {
   const trigger = document.getElementById('sr-trigger')?.value;
   const picker = document.getElementById('sr-item-picker');
-  if (picker && trigger) picker.innerHTML = buildSchedItemPicker(trigger, null);
+  if (!picker || !trigger) return;
+  // Preserve currently checked IDs before re-rendering
+  const currentChecked = [...document.querySelectorAll('.sr-item-cb:checked')].map(cb => cb.value);
+  // Build a fake rule object with those IDs so the picker re-checks them
+  const fakeRule = currentChecked.length ? { selectedIds: currentChecked } : null;
+  picker.innerHTML = buildSchedItemPicker(trigger, fakeRule);
 }
 
+
+function resetSchedRuleHistory(id) {
+  const rules = getSchedRules();
+  const rule = rules.find(r=>r.id===id);
+  if (!rule) return;
+  rule.lastRunDates = {};
+  saveSchedRules(rules);
+  toast('Run history cleared — rule will fire on next Run Now ✓');
+}
 
 function deleteSchedRule(id) {
   if (!confirm('Delete this alert rule?')) return;
