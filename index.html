@@ -360,6 +360,9 @@
     <div class="nav-item" onclick="navigate('alerts')"><span class="nav-icon">⚡</span> Alerts</div>
     <div class="nav-item" onclick="navigate('email-alerts')"><span class="nav-icon">✉</span> Email Alerts <span class="nav-badge" id="email-badge" style="display:none">!</span></div>
     <div class="nav-item" onclick="navigate('scheduled-alerts')"><span class="nav-icon">🕐</span> Scheduled Alerts <span class="nav-badge" id="sched-badge" style="display:none">0</span></div>
+    <div class="nav-section">Finance</div>
+    <div class="nav-item" id="nav-cashflow" onclick="navigate('cashflow')"><span class="nav-icon">💧</span> Cashflow</div>
+    <div class="nav-item" id="nav-pnl" onclick="navigate('pnl')"><span class="nav-icon">📊</span> P&amp;L</div>
     <div class="nav-section">Data</div>
     <div class="nav-item" onclick="navigate('import')"><span class="nav-icon">⇪</span> Import</div>
   </aside>
@@ -776,6 +779,78 @@
       <div style="margin-top:28px">
         <div style="font-size:11px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px">Recent Run Log</div>
         <div id="sched-run-log" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+    </div>
+
+    <!-- CASHFLOW -->
+    <div class="page" id="page-cashflow">
+      <div class="page-header">
+        <div><div class="page-title">Cashflow</div><div class="page-subtitle">Cash in/out with projections — next 12 months in MXN</div></div>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="exportCashflowCSV()">↓ CSV</button>
+          <button class="btn btn-primary" onclick="openCfExpenseModal()">＋ Add Expense</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="cf-stats"></div>
+      <div class="card mb20">
+        <div class="card-header">
+          <div class="card-title">12-Month Overview</div>
+          <div style="display:flex;gap:14px;font-size:12px;align-items:center;color:var(--text-muted)">
+            <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;background:var(--green);border-radius:2px;display:inline-block"></span>Inflows</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;background:var(--red);border-radius:2px;display:inline-block"></span>Outflows</span>
+          </div>
+        </div>
+        <div style="overflow-x:auto;padding:16px 20px">
+          <div id="cf-chart-wrap" style="display:flex;gap:6px;align-items:flex-end;min-width:600px;height:140px"></div>
+          <div id="cf-month-labels" style="display:flex;gap:6px;min-width:600px;margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="two-col mb20">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Inflows</div><span id="cf-inflows-total" class="badge badge-green"></span></div>
+          <div id="cf-inflows-detail"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Outflows (Expenses)</div><span id="cf-outflows-total" class="badge badge-red"></span></div>
+          <div id="cf-outflows-detail"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Expense Entries</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="openCfExpenseImport()">⇪ Import CSV</button>
+            <button class="btn btn-primary btn-sm" onclick="openCfExpenseModal()">＋ Add</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Category</th><th>Amount</th><th>Date / Recurring</th><th>Type</th><th></th></tr></thead>
+          <tbody id="cf-expense-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- P&L -->
+    <div class="page" id="page-pnl">
+      <div class="page-header">
+        <div><div class="page-title">P&amp;L Statement</div><div class="page-subtitle">Income, costs and expenses — actual + projected + adjustments in MXN</div></div>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="exportPnlCSV()">↓ CSV</button>
+          <select class="form-input" id="pnl-period" onchange="renderPnl()" style="width:120px;font-size:13px">
+            <option value="month">This Month</option>
+            <option value="quarter">This Quarter</option>
+            <option value="year" selected>This Year</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+      </div>
+      <div class="stats-grid" id="pnl-kpis"></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title" id="pnl-title">Income Statement</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="pnl-period-label"></div>
+        </div>
+        <div id="pnl-table-wrap"></div>
       </div>
     </div>
 
@@ -1293,7 +1368,8 @@ const SETTINGS_KEYS = [
   'mailgun-region', 'default-from-email', 'slack-webhook',
   'auto-alert-enabled', 'auto-alert-time', 'auto-alert-days',
   'auto-alert-selected-ids', 'auto-alert-status-filter',
-  'scheduled-rules', 'sched-run-log', 'from-name'
+  'scheduled-rules', 'sched-run-log', 'from-name',
+  'cf-expenses', 'pnl-lines'
 ];
 
 async function saveSettings() {
@@ -1456,6 +1532,10 @@ function updateFinanceLockBtn() {
     icon.textContent = '🔓';
     label.textContent = 'No PIN set';
     if (bankNav) bankNav.style.display = '';
+    const cfNav = document.getElementById('nav-cashflow');
+    const pnlNav = document.getElementById('nav-pnl');
+    if (cfNav) cfNav.style.display = '';
+    if (pnlNav) pnlNav.style.display = '';
     return;
   }
   btn.style.opacity = '1';
@@ -1466,14 +1546,22 @@ function updateFinanceLockBtn() {
     btn.style.borderColor = 'var(--green)';
     btn.style.color = 'var(--green)';
     if (bankNav) bankNav.style.display = '';
+    const cfNav2 = document.getElementById('nav-cashflow');
+    const pnlNav2 = document.getElementById('nav-pnl');
+    if (cfNav2) cfNav2.style.display = '';
+    if (pnlNav2) pnlNav2.style.display = '';
   } else {
     icon.textContent = '🔒';
     label.textContent = 'Finances hidden';
     btn.style.borderColor = 'var(--red)';
     btn.style.color = 'var(--red)';
     if (bankNav) bankNav.style.display = 'none';
-    // If currently on bank-accounts page, redirect to dashboard
-    if (typeof currentPage !== 'undefined' && currentPage === 'bank-accounts') navigate('dashboard');
+    const cfNav3 = document.getElementById('nav-cashflow');
+    const pnlNav3 = document.getElementById('nav-pnl');
+    if (cfNav3) cfNav3.style.display = 'none';
+    if (pnlNav3) pnlNav3.style.display = 'none';
+    // If currently on a finance page, redirect to dashboard
+    if (typeof currentPage !== 'undefined' && ['bank-accounts','cashflow','pnl'].includes(currentPage)) navigate('dashboard');
   }
 }
 
@@ -1675,6 +1763,8 @@ function renderPage(p) {
   if(p==='email-alerts') { renderEmailAlerts(); restoreSettings(); renderFinanceLockSettings(); updateFirebaseStatusLabel(); }
   if(p==='upsell') renderUpsell();
   if(p==='scheduled-alerts') renderScheduledAlerts();
+  if(p==='cashflow') renderCashflow();
+  if(p==='pnl') renderPnl();
   if(p==='import') resetImport();
   updateBadges();
 }
@@ -5028,6 +5118,644 @@ function saveSchedRule() {
   closeModal();
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CASHFLOW
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Data ──
+function getCfExpenses() { try { return JSON.parse(localStorage.getItem('cf-expenses')||'[]'); } catch(e) { return []; } }
+function saveCfExpenses(v) { localStorage.setItem('cf-expenses', JSON.stringify(v)); saveSettings(); }
+
+const CF_EXPENSE_CATEGORIES = ['Salaries & Payroll','Rent & Office','Software & Tools','Marketing & Advertising','Professional Services','Other'];
+
+// Convert to MXN inline
+function cfToMXN(amount, currency) {
+  if (!currency || currency === 'MXN') return amount;
+  const rates = getFxRates();
+  const r = parseFloat(rates[currency] || 0);
+  return r ? amount * r : amount;
+}
+
+// ── 12-month bucket engine ──
+function get12Months() {
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.push({ year: d.getFullYear(), month: d.getMonth(),
+      label: d.toLocaleString('es-MX', {month:'short'}),
+      fullLabel: d.toLocaleString('es-MX', {month:'long', year:'numeric'}) });
+  }
+  return months;
+}
+function mKey(y, m) { return y + '-' + String(m+1).padStart(2,'0'); }
+function isoToMKey(iso) { if (!iso) return null; const d = new Date(iso+'T00:00:00'); return mKey(d.getFullYear(), d.getMonth()); }
+
+function buildCfData() {
+  const months = get12Months();
+  const expenses = getCfExpenses();
+  const accounts = getBankAccounts();
+  const startingBalance = accounts.reduce((s,a) => s + cfToMXN(a.balance, a.currency), 0);
+
+  // Init buckets
+  const buckets = {};
+  months.forEach(m => {
+    buckets[mKey(m.year, m.month)] = {
+      label: m.label, fullLabel: m.fullLabel,
+      invoicesPaid: [], invoicesPending: [], renewalProjected: [],
+      expenses: [], expensesProj: []
+    };
+  });
+
+  // ACTUAL INFLOWS: paid invoices (by paid date)
+  data.invoices.filter(i => i.status === 'Paid' && i.paidDate).forEach(i => {
+    const k = isoToMKey(i.paidDate);
+    if (buckets[k]) {
+      const c = data.clients.find(x=>x.id===i.clientId);
+      buckets[k].invoicesPaid.push({ label: i.number + ' — ' + (c?.name||'?'), amount: i.amount, clientId: i.clientId, clientName: c?.name||'?' });
+    }
+  });
+
+  // PROJECTED INFLOWS: pending/overdue/pre-invoices (by due date)
+  data.invoices.filter(i => i.status !== 'Paid').forEach(i => {
+    const k = isoToMKey(i.dueDate);
+    if (buckets[k]) {
+      const c = data.clients.find(x=>x.id===i.clientId);
+      buckets[k].invoicesPending.push({ label: i.number + ' — ' + (c?.name||'?'), amount: i.amount, status: i.status, clientId: i.clientId, clientName: c?.name||'?' });
+    }
+  });
+
+  // PROJECTED INFLOWS: upcoming renewals (by renewal date)
+  data.renewals.filter(r => r.status !== 'Renewed' && r.date).forEach(r => {
+    const k = isoToMKey(r.date);
+    if (buckets[k]) {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      buckets[k].renewalProjected.push({ label: r.type + ' — ' + (c?.name||'?'), amount: r.amount });
+    }
+  });
+
+  // OUTFLOWS: manual expense entries
+  const now = new Date(); now.setHours(0,0,0,0);
+  expenses.forEach(exp => {
+    if (exp.recurring) {
+      months.forEach(m => {
+        const k = mKey(m.year, m.month);
+        const monthEnd = new Date(m.year, m.month+1, 0);
+        const isPast = monthEnd < now;
+        const bucket = isPast ? buckets[k]?.expenses : buckets[k]?.expensesProj;
+        if (bucket) bucket.push({ ...exp });
+      });
+    } else if (exp.date) {
+      const k = isoToMKey(exp.date);
+      if (buckets[k]) {
+        const expDate = new Date(exp.date+'T00:00:00');
+        const isPast = expDate < now;
+        const bucket = isPast ? buckets[k].expenses : buckets[k].expensesProj;
+        bucket.push({ ...exp });
+      }
+    }
+  });
+
+  // Compute totals and running balance
+  let runningBal = startingBalance;
+  const rows = months.map(m => {
+    const k = mKey(m.year, m.month);
+    const b = buckets[k];
+    const actualIn = b.invoicesPaid.reduce((s,x)=>s+x.amount,0);
+    const projIn = b.invoicesPending.reduce((s,x)=>s+x.amount,0) + b.renewalProjected.reduce((s,x)=>s+x.amount,0);
+    const actualOut = b.expenses.reduce((s,x)=>s+x.amount,0);
+    const projOut = b.expensesProj.reduce((s,x)=>s+x.amount,0);
+    const totalIn = actualIn + projIn;
+    const totalOut = actualOut + projOut;
+    const net = totalIn - totalOut;
+    const openBal = runningBal;
+    runningBal += net;
+    return { ...b, key: k, actualIn, projIn, totalIn, actualOut, projOut, totalOut, net, openBal, closeBal: runningBal };
+  });
+
+  return { rows, startingBalance };
+}
+
+// ── State ──
+let cfSelectedMonth = null;
+
+function renderCashflow() {
+  const { rows, startingBalance } = buildCfData();
+  if (!cfSelectedMonth || !rows.find(r=>r.key===cfSelectedMonth)) cfSelectedMonth = rows[0]?.key;
+
+  const totalIn12 = rows.reduce((s,r)=>s+r.totalIn,0);
+  const totalOut12 = rows.reduce((s,r)=>s+r.totalOut,0);
+  const endBal = rows[rows.length-1]?.closeBal || 0;
+
+  document.getElementById('cf-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Starting Balance</div><div class="stat-value" style="font-size:20px">${fmtF(startingBalance)}</div><div class="stat-delta">From bank accounts (MXN)</div></div>
+    <div class="stat-card"><div class="stat-label">Projected Inflows (12m)</div><div class="stat-value green" style="font-size:20px">${fmtF(totalIn12)}</div><div class="stat-delta">Paid + pending + renewals</div></div>
+    <div class="stat-card"><div class="stat-label">Projected Outflows (12m)</div><div class="stat-value red" style="font-size:20px">${fmtF(totalOut12)}</div><div class="stat-delta">From expense entries</div></div>
+    <div class="stat-card"><div class="stat-label">Projected End Balance</div><div class="stat-value ${endBal>=0?'green':'red'}" style="font-size:20px">${fmtF(endBal)}</div><div class="stat-delta">in 12 months</div></div>`;
+
+  renderCfChart(rows);
+  renderCfDetail(rows);
+  renderCfExpenseTable();
+}
+
+function renderCfChart(rows) {
+  const wrap = document.getElementById('cf-chart-wrap');
+  const labelsEl = document.getElementById('cf-month-labels');
+  if (!wrap || !labelsEl) return;
+  const maxVal = Math.max(...rows.map(r => Math.max(r.totalIn, r.totalOut)), 1);
+  const barH = 120;
+  const colW = Math.floor((wrap.parentElement.offsetWidth - 40) / 12) - 4;
+
+  wrap.innerHTML = rows.map(r => {
+    const inH = Math.round((r.totalIn / maxVal) * barH);
+    const outH = Math.round((r.totalOut / maxVal) * barH);
+    const isSelected = r.key === cfSelectedMonth;
+    return `<div onclick="cfSelectMonth('${r.key}')" style="flex:1;display:flex;gap:2px;align-items:flex-end;cursor:pointer;padding:2px;border-radius:4px;border:2px solid ${isSelected?'var(--accent)':'transparent'}">
+      <div style="flex:1;height:${inH}px;background:${isSelected?'#15803d':'#86efac'};border-radius:3px 3px 0 0;min-height:2px" title="Inflows: ${fmt(r.totalIn)}"></div>
+      <div style="flex:1;height:${outH}px;background:${isSelected?'#dc2626':'#fca5a5'};border-radius:3px 3px 0 0;min-height:2px" title="Outflows: ${fmt(r.totalOut)}"></div>
+    </div>`;
+  }).join('');
+
+  labelsEl.innerHTML = rows.map(r => `
+    <div onclick="cfSelectMonth('${r.key}')" style="flex:1;text-align:center;font-size:10px;color:${r.key===cfSelectedMonth?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-weight:${r.key===cfSelectedMonth?'600':'400'}">
+      ${r.label}<div style="font-size:9px;color:${r.net>=0?'var(--green)':'var(--red)'}">${r.net>=0?'+':''}${fmt(r.net)}</div>
+    </div>`).join('');
+}
+
+function cfSelectMonth(key) {
+  cfSelectedMonth = key;
+  const { rows } = buildCfData();
+  renderCfChart(rows);
+  renderCfDetail(rows);
+}
+
+function renderCfDetail(rows) {
+  const row = rows.find(r=>r.key===cfSelectedMonth);
+  if (!row) return;
+
+  // Group paid invoices by client
+  const groupByClient = items => {
+    const map = {};
+    items.forEach(x => {
+      if (!map[x.clientId]) map[x.clientId] = { name: x.clientName, total: 0, items: [] };
+      map[x.clientId].total += x.amount;
+      map[x.clientId].items.push(x);
+    });
+    return Object.values(map).sort((a,b)=>b.total-a.total);
+  };
+
+  const paidGroups = groupByClient(row.invoicesPaid);
+  const pendingGroups = groupByClient(row.invoicesPending);
+
+  // INFLOWS
+  let inflowHtml = '';
+  if (!row.totalIn) {
+    inflowHtml = '<div class="empty-state" style="padding:24px"><div class="empty-icon">💰</div><div>No inflows this month</div></div>';
+  } else {
+    if (paidGroups.length) {
+      inflowHtml += `<div style="padding:8px 16px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--green);background:var(--bg)">✓ Paid — ${fmt(row.actualIn)}</div>`;
+      inflowHtml += paidGroups.map(g => `
+        <div style="border-bottom:1px solid var(--border-soft)">
+          <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"
+            style="display:flex;justify-content:space-between;padding:10px 16px;cursor:pointer;font-size:13px;font-weight:500">
+            <span>${g.name}</span>
+            <span style="color:var(--green);font-family:var(--mono,monospace)">${fmt(g.total)} ▾</span>
+          </div>
+          <div style="display:none;background:var(--bg)">
+            ${g.items.map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 24px;font-size:12px;color:var(--text-muted)"><span>${i.label}</span><span>${fmt(i.amount)}</span></div>`).join('')}
+          </div>
+        </div>`).join('');
+    }
+    if (pendingGroups.length) {
+      inflowHtml += `<div style="padding:8px 16px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--amber);background:var(--bg)">⏳ Projected — ${fmt(row.projIn)}</div>`;
+      inflowHtml += pendingGroups.map(g => `
+        <div style="border-bottom:1px solid var(--border-soft)">
+          <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"
+            style="display:flex;justify-content:space-between;padding:10px 16px;cursor:pointer;font-size:13px;font-weight:500;opacity:0.8">
+            <span>${g.name}</span>
+            <span style="color:var(--amber);font-family:var(--mono,monospace)">${fmt(g.total)} ▾</span>
+          </div>
+          <div style="display:none;background:var(--bg)">
+            ${g.items.map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 24px;font-size:12px;color:var(--text-muted)"><span>${i.label} <span class="badge badge-${i.status==='Overdue'?'red':'amber'}" style="font-size:10px">${i.status}</span></span><span>${fmt(i.amount)}</span></div>`).join('')}
+          </div>
+        </div>`).join('');
+    }
+    if (row.renewalProjected.length) {
+      inflowHtml += `<div style="padding:8px 16px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:var(--accent);background:var(--bg)">↻ Renewals — ${fmt(row.renewalProjected.reduce((s,x)=>s+x.amount,0))}</div>`;
+      inflowHtml += row.renewalProjected.map(r=>`<div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:13px;border-bottom:1px solid var(--border-soft)"><span>${r.label}</span><span style="font-family:var(--mono,monospace)">${fmt(r.amount)}</span></div>`).join('');
+    }
+  }
+
+  // OUTFLOWS
+  let outflowHtml = '';
+  const allExp = [...row.expenses.map(e=>({...e,actual:true})), ...row.expensesProj.map(e=>({...e,actual:false}))];
+  if (!allExp.length) {
+    outflowHtml = '<div class="empty-state" style="padding:24px"><div class="empty-icon">💸</div><div>No expenses this month</div></div>';
+  } else {
+    const byCategory = {};
+    allExp.forEach(e => {
+      const cat = e.category||'Other';
+      if (!byCategory[cat]) byCategory[cat] = { actual:0, proj:0, items:[] };
+      if (e.actual) byCategory[cat].actual += e.amount; else byCategory[cat].proj += e.amount;
+      byCategory[cat].items.push(e);
+    });
+    outflowHtml = Object.entries(byCategory).map(([cat, g]) => `
+      <div style="border-bottom:1px solid var(--border-soft)">
+        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"
+          style="display:flex;justify-content:space-between;padding:10px 16px;cursor:pointer;font-size:13px;font-weight:500">
+          <span>${cat}</span>
+          <span style="color:var(--red);font-family:var(--mono,monospace)">${fmt(g.actual+g.proj)} ▾</span>
+        </div>
+        <div style="display:none;background:var(--bg)">
+          ${g.items.map(e=>`<div style="display:flex;justify-content:space-between;padding:6px 24px;font-size:12px;color:var(--text-muted)"><span>${e.name}${e.recurring?' <span style="font-size:10px;color:var(--accent)">↺</span>':''} ${!e.actual?'<span style="font-size:10px;color:var(--amber)">proj</span>':''}</span><span>${fmt(e.amount)}</span></div>`).join('')}
+        </div>
+      </div>`).join('');
+  }
+
+  const inflowTotal = document.getElementById('cf-inflows-total');
+  const outflowTotal = document.getElementById('cf-outflows-total');
+  if (inflowTotal) inflowTotal.textContent = fmt(row.totalIn);
+  if (outflowTotal) outflowTotal.textContent = fmt(row.totalOut);
+  document.getElementById('cf-inflows-detail').innerHTML = inflowHtml;
+  document.getElementById('cf-outflows-detail').innerHTML = outflowHtml;
+}
+
+function renderCfExpenseTable() {
+  const expenses = getCfExpenses();
+  const tbody = document.getElementById('cf-expense-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = expenses.length ? expenses.map(e => `<tr>
+    <td style="font-weight:500">${e.name}</td>
+    <td><span class="badge badge-gray">${e.category||'Other'}</span></td>
+    <td class="mono">${fmt(e.amount)}</td>
+    <td style="font-size:12px;color:var(--text-muted)">${e.recurring?'↺ Monthly':fmtDate(e.date)}</td>
+    <td>${e.recurring?'<span class="badge badge-blue">Recurring</span>':'<span class="badge badge-gray">One-time</span>'}</td>
+    <td><div class="row-actions">
+      <button class="btn btn-ghost btn-sm" onclick="openCfExpenseModal(${e.id})">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCfExpense(${e.id})">✕</button>
+    </div></td>
+  </tr>`).join('')
+  : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">💸</div><div>No expenses yet — click Add</div></div></td></tr>`;
+}
+
+// ── Expense modal ──
+let editingCfExpenseId = null;
+function openCfExpenseModal(id) {
+  editingCfExpenseId = id || null;
+  const expenses = getCfExpenses();
+  const e = id ? expenses.find(x=>x.id===id) : null;
+  const catOpts = CF_EXPENSE_CATEGORIES.map(c=>`<option value="${c}" ${e?.category===c?'selected':''}>${c}</option>`).join('');
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">${e?'Edit':'Add'} Expense</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="cfe-name" placeholder="e.g. AWS, Office Rent" value="${e?.name||''}"></div>
+      <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="cfe-cat">${catOpts}</select></div>
+      <div class="form-group"><label class="form-label">Amount (MXN) *</label><input class="form-input" type="number" id="cfe-amount" placeholder="0.00" value="${e?.amount||''}"></div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:7px 14px;border:1px solid var(--border);border-radius:7px">
+            <input type="radio" name="cfe-type" value="one-time" ${!e?.recurring?'checked':''} onchange="document.getElementById('cfe-date-group').style.display=''"> One-time
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:7px 14px;border:1px solid var(--border);border-radius:7px">
+            <input type="radio" name="cfe-type" value="recurring" ${e?.recurring?'checked':''} onchange="document.getElementById('cfe-date-group').style.display='none'"> ↺ Monthly Recurring
+          </label>
+        </div>
+      </div>
+      <div class="form-group" id="cfe-date-group" style="display:${e?.recurring?'none':''}">
+        <label class="form-label">Date</label>
+        <input class="form-input" type="date" id="cfe-date" value="${e?.date||new Date().toISOString().split('T')[0]}">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCfExpense()">Save</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function saveCfExpense() {
+  const name = document.getElementById('cfe-name').value.trim();
+  const amount = parseFloat(document.getElementById('cfe-amount').value);
+  if (!name || !amount) { toast('Name and amount required ✗'); return; }
+  const recurring = document.querySelector('input[name="cfe-type"]:checked')?.value === 'recurring';
+  const date = recurring ? null : document.getElementById('cfe-date').value;
+  const category = document.getElementById('cfe-cat').value;
+  const expenses = getCfExpenses();
+  if (editingCfExpenseId) {
+    const idx = expenses.findIndex(x=>x.id===editingCfExpenseId);
+    if (idx>=0) expenses[idx] = { ...expenses[idx], name, amount, category, recurring, date };
+    toast('Expense updated ✓');
+  } else {
+    expenses.push({ id: Date.now(), name, amount, category, recurring, date });
+    toast('Expense added ✓');
+  }
+  saveCfExpenses(expenses);
+  closeModal();
+  renderCashflow();
+}
+
+function deleteCfExpense(id) {
+  if (!confirm('Delete this expense?')) return;
+  saveCfExpenses(getCfExpenses().filter(x=>x.id!==id));
+  renderCashflow();
+  toast('Deleted ✓');
+}
+
+function openCfExpenseImport() {
+  const input = Object.assign(document.createElement('input'), { type:'file', accept:'.csv' });
+  input.onchange = e => {
+    const reader = new FileReader();
+    reader.onload = ev => importCfExpenseCsv(ev.target.result);
+    reader.readAsText(e.target.files[0]);
+  };
+  input.click();
+}
+
+function importCfExpenseCsv(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) { toast('Empty file ✗'); return; }
+  const headers = lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/^"|"$/g,''));
+  const expenses = getCfExpenses();
+  let added = 0;
+  lines.slice(1).forEach(line => {
+    const vals = line.split(',').map(v=>v.trim().replace(/^"|"$/g,''));
+    const get = (...keys) => { for (const k of keys) { const i=headers.indexOf(k); if(i>=0&&vals[i]) return vals[i]; } return ''; };
+    const name = get('name','descripcion','concepto');
+    const amount = parseFloat(get('amount','monto','importe').replace(/[^0-9.]/g,''));
+    if (!name || !amount) return;
+    const category = get('category','categoria') || 'Other';
+    const date = get('date','fecha') || new Date().toISOString().split('T')[0];
+    const recurring = get('recurring','recurrente').toLowerCase() === 'true' || get('recurring','recurrente') === '1';
+    expenses.push({ id: Date.now() + added, name, amount, category, recurring, date: recurring?null:date });
+    added++;
+  });
+  saveCfExpenses(expenses);
+  renderCashflow();
+  toast(added + ' expenses imported ✓');
+}
+
+function exportCashflowCSV() {
+  const { rows } = buildCfData();
+  const lines = [['Month','Actual Inflows','Projected Inflows','Actual Outflows','Projected Outflows','Net','Closing Balance']];
+  rows.forEach(r => lines.push([r.fullLabel, r.actualIn, r.projIn, r.actualOut, r.projOut, r.net, r.closeBal]));
+  const csv = lines.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'cashflow.csv'});
+  a.click(); URL.revokeObjectURL(a.href); toast('CSV exported ✓');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P&L STATEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Data ──
+function getPnlLines() { try { return JSON.parse(localStorage.getItem('pnl-lines')||'[]'); } catch(e) { return []; } }
+function savePnlLines(v) { localStorage.setItem('pnl-lines', JSON.stringify(v)); saveSettings(); }
+
+const PNL_CATEGORIES = {
+  income:    { label: 'Income', color: 'var(--green)', items: [
+    { key:'client-revenue', label:'Client Revenue (from Invoices)', auto: true },
+    { key:'other-income', label:'Other Income', auto: false },
+  ]},
+  cogs:      { label: 'Cost of Services', color: '#ea580c', items: [] },
+  expenses:  { label: 'Operating Expenses', color: 'var(--red)', items: [
+    { key:'salaries', label:'Salaries & Payroll' },
+    { key:'software', label:'Software & Tools' },
+    { key:'marketing', label:'Marketing & Advertising' },
+    { key:'professional', label:'Professional Services' },
+    { key:'other-exp', label:'Other Expenses' },
+  ]},
+};
+
+// Get date range for selected period
+function getPnlRange() {
+  const period = document.getElementById('pnl-period')?.value || 'year';
+  const now = new Date();
+  let start, end;
+  if (period === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  } else if (period === 'quarter') {
+    const q = Math.floor(now.getMonth()/3);
+    start = new Date(now.getFullYear(), q*3, 1);
+    end = new Date(now.getFullYear(), q*3+3, 0);
+  } else {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear(), 11, 31);
+  }
+  return { start, end, period };
+}
+
+function inRange(dateStr, start, end) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr+'T00:00:00');
+  return d >= start && d <= end;
+}
+
+function renderPnl() {
+  const { start, end, period } = getPnlRange();
+  const lines = getPnlLines();
+  const periodLabel = start.toLocaleDateString('es-MX',{month:'short',day:'numeric',year:'numeric'}) + ' — ' + end.toLocaleDateString('es-MX',{month:'short',day:'numeric',year:'numeric'});
+
+  const titleEl = document.getElementById('pnl-title');
+  const periodEl = document.getElementById('pnl-period-label');
+  if (titleEl) titleEl.textContent = 'Income Statement';
+  if (periodEl) periodEl.textContent = periodLabel;
+
+  // ── INCOME ──
+  // Client revenue: paid invoices in period
+  const paidInPeriod = data.invoices.filter(i => i.status==='Paid' && inRange(i.paidDate, start, end));
+  const clientRevenue = paidInPeriod.reduce((s,i)=>s+i.amount,0);
+  // Projected client revenue: pending invoices with due date in period
+  const pendingInPeriod = data.invoices.filter(i => i.status!=='Paid' && inRange(i.dueDate, start, end));
+  const projRevenue = pendingInPeriod.reduce((s,i)=>s+i.amount,0);
+
+  // Other income lines
+  const otherIncomeLines = lines.filter(l=>l.section==='income' && inRange(l.date, start, end));
+  const otherIncome = otherIncomeLines.reduce((s,l)=>s+l.amount,0);
+
+  const totalIncome = clientRevenue + projRevenue + otherIncome;
+
+  // ── COGS ──
+  const cogsLines = lines.filter(l=>l.section==='cogs' && inRange(l.date, start, end));
+  const totalCogs = cogsLines.reduce((s,l)=>s+l.amount,0);
+
+  // ── EXPENSES by category ──
+  const expenseLines = lines.filter(l=>l.section==='expenses' && inRange(l.date, start, end));
+  const expByCategory = {};
+  PNL_CATEGORIES.expenses.items.forEach(item => { expByCategory[item.key] = []; });
+  expenseLines.forEach(l => {
+    const key = l.category || 'other-exp';
+    if (!expByCategory[key]) expByCategory[key] = [];
+    expByCategory[key].push(l);
+  });
+  const totalExpenses = expenseLines.reduce((s,l)=>s+l.amount,0);
+
+  // ── TOTALS ──
+  const grossProfit = totalIncome - totalCogs;
+  const netIncome = grossProfit - totalExpenses;
+  const margin = totalIncome > 0 ? Math.round((netIncome/totalIncome)*100) : 0;
+
+  // KPIs
+  document.getElementById('pnl-kpis').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Income</div><div class="stat-value green" style="font-size:20px">${fmtF(totalIncome)}</div><div class="stat-delta">${fmtF(clientRevenue)} actual + ${fmtF(projRevenue+otherIncome)} projected</div></div>
+    <div class="stat-card"><div class="stat-label">Gross Profit</div><div class="stat-value ${grossProfit>=0?'green':'red'}" style="font-size:20px">${fmtF(grossProfit)}</div><div class="stat-delta">After cost of services</div></div>
+    <div class="stat-card"><div class="stat-label">Operating Expenses</div><div class="stat-value red" style="font-size:20px">${fmtF(totalExpenses)}</div><div class="stat-delta">${expenseLines.length} entries</div></div>
+    <div class="stat-card"><div class="stat-label">Net Income</div><div class="stat-value ${netIncome>=0?'green':'red'}" style="font-size:20px">${fmtF(netIncome)}</div><div class="stat-delta">Margin: ${margin}%</div></div>`;
+
+  // ── STATEMENT TABLE ──
+  const pnlRow = (label, amount, indent, isTotal, color, action) =>
+    `<tr style="${isTotal?'background:var(--bg);font-weight:700;':''}">
+      <td style="padding:${indent?'8px 16px 8px '+(indent*20+16)+'px':'10px 16px'};font-size:13px;${isTotal?'font-weight:700':''}${color?';color:'+color:''}">${label}</td>
+      <td style="padding:10px 16px;text-align:right;font-family:var(--mono,monospace);font-size:13px;${isTotal?'font-weight:700':''}${color?';color:'+color:''}">${amount===null?'':fmtF(amount)}</td>
+      <td style="padding:10px 8px;width:80px;text-align:right">${action||''}</td>
+    </tr>`;
+
+  const addBtn = (section, category) =>
+    `<button class="btn btn-ghost btn-sm" onclick="openPnlLineModal('${section}','${category||''}')" style="font-size:11px;padding:3px 8px">＋ Add</button>`;
+
+  const lineRows = (linesArr) => linesArr.map(l =>
+    `<tr><td style="padding:6px 16px 6px 36px;font-size:12px;color:var(--text-muted)">${l.name}${l.note?` <span style="font-style:italic;font-size:11px">(${l.note})</span>`:''}</td>
+    <td style="padding:6px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--text-muted)">${fmtF(l.amount)}</td>
+    <td style="padding:6px 8px;text-align:right">
+      <div class="row-actions"><button class="btn btn-ghost btn-sm" onclick="editPnlLine(${l.id})" style="font-size:10px;padding:2px 6px">Edit</button><button class="btn btn-danger btn-sm" onclick="deletePnlLine(${l.id})" style="font-size:10px;padding:2px 6px">✕</button></div>
+    </td></tr>`
+  ).join('');
+
+  const invoiceRows = paidInPeriod.map(i => {
+    const c = data.clients.find(x=>x.id===i.clientId);
+    return `<tr><td style="padding:5px 16px 5px 36px;font-size:12px;color:var(--text-muted)">${i.number} — ${c?.name||'?'}</td>
+    <td style="padding:5px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--text-muted)">${fmtF(i.amount)}</td><td></td></tr>`;
+  }).join('');
+
+  const pendingRows = pendingInPeriod.map(i => {
+    const c = data.clients.find(x=>x.id===i.clientId);
+    return `<tr><td style="padding:5px 16px 5px 36px;font-size:12px;color:var(--amber)">${i.number} — ${c?.name||'?'} <span class="badge badge-amber" style="font-size:10px">${i.status}</span></td>
+    <td style="padding:5px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--amber)">${fmtF(i.amount)}</td><td></td></tr>`;
+  }).join('');
+
+  let html = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)"><th style="padding:10px 16px;text-align:left;font-size:11px;color:var(--text-muted);text-transform:uppercase">Item</th><th style="padding:10px 16px;text-align:right;font-size:11px;color:var(--text-muted);text-transform:uppercase">Amount (MXN)</th><th></th></tr></thead><tbody>';
+
+  // INCOME section
+  html += `<tr style="background:#f0fdf4"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green)">INCOME</td></tr>`;
+  html += pnlRow('Client Revenue (Actual)', clientRevenue, 1, false, null, null);
+  if (invoiceRows) html += invoiceRows;
+  if (projRevenue > 0) { html += pnlRow('Client Revenue (Projected)', projRevenue, 1, false, 'var(--amber)', null); html += pendingRows; }
+  html += pnlRow('Other Income', otherIncome, 1, false, null, addBtn('income',''));
+  html += lineRows(otherIncomeLines);
+  html += pnlRow('Total Income', totalIncome, 0, true, 'var(--green)', null);
+
+  // COGS section
+  html += `<tr style="background:#fff7ed"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#ea580c">COST OF SERVICES</td></tr>`;
+  html += lineRows(cogsLines);
+  html += pnlRow('Total COGS', totalCogs, 0, false, '#ea580c', addBtn('cogs',''));
+  html += pnlRow('GROSS PROFIT', grossProfit, 0, true, grossProfit>=0?'var(--green)':'var(--red)', null);
+
+  // EXPENSES section
+  html += `<tr style="background:#fef2f2"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--red)">OPERATING EXPENSES</td></tr>`;
+  PNL_CATEGORIES.expenses.items.forEach(cat => {
+    const catLines = expByCategory[cat.key] || [];
+    const catTotal = catLines.reduce((s,l)=>s+l.amount,0);
+    html += pnlRow(cat.label, catTotal||null, 1, false, null, addBtn('expenses', cat.key));
+    html += lineRows(catLines);
+  });
+  html += pnlRow('Total Expenses', totalExpenses, 0, true, 'var(--red)', null);
+
+  // NET
+  html += `<tr style="background:${netIncome>=0?'var(--green-light)':'var(--red-light)'}">
+    <td style="padding:14px 16px;font-size:14px;font-weight:700;color:${netIncome>=0?'var(--green)':'var(--red)'}">&nbsp;&nbsp;NET INCOME</td>
+    <td style="padding:14px 16px;text-align:right;font-family:var(--mono,monospace);font-size:16px;font-weight:700;color:${netIncome>=0?'var(--green)':'var(--red)'}">${fmtF(netIncome)}</td>
+    <td></td></tr>`;
+
+  html += '</tbody></table>';
+  document.getElementById('pnl-table-wrap').innerHTML = html;
+}
+
+// ── P&L line item modal ──
+let editingPnlId = null;
+function openPnlLineModal(section, category) {
+  editingPnlId = null;
+  const catOpts = section === 'expenses'
+    ? PNL_CATEGORIES.expenses.items.map(c=>`<option value="${c.key}" ${c.key===category?'selected':''}>${c.label}</option>`).join('')
+    : '';
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">Add ${section==='income'?'Income':section==='cogs'?'Cost of Service':'Expense'} Line</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group"><label class="form-label">Description *</label><input class="form-input" id="pnl-name" placeholder="e.g. AWS hosting, Freelancer"></div>
+      <div class="form-group"><label class="form-label">Amount (MXN) *</label><input class="form-input" type="number" id="pnl-amount" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="pnl-date" value="${new Date().toISOString().split('T')[0]}"></div>
+      ${section==='expenses'?`<div class="form-group"><label class="form-label">Category</label><select class="form-input" id="pnl-cat">${catOpts}</select></div>`:''}
+      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="pnl-note" placeholder="Any context"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePnlLine('${section}','${category}')">Save</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function editPnlLine(id) {
+  const lines = getPnlLines();
+  const l = lines.find(x=>x.id===id);
+  if (!l) return;
+  editingPnlId = id;
+  const catOpts = l.section === 'expenses'
+    ? PNL_CATEGORIES.expenses.items.map(c=>`<option value="${c.key}" ${c.key===l.category?'selected':''}>${c.label}</option>`).join('')
+    : '';
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">Edit Line Item</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group"><label class="form-label">Description *</label><input class="form-input" id="pnl-name" value="${l.name}"></div>
+      <div class="form-group"><label class="form-label">Amount (MXN) *</label><input class="form-input" type="number" id="pnl-amount" value="${l.amount}"></div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="pnl-date" value="${l.date||''}"></div>
+      ${l.section==='expenses'?`<div class="form-group"><label class="form-label">Category</label><select class="form-input" id="pnl-cat">${catOpts}</select></div>`:''}
+      <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="pnl-note" value="${l.note||''}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePnlLine('${l.section}','${l.category||''}')">Save</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function savePnlLine(section, category) {
+  const name = document.getElementById('pnl-name').value.trim();
+  const amount = parseFloat(document.getElementById('pnl-amount').value);
+  if (!name || !amount) { toast('Description and amount required ✗'); return; }
+  const date = document.getElementById('pnl-date').value;
+  const note = document.getElementById('pnl-note')?.value.trim()||'';
+  const cat = document.getElementById('pnl-cat')?.value || category;
+  const lines = getPnlLines();
+  if (editingPnlId) {
+    const idx = lines.findIndex(x=>x.id===editingPnlId);
+    if (idx>=0) lines[idx] = { ...lines[idx], name, amount, date, note, category: cat };
+    toast('Line updated ✓');
+  } else {
+    lines.push({ id: Date.now(), section, category: cat, name, amount, date, note });
+    toast('Line added ✓');
+  }
+  savePnlLines(lines);
+  closeModal();
+  renderPnl();
+}
+
+function deletePnlLine(id) {
+  if (!confirm('Delete this line?')) return;
+  savePnlLines(getPnlLines().filter(x=>x.id!==id));
+  renderPnl();
+  toast('Deleted ✓');
+}
+
+function exportPnlCSV() {
+  const { start, end } = getPnlRange();
+  const lines = getPnlLines().filter(l => inRange(l.date, start, end));
+  const rows = [['Section','Category','Name','Amount','Date','Note']];
+  lines.forEach(l => rows.push([l.section, l.category||'', l.name, l.amount, l.date||'', l.note||'']));
+  const csv = rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'pnl.csv'});
+  a.click(); URL.revokeObjectURL(a.href); toast('CSV exported ✓');
+}
 
 (async()=>{
   // Always connect to Firebase with hardcoded config
