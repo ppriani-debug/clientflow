@@ -1714,7 +1714,7 @@ function renderClients() {
   if (sub) sub.textContent = `${data.clients.length} client${data.clients.length!==1?'s':''} total · Click a row to view details`;
   document.getElementById('clients-tbody').innerHTML = rows.length
     ? rows.map(c=>`<tr onclick="openDetail(${c.id})" style="cursor:pointer">
-        <td><div class="client-name">${c.name}</div><div class="client-email">${c.contact}</div></td>
+        <td><div class="client-name">${c.name}</div><div class="client-email">${c.clientContact||c.contact||'—'}</div></td>
         <td><div class="client-email">${c.email}</div><div class="client-email">${c.phone}</div></td>
         <td><div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div></td>
         <td>${statusBadge(c.status)}</td>
@@ -1739,10 +1739,14 @@ function openDetail(id) {
   document.getElementById('dp-contact').innerHTML = `
     <div class="detail-row"><span class="detail-label">Commercial</span><span class="detail-val" style="font-weight:600">${c.name}</span></div>
     ${legalNames.length ? legalNames.map((n,i)=>`<div class="detail-row"><span class="detail-label">${i===0?'Legal Name':'Legal '+(i+1)}</span><span class="detail-val" style="color:var(--accent)">${n}</span></div>`).join('') : ''}
-    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c.contact||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Email</span><span class="detail-val">${c.email||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Since</span><span class="detail-val">${fmtDate(c.since)}</span></div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin:10px 0 4px">Client Contact</div>
+    <div class="detail-row"><span class="detail-label">Name</span><span class="detail-val">${c.clientContact||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Email</span><span class="detail-val">${c.email ? `<a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a>` : '—'}</span></div>
     <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-val">${c.phone||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Since</span><span class="detail-val">${fmtDate(c.since)}</span></div>`;
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin:10px 0 4px">CS Agent</div>
+    <div class="detail-row"><span class="detail-label">Agent</span><span class="detail-val">${c.contact||'—'}</span></div>
+    ${c.csEmail ? `<div class="detail-row"><span class="detail-label">Agent Email</span><span class="detail-val"><a href='mailto:${c.csEmail}' style='color:var(--accent)'>${c.csEmail}</a></span></div>` : ''}`;
   const cR = data.renewals.filter(r=>r.clientId===id);
   document.getElementById('dp-renewals').innerHTML = cR.length
     ? cR.map(r=>`<div class="detail-row"><span class="detail-label">${r.type}<br><small style="color:var(--text-soft)">${fmtDate(r.date)}</small></span>${statusBadge(r.status)}</div>`).join('')
@@ -3031,9 +3035,13 @@ function openModal(type, existing) {
           <div id="legal-names-container">${legalRows}</div>
           ${!existingLegal.length?'<div style="font-size:12px;color:var(--text-soft);padding:4px 0">No legal names added yet</div>':''}
         </div>
-        <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="f-contact" placeholder="Jane Doe" value="${existing?.contact||''}"></div>
-        <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" type="email" value="${existing?.email||''}"></div>
-        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="f-phone" value="${existing?.phone||''}"></div>
+        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Internal — Customer Success</div></div>
+        <div class="form-group"><label class="form-label">CS Agent</label><input class="form-input" id="f-contact" placeholder="e.g. Juan Pérez" value="${existing?.contact||''}"></div>
+        <div class="form-group"><label class="form-label">CS Agent Email</label><input class="form-input" id="f-cs-email" type="email" placeholder="juan@alephri.com" value="${existing?.csEmail||''}"></div>
+        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Client — Contact Person</div></div>
+        <div class="form-group"><label class="form-label">Client Contact Name</label><input class="form-input" id="f-client-contact" placeholder="e.g. María López" value="${existing?.clientContact||''}"></div>
+        <div class="form-group"><label class="form-label">Client Contact Email <span style='color:var(--red)'>*</span></label><input class="form-input" id="f-email" type="email" placeholder="maria@clientco.com" value="${existing?.email||''}"></div>
+        <div class="form-group"><label class="form-label">Client Phone</label><input class="form-input" id="f-phone" value="${existing?.phone||''}"></div>
         <div class="form-group span2"><label class="form-label">Plans</label><div class="plan-picker" id="f-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip ${(Array.isArray(existing?.plan)?existing.plan:[existing?.plan]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
         <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Active'?'selected':''}>Active</option><option ${existing?.status==='At Risk'?'selected':''}>At Risk</option><option ${existing?.status==='Inactive'?'selected':''}>Inactive</option></select></div>
         <div class="form-group"><label class="form-label">Client Since</label><input class="form-input" id="f-since" type="date" value="${existing?.since||new Date().toISOString().split('T')[0]}"></div>
@@ -3091,7 +3099,7 @@ function addLegalNameRow() {
 
 function saveClient(id) {
   const legalNames = [...document.querySelectorAll('.legal-name-input')].map(i=>i.value.trim()).filter(Boolean);
-  const obj={name:document.getElementById('f-name').value.trim(),contact:document.getElementById('f-contact').value,email:document.getElementById('f-email').value,phone:document.getElementById('f-phone').value,plan:[...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),status:document.getElementById('f-status').value,since:document.getElementById('f-since').value,legalNames};
+  const obj={name:document.getElementById('f-name').value.trim(),contact:document.getElementById('f-contact').value,csEmail:document.getElementById('f-cs-email')?.value||'',clientContact:document.getElementById('f-client-contact')?.value||'',email:document.getElementById('f-email').value,phone:document.getElementById('f-phone').value,plan:[...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),status:document.getElementById('f-status').value,since:document.getElementById('f-since').value,legalNames};
   if(!obj.name){alert('Commercial name is required.');return;}
   if(id){const c=data.clients.find(c=>c.id===id);obj.notes=c.notes||'';Object.assign(c,obj);toast('Client updated ✓');}
   else{obj.id=++data.nextId;obj.notes='';data.clients.push(obj);toast('Client added ✓');}
@@ -3593,7 +3601,9 @@ function openRenewalDetail(id) {
 
   document.getElementById('rdp-info').innerHTML = `
     <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
+    ${c?.clientContact ? `<div class='detail-row'><span class='detail-label'>Client Contact</span><span class='detail-val'>${c.clientContact}</span></div>` : ''}
+    ${c?.email ? `<div class='detail-row'><span class='detail-label'>Client Email</span><span class='detail-val'><a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a></span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">CS Agent</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Renewal Date</span><span class="detail-val">${fmtDate(r.date)}</span></div>
     <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--green);font-weight:600">${fmtF(r.amount)}</span></div>
     <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val">${statusBadge(r.status)}</span></div>`;
@@ -3734,7 +3744,7 @@ async function sendRenewalEmail() {
     icon: '↻', accentColor: '#2563eb',
     fields: [
       { label: 'Client', value: c?.name||'—' },
-      { label: 'Contact', value: c?.contact||'—' },
+      { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
       { label: 'Renewal Type', value: r?.type||'—' },
       { label: 'Amount', value: fmtF(r?.amount), highlight: true },
       { label: 'Renewal Date', value: fmtDate(r?.date) },
@@ -3769,7 +3779,9 @@ function openInvoiceDetail(id) {
     <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
     ${inv.billingName && inv.billingName !== c?.name ? `<div class="detail-row"><span class="detail-label">Bill To</span><span class="detail-val" style="font-weight:600;color:var(--accent)">${inv.billingName}</span></div>` : ''}
     ${inv.concept ? `<div class="detail-row"><span class="detail-label">Concept</span><span class="detail-val" style="font-style:italic;color:var(--text)">${inv.concept}</span></div>` : ''}
-    <div class="detail-row"><span class="detail-label">Contact</span><span class="detail-val">${c?.contact||'—'}</span></div>
+    ${c?.clientContact ? `<div class='detail-row'><span class='detail-label'>Client Contact</span><span class='detail-val'>${c.clientContact}</span></div>` : ''}
+    ${c?.email ? `<div class='detail-row'><span class='detail-label'>Client Email</span><span class='detail-val'><a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a></span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">CS Agent</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Invoice #</span><span class="detail-val" style="font-family:var(--mono)">${inv.number}</span></div>
     <div class="detail-row"><span class="detail-label">Due Date</span><span class="detail-val">${fmtDate(inv.dueDate)}</span></div>
     <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--red);font-weight:600">${fmtF(inv.amount)}</span></div>
@@ -3934,7 +3946,7 @@ async function sendInvoiceEmail() {
     icon: '⚠️', accentColor: '#dc2626',
     fields: [
       { label: 'Client', value: c?.name||'—' },
-      { label: 'Contact', value: c?.contact||'—' },
+      { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
       { label: 'Invoice #', value: inv?.number||'—' },
       { label: 'Amount Due', value: fmtF(inv?.amount), highlight: true },
       { label: 'Due Date', value: fmtDate(inv?.dueDate) },
@@ -4669,17 +4681,17 @@ async function executeSchedRule(rule, force = false) {
     data.invoices.filter(i => i.status === 'Overdue' && isDue('inv-'+i.id) && isSelected('inv-'+i.id)).forEach(i => {
       const c = data.clients.find(x=>x.id===i.clientId);
       const daysOver = Math.abs(daysUntil(i.dueDate));
-      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(i.amount), date: fmtDate(i.dueDate), days: daysOver, number: i.number, type: 'invoice' };
+      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(i.amount), date: fmtDate(i.dueDate), days: daysOver, number: i.number, type: 'invoice' };
       const subj = isClientTrigger ? 'Payment Reminder: Invoice ' + i.number : '⚠️ Overdue Invoice ' + i.number + ' — ' + (c?.name||'');
       const body = isClientTrigger
-        ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nThis is a reminder that invoice ' + i.number + ' for ' + fmt(i.amount) + ' was due on ' + fmtDate(i.dueDate) + ' (' + daysOver + ' days ago) and remains unpaid.\n\nPlease arrange payment at your earliest convenience.\n\nBest regards'
+        ? 'Dear ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nThis is a reminder that invoice ' + i.number + ' for ' + fmt(i.amount) + ' was due on ' + fmtDate(i.dueDate) + ' (' + daysOver + ' days ago) and remains unpaid.\n\nPlease arrange payment at your earliest convenience.\n\nBest regards'
         : 'Invoice ' + i.number + ' for ' + (c?.name||'') + ' is OVERDUE.\nAmount: ' + fmt(i.amount) + '\nDue: ' + fmtDate(i.dueDate) + ' (' + daysOver + 'd ago)\n\n— ClientFlow';
       const slack = '⚠️ *Overdue Invoice — ' + (c?.name||'') + '*\nInvoice *' + i.number + '* · *' + fmt(i.amount) + '* · ' + daysOver + 'd overdue';
       const meta = {
         icon: '⚠️', accentColor: isClientTrigger ? '#2563eb' : '#dc2626',
         fields: [
           { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
           { label: 'Invoice #', value: i.number },
           { label: 'Amount Due', value: fmt(i.amount), highlight: true },
           { label: 'Due Date', value: fmtDate(i.dueDate) },
@@ -4694,17 +4706,17 @@ async function executeSchedRule(rule, force = false) {
     data.renewals.filter(r => r.status === 'Overdue' && isDue('ren-'+r.id) && isSelected('ren-'+r.id)).forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const daysOver = Math.abs(daysUntil(r.date));
-      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: daysOver, type: r.type };
+      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: daysOver, type: r.type };
       const subj = isClientTrigger ? 'Action Required: ' + r.type + ' Renewal Overdue' : '🔴 Overdue Renewal — ' + (c?.name||'');
       const body = isClientTrigger
-        ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nYour ' + r.type + ' renewal was due on ' + fmtDate(r.date) + ' (' + daysOver + ' days ago). Please contact us to renew.\n\nBest regards'
+        ? 'Dear ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nYour ' + r.type + ' renewal was due on ' + fmtDate(r.date) + ' (' + daysOver + ' days ago). Please contact us to renew.\n\nBest regards'
         : (c?.name||'') + "'s " + r.type + ' renewal is OVERDUE.\nDue: ' + fmtDate(r.date) + ' (' + daysOver + 'd ago)\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
       const slack = '🔴 *Overdue Renewal — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · ' + daysOver + 'd overdue';
       const meta = {
         icon: '🔴', accentColor: '#dc2626',
         fields: [
           { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
           { label: 'Renewal Type', value: r.type },
           { label: 'Amount', value: fmt(r.amount), highlight: true },
           { label: 'Was Due', value: fmtDate(r.date) },
@@ -4719,17 +4731,17 @@ async function executeSchedRule(rule, force = false) {
     data.renewals.filter(r => { const d=daysUntil(r.date); return d>=0&&d<=threshold&&r.status!=='Renewed'&&isDue('ren-'+r.id)&&isSelected('ren-'+r.id); }).forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const d = daysUntil(r.date);
-      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: d, type: r.type };
+      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: d, type: r.type };
       const subj = isClientTrigger ? 'Upcoming Renewal: ' + r.type + ' — ' + fmtDate(r.date) : '🔔 Renewal Due Soon — ' + (c?.name||'') + ' (' + d + 'd)';
       const body = isClientTrigger
-        ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nThis is a reminder that your ' + r.type + ' is due for renewal on ' + fmtDate(r.date) + ' (' + d + ' days from now).\n\nAmount: ' + fmt(r.amount) + '\n\nPlease do not hesitate to contact us with any questions.\n\nBest regards'
+        ? 'Dear ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nThis is a reminder that your ' + r.type + ' is due for renewal on ' + fmtDate(r.date) + ' (' + d + ' days from now).\n\nAmount: ' + fmt(r.amount) + '\n\nPlease do not hesitate to contact us with any questions.\n\nBest regards'
         : (c?.name||'') + "'s " + r.type + ' renewal is due in ' + d + ' days.\nDate: ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
       const slack = '🔔 *Renewal Due Soon — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · in ' + d + 'd';
       const meta = {
         icon: '🔔', accentColor: '#d97706',
         fields: [
           { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
           { label: 'Renewal Type', value: r.type },
           { label: 'Amount', value: fmt(r.amount), highlight: true },
           { label: 'Renewal Date', value: fmtDate(r.date) },
@@ -4748,7 +4760,7 @@ async function executeSchedRule(rule, force = false) {
     }).forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
-      const vars = { client: c?.name||'', contact: c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: lc||'unknown', type: r.type };
+      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: lc||'unknown', type: r.type };
       const subj = '📵 No Contact — ' + (c?.name||'');
       const body = (c?.name||'') + ' has not been contacted' + (lc ? ' in '+lc+' days' : ' yet') + '.\n' + r.type + ' renews ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
       const slack = '📵 *No Contact — ' + (c?.name||'') + '*\n' + r.type + ' · renews ' + fmtDate(r.date);
@@ -4756,7 +4768,7 @@ async function executeSchedRule(rule, force = false) {
         icon: '📵', accentColor: '#7c3aed',
         fields: [
           { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
           { label: 'Renewal Type', value: r.type },
           { label: 'Renewal Date', value: fmtDate(r.date) },
           { label: 'Last Contact', value: r.lastContact ? fmtDate(r.lastContact) + ' (' + lc + 'd ago)' : 'Never recorded', highlight: true },
