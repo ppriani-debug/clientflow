@@ -836,12 +836,13 @@
         <div><div class="page-title">P&amp;L Statement</div><div class="page-subtitle">Income, costs and expenses — actual + projected + adjustments in MXN</div></div>
         <div class="header-actions">
           <button class="btn btn-ghost" onclick="exportPnlCSV()">↓ CSV</button>
-          <select class="form-input" id="pnl-period" onchange="renderPnl()" style="width:120px;font-size:13px">
-            <option value="month">This Month</option>
+          <select class="form-input" id="pnl-period" onchange="renderPnl()" style="width:130px;font-size:13px">
+            <option value="month">Monthly</option>
             <option value="quarter">This Quarter</option>
             <option value="year" selected>This Year</option>
-            <option value="custom">Custom…</option>
           </select>
+          <select class="form-input" id="pnl-month" onchange="renderPnl()" style="width:110px;font-size:13px"></select>
+          <select class="form-input" id="pnl-year" onchange="renderPnl()" style="width:80px;font-size:13px"></select>
         </div>
       </div>
       <div class="stats-grid" id="pnl-kpis"></div>
@@ -5130,6 +5131,18 @@ function saveCfExpenses(v) { localStorage.setItem('cf-expenses', JSON.stringify(
 const CF_EXPENSE_CATEGORIES = ['Salaries & Payroll','Rent & Office','Software & Tools','Marketing & Advertising','Professional Services','Other'];
 
 // Convert to MXN inline
+function getCfStartingBalance() {
+  const manual = localStorage.getItem('cf-starting-balance');
+  if (manual !== null) return parseFloat(manual);
+  return null; // null = use bank accounts
+}
+function saveCfStartingBalance(val) {
+  if (val === null) localStorage.removeItem('cf-starting-balance');
+  else localStorage.setItem('cf-starting-balance', val);
+  saveSettings();
+  renderCashflow();
+}
+
 function cfToMXN(amount, currency) {
   if (!currency || currency === 'MXN') return amount;
   const rates = getFxRates();
@@ -5156,7 +5169,9 @@ function buildCfData() {
   const months = get12Months();
   const expenses = getCfExpenses();
   const accounts = getBankAccounts();
-  const startingBalance = accounts.reduce((s,a) => s + cfToMXN(a.balance, a.currency), 0);
+  const bankBalance = accounts.reduce((s,a) => s + cfToMXN(a.balance, a.currency), 0);
+  const manualBalance = getCfStartingBalance();
+  const startingBalance = manualBalance !== null ? manualBalance : bankBalance;
 
   // Init buckets
   const buckets = {};
@@ -5249,7 +5264,7 @@ function renderCashflow() {
   const endBal = rows[rows.length-1]?.closeBal || 0;
 
   document.getElementById('cf-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-label">Starting Balance</div><div class="stat-value" style="font-size:20px">${fmtF(startingBalance)}</div><div class="stat-delta">From bank accounts (MXN)</div></div>
+    <div class="stat-card"><div style="display:flex;justify-content:space-between;align-items:center"><div class="stat-label">Starting Balance</div><button class="btn btn-ghost btn-sm" onclick="openCfBalanceModal()" style="font-size:10px;padding:2px 6px">Edit</button></div><div class="stat-value" style="font-size:20px">${fmtF(startingBalance)}</div><div class="stat-delta">${manualBalance!==null?'Manual override':'From bank accounts (MXN)'}</div></div>
     <div class="stat-card"><div class="stat-label">Projected Inflows (12m)</div><div class="stat-value green" style="font-size:20px">${fmtF(totalIn12)}</div><div class="stat-delta">Paid + pending + renewals</div></div>
     <div class="stat-card"><div class="stat-label">Projected Outflows (12m)</div><div class="stat-value red" style="font-size:20px">${fmtF(totalOut12)}</div><div class="stat-delta">From expense entries</div></div>
     <div class="stat-card"><div class="stat-label">Projected End Balance</div><div class="stat-value ${endBal>=0?'green':'red'}" style="font-size:20px">${fmtF(endBal)}</div><div class="stat-delta">in 12 months</div></div>`;
@@ -5379,6 +5394,34 @@ function renderCfDetail(rows) {
   if (outflowTotal) outflowTotal.textContent = fmt(row.totalOut);
   document.getElementById('cf-inflows-detail').innerHTML = inflowHtml;
   document.getElementById('cf-outflows-detail').innerHTML = outflowHtml;
+}
+
+function openCfBalanceModal() {
+  const manual = getCfStartingBalance();
+  const bankBal = getBankAccounts().reduce((s,a) => s + cfToMXN(a.balance, a.currency), 0);
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">Starting Balance</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+      Current bank accounts balance: <strong>${fmtF(bankBal)} MXN</strong><br>
+      Override this to model a different starting point for cashflow projections.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Starting Balance (MXN)</label>
+        <input class="form-input" type="number" id="cf-bal-input" placeholder="${fmtF(bankBal)}" value="${manual !== null ? manual : ''}">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Leave blank to use bank accounts total automatically.</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="saveCfStartingBalance(null);closeModal()">Reset to Bank Total</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="
+        const v = document.getElementById('cf-bal-input').value;
+        saveCfStartingBalance(v ? parseFloat(v) : null);
+        closeModal();
+      ">Save</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
 }
 
 function renderCfExpenseTable() {
@@ -5529,20 +5572,56 @@ const PNL_CATEGORIES = {
 };
 
 // Get date range for selected period
+function initPnlSelectors() {
+  const now = new Date();
+  const monthEl = document.getElementById('pnl-month');
+  const yearEl = document.getElementById('pnl-year');
+  if (!monthEl || !yearEl) return;
+
+  // Populate months
+  if (!monthEl.options.length) {
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    months.forEach((m, i) => {
+      const opt = document.createElement('option');
+      opt.value = i; opt.textContent = m;
+      if (i === now.getMonth()) opt.selected = true;
+      monthEl.appendChild(opt);
+    });
+  }
+
+  // Populate years (3 back, 2 forward)
+  if (!yearEl.options.length) {
+    for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 2; y++) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      if (y === now.getFullYear()) opt.selected = true;
+      yearEl.appendChild(opt);
+    }
+  }
+
+  // Show/hide month selector based on period
+  const period = document.getElementById('pnl-period')?.value || 'year';
+  monthEl.style.display = period === 'month' ? '' : 'none';
+  yearEl.style.display = (period === 'month' || period === 'year') ? '' : 'none';
+}
+
 function getPnlRange() {
+  initPnlSelectors();
   const period = document.getElementById('pnl-period')?.value || 'year';
   const now = new Date();
+  const selMonth = parseInt(document.getElementById('pnl-month')?.value ?? now.getMonth());
+  const selYear = parseInt(document.getElementById('pnl-year')?.value ?? now.getFullYear());
   let start, end;
   if (period === 'month') {
-    start = new Date(now.getFullYear(), now.getMonth(), 1);
-    end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    start = new Date(selYear, selMonth, 1);
+    end = new Date(selYear, selMonth + 1, 0);
   } else if (period === 'quarter') {
-    const q = Math.floor(now.getMonth()/3);
-    start = new Date(now.getFullYear(), q*3, 1);
-    end = new Date(now.getFullYear(), q*3+3, 0);
+    const q = Math.floor(now.getMonth() / 3);
+    start = new Date(now.getFullYear(), q * 3, 1);
+    end = new Date(now.getFullYear(), q * 3 + 3, 0);
   } else {
-    start = new Date(now.getFullYear(), 0, 1);
-    end = new Date(now.getFullYear(), 11, 31);
+    start = new Date(selYear, 0, 1);
+    end = new Date(selYear, 11, 31);
   }
   return { start, end, period };
 }
