@@ -5249,14 +5249,14 @@ function buildCfData() {
     return { ...b, key: k, actualIn, projIn, totalIn, actualOut, projOut, totalOut, net, openBal, closeBal: runningBal };
   });
 
-  return { rows, startingBalance };
+  return { rows, startingBalance, manualBalance };
 }
 
 // ── State ──
 let cfSelectedMonth = null;
 
 function renderCashflow() {
-  const { rows, startingBalance } = buildCfData();
+  const { rows, startingBalance, manualBalance } = buildCfData();
   if (!cfSelectedMonth || !rows.find(r=>r.key===cfSelectedMonth)) cfSelectedMonth = rows[0]?.key;
 
   const totalIn12 = rows.reduce((s,r)=>s+r.totalIn,0);
