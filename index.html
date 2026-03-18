@@ -2707,7 +2707,7 @@ async function sendAllEmails() {
   if (!ready.length) { toast('Emails still generating…'); return; }
   const to = emailRecipients.join(',');
   const from = getFromEmail();
-  let sent = 0, failed = 0, lastError = '';
+  let sent = 0, failed = 0, lastError = '', sentTo = [];
   for (const a of ready) {
     try { await mailgunSend({ to, from, subject: a.subject, text: a.body }); sent++; }
     catch(e) { failed++; }
@@ -4484,8 +4484,23 @@ async function runSchedRuleNow(id) {
   const rules = getSchedRules();
   const rule = rules.find(r=>r.id===id);
   if (!rule) return;
-  toast(`Running "${rule.name}"…`);
-  await executeSchedRule(rule, true); // force=true ignores repeat interval
+
+  // Build preview of what will be sent
+  const isClientTrigger = SCHED_TRIGGERS.find(t=>t.key===rule.trigger)?.client || false;
+  const fromEmail = getFromEmail();
+  const toPreview = isClientTrigger ? '(each client\'s email)' : (rule.emailTo || emailRecipients.join(', ') || '⚠ NONE SET');
+  const channelList = [rule.channels?.email ? 'Email → ' + toPreview : '', rule.channels?.slack ? 'Slack' : ''].filter(Boolean).join(' + ');
+
+  const confirmed = confirm(
+    'Run "' + rule.name + '" now?\n\n' +
+    'From: ' + (fromEmail || '⚠ NOT SET') + '\n' +
+    'Send via: ' + (channelList || '⚠ No channel selected') + '\n\n' +
+    'This will send immediately, ignoring the repeat interval.'
+  );
+  if (!confirmed) return;
+
+  toast('Running "' + rule.name + '"…');
+  await executeSchedRule(rule, true);
   saveSchedRules(rules);
 }
 
@@ -4616,7 +4631,9 @@ async function executeSchedRule(rule, force = false) {
         if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured — add email in rule or Email Alerts → Recipients');
         if (!getMailgunKey()) throw new Error('No Mailgun API key — add it in Email Alerts → Settings');
         if (!getMailgunDomain()) throw new Error('No Mailgun domain — add it in Email Alerts → Settings');
-        await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body });
+        const result = await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body });
+        sentTo.push(toEmail);
+        console.log('Mailgun accepted:', toEmail, result);
       }
       if (rule.channels?.slack && webhook) {
         await slackSend(webhook, item.slackMsg);
@@ -4635,7 +4652,7 @@ async function executeSchedRule(rule, force = false) {
 
   addSchedLog({
     ruleName: rule.name,
-    message: sent + ' sent' + (failed ? ', ' + failed + ' failed' + (lastError ? ': ' + lastError : '') : '') + ' (' + items.length + ' items)',
+    message: sent + ' sent' + (sentTo.length ? ' → ' + sentTo.join(', ') : '') + (failed ? ', ' + failed + ' failed' + (lastError ? ': ' + lastError : '') : '') + ' (' + items.length + ' items)',
     success: failed === 0
   });
   renderScheduledAlerts();
