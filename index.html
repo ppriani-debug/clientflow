@@ -636,7 +636,10 @@
             <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Match the region where your domain is registered.</div>
           </div>
         </div>
-        <div id="settings-status" style="margin-top:14px;font-size:12.5px;padding-top:12px;border-top:1px solid var(--border-soft)"></div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div id="settings-status" style="font-size:12.5px;flex:1"></div>
+          <button class="btn btn-ghost btn-sm" onclick="sendTestEmail()" title="Send a test email to verify Mailgun is configured correctly">📧 Send Test Email</button>
+        </div>
       </div>
 
       <!-- FINANCE LOCK SETTINGS -->
@@ -2436,6 +2439,39 @@ function restoreSettings() {
 }
 
 // ─── MAILGUN SEND ─────────────────────────────────────────────────────────────
+async function sendTestEmail() {
+  const key = getMailgunKey();
+  const domain = getMailgunDomain();
+  const from = getFromEmail();
+  const region = getMailgunRegion();
+
+  // Show what's missing
+  if (!key)    { toast('No Mailgun API key set ✗'); return; }
+  if (!domain) { toast('No Mailgun domain set ✗'); return; }
+  if (!from)   { toast('No "From" email set ✗'); return; }
+
+  const to = prompt('Send test email to:', from);
+  if (!to) return;
+
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    await mailgunSend({
+      to,
+      from,
+      subject: 'ClientFlow — Test Email ✓',
+      text: 'This is a test email from ClientFlow.\n\nIf you received this, Mailgun is configured correctly.\n\nSettings used:\n- Domain: ' + domain + '\n- Region: ' + region + '\n- From: ' + from
+    });
+    toast('Test email sent to ' + to + ' ✓');
+  } catch(e) {
+    toast('Failed: ' + e.message + ' ✗');
+    console.error('Test email error:', e);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '📧 Send Test Email'; }
+}
+
 async function mailgunSend({ to, from, subject, text }) {
   const key = getMailgunKey();
   const domain = getMailgunDomain();
@@ -2671,7 +2707,7 @@ async function sendAllEmails() {
   if (!ready.length) { toast('Emails still generating…'); return; }
   const to = emailRecipients.join(',');
   const from = getFromEmail();
-  let sent = 0, failed = 0;
+  let sent = 0, failed = 0, lastError = '';
   for (const a of ready) {
     try { await mailgunSend({ to, from, subject: a.subject, text: a.body }); sent++; }
     catch(e) { failed++; }
@@ -4574,28 +4610,37 @@ async function executeSchedRule(rule, force = false) {
       ? item.clientEmail
       : (rule.emailTo || emailRecipients.join(','));
     try {
-      if (rule.channels?.email && toEmail && fromEmail) {
+      // Pre-flight checks with clear errors
+      if (rule.channels?.email) {
+        if (!fromEmail) throw new Error('No "From" email set — add it in Email Alerts → Settings → Default From Email');
+        if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured — add email in rule or Email Alerts → Recipients');
+        if (!getMailgunKey()) throw new Error('No Mailgun API key — add it in Email Alerts → Settings');
+        if (!getMailgunDomain()) throw new Error('No Mailgun domain — add it in Email Alerts → Settings');
         await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body });
       }
       if (rule.channels?.slack && webhook) {
         await slackSend(webhook, item.slackMsg);
       }
+      if (!rule.channels?.email && !rule.channels?.slack) {
+        throw new Error('No send channel selected — edit the rule and check Email or Slack');
+      }
       markSent(item.key);
       sent++;
     } catch(e) {
       console.error('Sched rule send failed', e);
+      lastError = e.message;
       failed++;
     }
   }
 
   addSchedLog({
     ruleName: rule.name,
-    message: sent + ' sent' + (failed ? ', ' + failed + ' failed' : '') + ' (' + items.length + ' items)',
+    message: sent + ' sent' + (failed ? ', ' + failed + ' failed' + (lastError ? ': ' + lastError : '') : '') + ' (' + items.length + ' items)',
     success: failed === 0
   });
   renderScheduledAlerts();
   if (sent) toast(rule.name + ': ' + sent + ' alert' + (sent!==1?'s':'') + ' sent ✓');
-  if (failed) toast(rule.name + ': ' + failed + ' failed ✗');
+  if (failed) toast('Failed: ' + (lastError || 'unknown error') + ' ✗');
 }
 
 // ── Scheduled alert scheduler (checks every minute like auto-alert) ──
