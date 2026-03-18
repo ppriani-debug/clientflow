@@ -4618,6 +4618,7 @@ function openSchedModal(id) {
     '<option value="' + t.key + '" ' + (rule?.trigger===t.key?'selected':'') + '>' + t.label + '</option>'
   ).join('');
 
+  const trigger = rule?.trigger || SCHED_TRIGGERS[0].key;
   const isClient = rule ? SCHED_TRIGGERS.find(t=>t.key===rule.trigger)?.client : false;
   const recipientHint = emailRecipients.length
     ? 'Global recipients: ' + emailRecipients.join(', ')
@@ -4679,7 +4680,7 @@ function openSchedModal(id) {
     + '<label class="form-label" style="margin:0">Apply to <span style="font-size:11px;color:var(--text-muted)">— select which items this rule monitors</span></label>'
     + '<div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="schedPickerSelectAll()">All</button><button class="btn btn-ghost btn-sm" onclick="schedPickerSelectNone()">None</button></div>'
     + '</div>'
-    + '<div id="sr-item-picker" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px">' + buildSchedItemPicker(trigger, rule) + '</div>'
+    + '<div id="sr-item-picker" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px">' + buildSchedItemPicker(trigger || SCHED_TRIGGERS[0].key, rule) + '</div>'
     + '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Only selected items will be included. Check all to monitor everything matching the trigger.</div>'
     + '</div>'
 
