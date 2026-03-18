@@ -2187,9 +2187,16 @@ function buildInvoiceReportText() {
   // Bank balances first
   if (accounts.length) {
     t += `*🏦 Disponibilidad en Bancos*\n`;
-    accounts.forEach(a => t += `   ${a.name}${a.bank?' ('+a.bank+')':''}: *${a.currency} ${fmt(a.balance)}*\n`);
+    accounts.forEach(a => {
+      const mxn = a.currency !== 'MXN' ? toMXNAmount(a.balance, a.currency) : a.balance;
+      const rates = getFxRates();
+      const rateNote = a.currency !== 'MXN' && rates[a.currency] ? ` → ${fmt(mxn)} MXN @ ${parseFloat(rates[a.currency]).toFixed(2)}` : a.currency !== 'MXN' ? ' (sin tipo de cambio)' : '';
+      t += `   ${a.name}${a.bank?' ('+a.bank+')':''}: *${a.currency} ${fmt(a.balance)}*${rateNote}\n`;
+    });
+    const totalMXN = accounts.reduce((s,a) => s + toMXNAmount(a.balance, a.currency), 0);
+    const hasForeign = accounts.some(a => a.currency !== 'MXN');
     t += `   ${'─'.repeat(34)}\n`;
-    t += `   *TOTAL DISPONIBLE: ${fmt(accounts.reduce((s,a)=>s+a.balance,0))}*\n`;
+    t += `   *TOTAL DISPONIBLE: ${fmt(totalMXN)} MXN*${hasForeign ? ' _(convertido a MXN)_' : ''}\n`;
     t += `\n${divider}\n\n`;
   }
 
