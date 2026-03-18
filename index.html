@@ -5563,26 +5563,21 @@ function renderPnl() {
   if (titleEl) titleEl.textContent = 'Income Statement';
   if (periodEl) periodEl.textContent = periodLabel;
 
-  // ── INCOME ──
-  // Client revenue: paid invoices in period
-  const paidInPeriod = data.invoices.filter(i => i.status==='Paid' && inRange(i.paidDate, start, end));
-  const clientRevenue = paidInPeriod.reduce((s,i)=>s+i.amount,0);
-  // Projected client revenue: pending invoices with due date in period
-  const pendingInPeriod = data.invoices.filter(i => i.status!=='Paid' && inRange(i.dueDate, start, end));
-  const projRevenue = pendingInPeriod.reduce((s,i)=>s+i.amount,0);
+  const IVA_RATE = 0.16;
+  const exIva = amt => amt / (1 + IVA_RATE);
 
-  // Other income lines
-  const otherIncomeLines = lines.filter(l=>l.section==='income' && inRange(l.date, start, end));
-  const otherIncome = otherIncomeLines.reduce((s,l)=>s+l.amount,0);
-
-  const totalIncome = clientRevenue + projRevenue + otherIncome;
+  // ── INCOME: fully manual, entered ex-IVA or gross depending on flag ──
+  const incomeLines = lines.filter(l => l.section === 'income' && inRange(l.date, start, end));
+  // Each line has: amount (gross with IVA), so we strip IVA
+  const totalIncomeGross = incomeLines.reduce((s,l) => s + l.amount, 0);
+  const totalIncomeExIva = incomeLines.reduce((s,l) => s + exIva(l.amount), 0);
 
   // ── COGS ──
-  const cogsLines = lines.filter(l=>l.section==='cogs' && inRange(l.date, start, end));
-  const totalCogs = cogsLines.reduce((s,l)=>s+l.amount,0);
+  const cogsLines = lines.filter(l => l.section === 'cogs' && inRange(l.date, start, end));
+  const totalCogs = cogsLines.reduce((s,l) => s + l.amount, 0);
 
   // ── EXPENSES by category ──
-  const expenseLines = lines.filter(l=>l.section==='expenses' && inRange(l.date, start, end));
+  const expenseLines = lines.filter(l => l.section === 'expenses' && inRange(l.date, start, end));
   const expByCategory = {};
   PNL_CATEGORIES.expenses.items.forEach(item => { expByCategory[item.key] = []; });
   expenseLines.forEach(l => {
@@ -5590,83 +5585,109 @@ function renderPnl() {
     if (!expByCategory[key]) expByCategory[key] = [];
     expByCategory[key].push(l);
   });
-  const totalExpenses = expenseLines.reduce((s,l)=>s+l.amount,0);
+  const totalExpenses = expenseLines.reduce((s,l) => s + l.amount, 0);
+
+  // ── ADJUSTMENTS ──
+  const adjIncomeLines = lines.filter(l => l.section === 'adj-income' && inRange(l.date, start, end));
+  const adjExpenseLines = lines.filter(l => l.section === 'adj-expense' && inRange(l.date, start, end));
+  const totalAdjIncome = adjIncomeLines.reduce((s,l) => s + l.amount, 0);
+  const totalAdjExpense = adjExpenseLines.reduce((s,l) => s + l.amount, 0);
 
   // ── TOTALS ──
-  const grossProfit = totalIncome - totalCogs;
-  const netIncome = grossProfit - totalExpenses;
-  const margin = totalIncome > 0 ? Math.round((netIncome/totalIncome)*100) : 0;
+  const grossProfit = totalIncomeExIva - totalCogs;
+  const operatingIncome = grossProfit - totalExpenses;
+  const netIncome = operatingIncome + totalAdjIncome - totalAdjExpense;
+  const margin = totalIncomeExIva > 0 ? Math.round((netIncome / totalIncomeExIva) * 100) : 0;
 
   // KPIs
   document.getElementById('pnl-kpis').innerHTML = `
-    <div class="stat-card"><div class="stat-label">Total Income</div><div class="stat-value green" style="font-size:20px">${fmtF(totalIncome)}</div><div class="stat-delta">${fmtF(clientRevenue)} actual + ${fmtF(projRevenue+otherIncome)} projected</div></div>
+    <div class="stat-card"><div class="stat-label">Total Income (ex-IVA)</div><div class="stat-value green" style="font-size:20px">${fmtF(totalIncomeExIva)}</div><div class="stat-delta">Bruto c/IVA: ${fmtF(totalIncomeGross)}</div></div>
     <div class="stat-card"><div class="stat-label">Gross Profit</div><div class="stat-value ${grossProfit>=0?'green':'red'}" style="font-size:20px">${fmtF(grossProfit)}</div><div class="stat-delta">After cost of services</div></div>
     <div class="stat-card"><div class="stat-label">Operating Expenses</div><div class="stat-value red" style="font-size:20px">${fmtF(totalExpenses)}</div><div class="stat-delta">${expenseLines.length} entries</div></div>
-    <div class="stat-card"><div class="stat-label">Net Income</div><div class="stat-value ${netIncome>=0?'green':'red'}" style="font-size:20px">${fmtF(netIncome)}</div><div class="stat-delta">Margin: ${margin}%</div></div>`;
+    <div class="stat-card"><div class="stat-label">Net Income</div><div class="stat-value ${netIncome>=0?'green':'red'}" style="font-size:20px">${fmtF(netIncome)}</div><div class="stat-delta">Margin: ${margin}% ${(totalAdjIncome||totalAdjExpense)?'(incl. adjustments)':''}</div></div>`;
 
-  // ── STATEMENT TABLE ──
+  // ── TABLE HELPERS ──
   const pnlRow = (label, amount, indent, isTotal, color, action) =>
-    `<tr style="${isTotal?'background:var(--bg);font-weight:700;':''}">
+    `<tr style="${isTotal?'background:var(--bg);':''}" >
       <td style="padding:${indent?'8px 16px 8px '+(indent*20+16)+'px':'10px 16px'};font-size:13px;${isTotal?'font-weight:700':''}${color?';color:'+color:''}">${label}</td>
       <td style="padding:10px 16px;text-align:right;font-family:var(--mono,monospace);font-size:13px;${isTotal?'font-weight:700':''}${color?';color:'+color:''}">${amount===null?'':fmtF(amount)}</td>
-      <td style="padding:10px 8px;width:80px;text-align:right">${action||''}</td>
+      <td style="padding:10px 8px;width:90px;text-align:right">${action||''}</td>
     </tr>`;
 
-  const addBtn = (section, category) =>
-    `<button class="btn btn-ghost btn-sm" onclick="openPnlLineModal('${section}','${category||''}')" style="font-size:11px;padding:3px 8px">＋ Add</button>`;
+  const addBtn = (section, cat) =>
+    `<button class="btn btn-ghost btn-sm" onclick="openPnlLineModal('${section}','${cat||''}')" style="font-size:11px;padding:3px 8px">＋ Add</button>`;
 
-  const lineRows = (linesArr) => linesArr.map(l =>
-    `<tr><td style="padding:6px 16px 6px 36px;font-size:12px;color:var(--text-muted)">${l.name}${l.note?` <span style="font-style:italic;font-size:11px">(${l.note})</span>`:''}</td>
-    <td style="padding:6px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--text-muted)">${fmtF(l.amount)}</td>
-    <td style="padding:6px 8px;text-align:right">
-      <div class="row-actions"><button class="btn btn-ghost btn-sm" onclick="editPnlLine(${l.id})" style="font-size:10px;padding:2px 6px">Edit</button><button class="btn btn-danger btn-sm" onclick="deletePnlLine(${l.id})" style="font-size:10px;padding:2px 6px">✕</button></div>
-    </td></tr>`
-  ).join('');
-
-  const invoiceRows = paidInPeriod.map(i => {
-    const c = data.clients.find(x=>x.id===i.clientId);
-    return `<tr><td style="padding:5px 16px 5px 36px;font-size:12px;color:var(--text-muted)">${i.number} — ${c?.name||'?'}</td>
-    <td style="padding:5px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--text-muted)">${fmtF(i.amount)}</td><td></td></tr>`;
+  const lineRows = (linesArr, showIva) => linesArr.map(l => {
+    const displayAmt = showIva ? exIva(l.amount) : l.amount;
+    const ivaNote = showIva ? ` <span style="font-size:10px;color:var(--text-soft)">(bruto ${fmtF(l.amount)})</span>` : '';
+    return `<tr>
+      <td style="padding:6px 16px 6px 36px;font-size:12px;color:var(--text-muted)">${l.name}${ivaNote}${l.note?` <span style="font-style:italic;font-size:11px;color:var(--text-soft)">${l.note}</span>`:''}</td>
+      <td style="padding:6px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--text-muted)">${fmtF(displayAmt)}</td>
+      <td style="padding:6px 8px;text-align:right">
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="editPnlLine(${l.id})" style="font-size:10px;padding:2px 6px">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deletePnlLine(${l.id})" style="font-size:10px;padding:2px 6px">✕</button>
+        </div>
+      </td></tr>`;
   }).join('');
 
-  const pendingRows = pendingInPeriod.map(i => {
-    const c = data.clients.find(x=>x.id===i.clientId);
-    return `<tr><td style="padding:5px 16px 5px 36px;font-size:12px;color:var(--amber)">${i.number} — ${c?.name||'?'} <span class="badge badge-amber" style="font-size:10px">${i.status}</span></td>
-    <td style="padding:5px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--amber)">${fmtF(i.amount)}</td><td></td></tr>`;
-  }).join('');
+  let html = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:10px 16px;text-align:left;font-size:11px;color:var(--text-muted);text-transform:uppercase">Item</th>
+      <th style="padding:10px 16px;text-align:right;font-size:11px;color:var(--text-muted);text-transform:uppercase">MXN</th>
+      <th style="width:90px"></th>
+    </tr></thead><tbody>`;
 
-  let html = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)"><th style="padding:10px 16px;text-align:left;font-size:11px;color:var(--text-muted);text-transform:uppercase">Item</th><th style="padding:10px 16px;text-align:right;font-size:11px;color:var(--text-muted);text-transform:uppercase">Amount (MXN)</th><th></th></tr></thead><tbody>';
+  // ── INCOME ──
+  html += `<tr style="background:#f0fdf4"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green)">
+    INCOME <span style="font-weight:400;font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0">— ingresar monto con IVA, se muestra ex-IVA (÷1.16)</span>
+    </td></tr>`;
+  html += lineRows(incomeLines, true);
+  if (!incomeLines.length) html += `<tr><td colspan="3" style="padding:10px 16px 6px 36px;font-size:12px;color:var(--text-soft)">No income lines yet — click Add to enter recognized revenue</td></tr>`;
+  html += pnlRow('Total Income (ex-IVA)', totalIncomeExIva, 0, true, 'var(--green)', addBtn('income',''));
+  html += `<tr><td colspan="3" style="padding:2px 16px 10px;font-size:11px;color:var(--text-soft)">Bruto c/IVA: ${fmtF(totalIncomeGross)} — IVA: ${fmtF(totalIncomeGross - totalIncomeExIva)}</td></tr>`;
 
-  // INCOME section
-  html += `<tr style="background:#f0fdf4"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green)">INCOME</td></tr>`;
-  html += pnlRow('Client Revenue (Actual)', clientRevenue, 1, false, null, null);
-  if (invoiceRows) html += invoiceRows;
-  if (projRevenue > 0) { html += pnlRow('Client Revenue (Projected)', projRevenue, 1, false, 'var(--amber)', null); html += pendingRows; }
-  html += pnlRow('Other Income', otherIncome, 1, false, null, addBtn('income',''));
-  html += lineRows(otherIncomeLines);
-  html += pnlRow('Total Income', totalIncome, 0, true, 'var(--green)', null);
-
-  // COGS section
+  // ── COGS ──
   html += `<tr style="background:#fff7ed"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#ea580c">COST OF SERVICES</td></tr>`;
-  html += lineRows(cogsLines);
+  html += lineRows(cogsLines, false);
   html += pnlRow('Total COGS', totalCogs, 0, false, '#ea580c', addBtn('cogs',''));
   html += pnlRow('GROSS PROFIT', grossProfit, 0, true, grossProfit>=0?'var(--green)':'var(--red)', null);
 
-  // EXPENSES section
+  // ── EXPENSES ──
   html += `<tr style="background:#fef2f2"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--red)">OPERATING EXPENSES</td></tr>`;
   PNL_CATEGORIES.expenses.items.forEach(cat => {
     const catLines = expByCategory[cat.key] || [];
     const catTotal = catLines.reduce((s,l)=>s+l.amount,0);
     html += pnlRow(cat.label, catTotal||null, 1, false, null, addBtn('expenses', cat.key));
-    html += lineRows(catLines);
+    html += lineRows(catLines, false);
   });
   html += pnlRow('Total Expenses', totalExpenses, 0, true, 'var(--red)', null);
+  html += pnlRow('OPERATING INCOME', operatingIncome, 0, true, operatingIncome>=0?'var(--green)':'var(--red)', null);
 
-  // NET
-  html += `<tr style="background:${netIncome>=0?'var(--green-light)':'var(--red-light)'}">
-    <td style="padding:14px 16px;font-size:14px;font-weight:700;color:${netIncome>=0?'var(--green)':'var(--red)'}">&nbsp;&nbsp;NET INCOME</td>
-    <td style="padding:14px 16px;text-align:right;font-family:var(--mono,monospace);font-size:16px;font-weight:700;color:${netIncome>=0?'var(--green)':'var(--red)'}">${fmtF(netIncome)}</td>
-    <td></td></tr>`;
+  // ── ADJUSTMENTS ──
+  html += `<tr style="background:#f5f3ff"><td colspan="3" style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#7c3aed">
+    ADJUSTMENTS <span style="font-weight:400;font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0">— scenario planning, one-offs, non-cash items</span>
+  </td></tr>`;
+
+  // Income adjustments (+)
+  html += `<tr><td style="padding:8px 16px 4px 20px;font-size:12px;font-weight:600;color:#7c3aed">+ Income Adjustments</td>
+    <td style="padding:8px 16px 4px;text-align:right;font-size:12px;color:#7c3aed">${fmtF(totalAdjIncome)}</td>
+    <td style="padding:8px 8px 4px;text-align:right">${addBtn('adj-income','')}</td></tr>`;
+  html += lineRows(adjIncomeLines, false);
+
+  // Expense adjustments (-)
+  html += `<tr><td style="padding:8px 16px 4px 20px;font-size:12px;font-weight:600;color:var(--red)">− Expense Adjustments</td>
+    <td style="padding:8px 16px 4px;text-align:right;font-size:12px;color:var(--red)">${fmtF(totalAdjExpense)}</td>
+    <td style="padding:8px 8px 4px;text-align:right">${addBtn('adj-expense','')}</td></tr>`;
+  html += lineRows(adjExpenseLines, false);
+
+  // ── NET INCOME ──
+  const netColor = netIncome>=0 ? 'var(--green)' : 'var(--red)';
+  html += `<tr style="background:var(--bg)">
+    <td style="padding:16px;font-size:15px;font-weight:700;color:${netColor}">&nbsp;NET INCOME</td>
+    <td style="padding:16px;text-align:right;font-family:var(--mono,monospace);font-size:18px;font-weight:700;color:${netColor}">${fmtF(netIncome)}</td>
+    <td style="padding:16px;text-align:right;font-size:12px;color:var(--text-muted)">${margin}% margin</td>
+  </tr>`;
 
   html += '</tbody></table>';
   document.getElementById('pnl-table-wrap').innerHTML = html;
@@ -5676,17 +5697,22 @@ function renderPnl() {
 let editingPnlId = null;
 function openPnlLineModal(section, category) {
   editingPnlId = null;
+  const titles = { income:'Income Line', cogs:'Cost of Service', expenses:'Expense', 'adj-income':'Income Adjustment (+)', 'adj-expense':'Expense Adjustment (−)' };
   const catOpts = section === 'expenses'
     ? PNL_CATEGORIES.expenses.items.map(c=>`<option value="${c.key}" ${c.key===category?'selected':''}>${c.label}</option>`).join('')
     : '';
+  const isIncome = section === 'income';
+  const isAdj = section.startsWith('adj-');
   document.getElementById('modal-content').innerHTML = `
-    <div class="modal-title">Add ${section==='income'?'Income':section==='cogs'?'Cost of Service':'Expense'} Line</div>
+    <div class="modal-title">Add ${titles[section]||'Line'}</div>
+    ${isIncome ? '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:7px;padding:10px 12px;font-size:12px;color:#15803d;margin-bottom:4px">Enter the amount <strong>with IVA included</strong> — the P&L will automatically show the ex-IVA figure (÷1.16).</div>' : ''}
+    ${isAdj ? '<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:7px;padding:10px 12px;font-size:12px;color:#7c3aed;margin-bottom:4px">Adjustments are for scenario planning — depreciation, one-off items, provisions, etc. You can add as many as you need.</div>' : ''}
     <div style="display:flex;flex-direction:column;gap:12px">
-      <div class="form-group"><label class="form-label">Description *</label><input class="form-input" id="pnl-name" placeholder="e.g. AWS hosting, Freelancer"></div>
-      <div class="form-group"><label class="form-label">Amount (MXN) *</label><input class="form-input" type="number" id="pnl-amount" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Description *</label><input class="form-input" id="pnl-name" placeholder="${isIncome?'e.g. Suscripción mensual Apex Solutions':isAdj?'e.g. Depreciation, Provision Q1':'e.g. AWS hosting, Salario'}"></div>
+      <div class="form-group"><label class="form-label">Amount (MXN)${isIncome?' — con IVA incluido':''} *</label><input class="form-input" type="number" id="pnl-amount" placeholder="0.00"></div>
       <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="pnl-date" value="${new Date().toISOString().split('T')[0]}"></div>
       ${section==='expenses'?`<div class="form-group"><label class="form-label">Category</label><select class="form-input" id="pnl-cat">${catOpts}</select></div>`:''}
-      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="pnl-note" placeholder="Any context"></div>
+      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="pnl-note" placeholder="Any context or scenario name"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
