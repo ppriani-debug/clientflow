@@ -630,7 +630,7 @@
               <input class="form-input" id="global-from-name" placeholder="e.g. Aleph RI" style="flex:1;font-size:12px">
               <button class="btn btn-ghost btn-sm" onclick="saveFromName()">Save</button>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Shown as "Aleph RI &lt;alerts@yourdomain.com&gt;" — improves deliverability.</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Shown as "Aleph RI &lt;<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d7b6bbb2a5a3a497aeb8a2a5b3b8bab6beb9f9b4b8ba">[email&#160;protected]</a>&gt;" — improves deliverability.</div>
           </div>
           <div class="form-group" style="margin:0">
             <label class="form-label">Mailgun Region</label>
@@ -1131,7 +1131,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DEFAULT_DATA = {
   clients: [
@@ -2492,39 +2492,57 @@ async function sendTestEmail() {
   if (btn) { btn.disabled = false; btn.textContent = '📧 Send Test Email'; }
 }
 
-// Build HTML version of email for better deliverability
-function buildHtmlEmail(subject, text, fromName) {
-  const escaped = text
+// Build rich HTML email with structured invoice/renewal data
+function buildHtmlEmail(subject, text, fromName, meta) {
+  // meta: { type, fields: [{label, value, highlight}], accentColor, icon }
+  const org = fromName || 'ClientFlow';
+  const accentColor = (meta && meta.accentColor) || '#2563eb';
+  const icon = (meta && meta.icon) || '';
+
+  const bodyText = text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\n/g,'<br>');
-  const org = fromName || 'ClientFlow';
-  return `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f4f4f5;margin:0;padding:0}
-  .wrap{max-width:560px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
-  .header{background:#1a1916;padding:20px 28px;color:white}
-  .header-title{font-size:16px;font-weight:600;color:white;margin:0}
-  .header-sub{font-size:12px;color:#a1a09a;margin-top:3px}
-  .body{padding:28px;color:#1a1916;font-size:14px;line-height:1.6}
-  .footer{padding:16px 28px;background:#f7f6f3;font-size:11px;color:#8a8580;border-top:1px solid #e8e5df}
-  .footer a{color:#2563eb;text-decoration:none}
-</style></head>
-<body>
-<div class="wrap">
-  <div class="header">
-    <div class="header-title">${org}</div>
-    <div class="header-sub">${subject}</div>
-  </div>
-  <div class="body">${escaped}</div>
-  <div class="footer">
-    Sent by ${org} via ClientFlow &mdash; <a href="mailto:${getFromEmail()}">Contact us</a>
-  </div>
-</div>
-</body></html>`;
+
+  // Info table rows
+  const infoRows = (meta && meta.fields) ? meta.fields.map(f =>
+    '<tr>'
+    + '<td style="padding:8px 16px;font-size:12px;color:#8a8580;width:40%;border-bottom:1px solid #f0ede8;vertical-align:top">' + f.label + '</td>'
+    + '<td style="padding:8px 16px;font-size:13px;font-weight:' + (f.highlight?'700':'500') + ';color:' + (f.highlight?accentColor:'#1a1916') + ';border-bottom:1px solid #f0ede8">' + f.value + '</td>'
+    + '</tr>'
+  ).join('') : '';
+
+  const infoTable = infoRows ? (
+    '<table style="width:100%;border-collapse:collapse;background:#f7f6f3;border-radius:8px;overflow:hidden;margin:20px 0">'
+    + infoRows
+    + '</table>'
+  ) : '';
+
+  return '<!DOCTYPE html>'
+    + '<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+    + '<body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;background:#f4f4f5;margin:0;padding:0">'
+    + '<div style="max-width:560px;margin:32px auto;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">'
+
+    // Header
+    + '<div style="background:' + accentColor + ';padding:24px 28px">'
+    + '<div style="font-size:18px;font-weight:700;color:white;letter-spacing:-0.3px">' + icon + (icon?' ':'') + org + '</div>'
+    + '<div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px">' + subject + '</div>'
+    + '</div>'
+
+    // Body
+    + '<div style="padding:28px">'
+    + '<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1916">' + bodyText + '</p>'
+    + infoTable
+    + '</div>'
+
+    // Footer
+    + '<div style="padding:16px 28px;background:#f7f6f3;border-top:1px solid #e8e5df">'
+    + '<p style="margin:0;font-size:11px;color:#8a8580">Sent by ' + org + ' · <a href="mailto:' + getFromEmail() + '" style="color:#2563eb;text-decoration:none">Contact us</a></p>'
+    + '</div>'
+
+    + '</div></body></html>';
 }
 
-async function mailgunSend({ to, from, subject, text }) {
+async function mailgunSend({ to, from, subject, text, html }) {
   const key = getMailgunKey();
   const domain = getMailgunDomain();
   const region = getMailgunRegion();
@@ -2540,14 +2558,14 @@ async function mailgunSend({ to, from, subject, text }) {
   const base = region === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
   const url = `${base}/v3/${domain}/messages`;
 
-  const html = buildHtmlEmail(subject, text, fromName);
+  const finalHtml = html || buildHtmlEmail(subject, text, fromName, null);
 
   const body = new FormData();
   body.append('from', formattedFrom);
   body.append('to', to);
   body.append('subject', subject);
   body.append('text', text);
-  body.append('html', html);
+  body.append('html', finalHtml);
   // Tracking helps deliverability signals
   body.append('o:tracking', 'yes');
   body.append('o:tracking-clicks', 'no');
@@ -3711,8 +3729,20 @@ async function sendRenewalEmail() {
   btn.disabled = true;
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
 
+  const subject = `Follow-up: ${c?.name} — ${r?.type}`;
+  const html = buildHtmlEmail(subject, msg, getFromName(), {
+    icon: '↻', accentColor: '#2563eb',
+    fields: [
+      { label: 'Client', value: c?.name||'—' },
+      { label: 'Contact', value: c?.contact||'—' },
+      { label: 'Renewal Type', value: r?.type||'—' },
+      { label: 'Amount', value: fmtF(r?.amount), highlight: true },
+      { label: 'Renewal Date', value: fmtDate(r?.date) },
+      { label: 'Status', value: r?.status||'—' },
+    ]
+  });
   try {
-    await mailgunSend({ to, from, subject: `Follow-up: ${c?.name} — ${r?.type}`, text: msg });
+    await mailgunSend({ to, from, subject, text: msg, html });
     statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Mailgun</span>';
     toast('Email sent ✓');
   } catch(e) {
@@ -3899,8 +3929,22 @@ async function sendInvoiceEmail() {
   btn.disabled = true;
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
 
+  const subject = `Payment Follow-up: ${inv?.number} — ${c?.name}`;
+  const html = buildHtmlEmail(subject, msg, getFromName(), {
+    icon: '⚠️', accentColor: '#dc2626',
+    fields: [
+      { label: 'Client', value: c?.name||'—' },
+      { label: 'Contact', value: c?.contact||'—' },
+      { label: 'Invoice #', value: inv?.number||'—' },
+      { label: 'Amount Due', value: fmtF(inv?.amount), highlight: true },
+      { label: 'Due Date', value: fmtDate(inv?.dueDate) },
+      { label: 'Days Overdue', value: Math.abs(daysUntil(inv?.dueDate)) + ' days', highlight: true },
+      inv?.billingName ? { label: 'Bill To', value: inv.billingName } : null,
+      inv?.concept ? { label: 'Concept', value: inv.concept } : null,
+    ].filter(Boolean)
+  });
   try {
-    await mailgunSend({ to, from, subject: `Payment Follow-up: ${inv?.number} — ${c?.name}`, text: msg });
+    await mailgunSend({ to, from, subject, text: msg, html });
     statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Mailgun</span>';
     toast('Email sent ✓');
   } catch(e) {
@@ -4603,12 +4647,17 @@ async function executeSchedRule(rule, force = false) {
   // selectedIds: null = all, array = only those keys
   const isSelected = (key) => !rule.selectedIds || rule.selectedIds.includes(key);
 
-  const makeItem = (key, vars, defaultSubject, defaultBody, defaultSlack, clientEmail) => {
+  const makeItem = (key, vars, defaultSubject, defaultBody, defaultSlack, clientEmail, meta) => {
     const customBody = rule.messageBody ? applyMsgTemplate(rule.messageBody, vars) : null;
+    const finalBody = customBody || defaultBody;
+    const finalSubject = customBody ? (rule.name + ' — ' + (vars.client||'')) : defaultSubject;
+    const fromName = getFromName();
+    const htmlBody = buildHtmlEmail(finalSubject, finalBody, fromName, meta);
     return {
       key,
-      subject: customBody ? (rule.name + ' — ' + (vars.client||'')) : defaultSubject,
-      body: customBody || defaultBody,
+      subject: finalSubject,
+      body: finalBody,
+      htmlBody,
       slackMsg: customBody ? ('*' + rule.name + ' — ' + (vars.client||'') + '*\n' + customBody) : defaultSlack,
       clientEmail
     };
@@ -4626,7 +4675,19 @@ async function executeSchedRule(rule, force = false) {
         ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nThis is a reminder that invoice ' + i.number + ' for ' + fmt(i.amount) + ' was due on ' + fmtDate(i.dueDate) + ' (' + daysOver + ' days ago) and remains unpaid.\n\nPlease arrange payment at your earliest convenience.\n\nBest regards'
         : 'Invoice ' + i.number + ' for ' + (c?.name||'') + ' is OVERDUE.\nAmount: ' + fmt(i.amount) + '\nDue: ' + fmtDate(i.dueDate) + ' (' + daysOver + 'd ago)\n\n— ClientFlow';
       const slack = '⚠️ *Overdue Invoice — ' + (c?.name||'') + '*\nInvoice *' + i.number + '* · *' + fmt(i.amount) + '* · ' + daysOver + 'd overdue';
-      items.push(makeItem('inv-'+i.id, vars, subj, body, slack, c?.email));
+      const meta = {
+        icon: '⚠️', accentColor: isClientTrigger ? '#2563eb' : '#dc2626',
+        fields: [
+          { label: 'Client', value: c?.name||'—' },
+          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Invoice #', value: i.number },
+          { label: 'Amount Due', value: fmt(i.amount), highlight: true },
+          { label: 'Due Date', value: fmtDate(i.dueDate) },
+          { label: 'Days Overdue', value: daysOver + ' days', highlight: true },
+          { label: 'Status', value: i.status },
+        ].filter(f => f.value && f.value !== '—')
+      };
+      items.push(makeItem('inv-'+i.id, vars, subj, body, slack, c?.email, meta));
     });
 
   } else if (rule.trigger === 'renewal-overdue' || rule.trigger === 'renewal-overdue-client') {
@@ -4639,7 +4700,18 @@ async function executeSchedRule(rule, force = false) {
         ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nYour ' + r.type + ' renewal was due on ' + fmtDate(r.date) + ' (' + daysOver + ' days ago). Please contact us to renew.\n\nBest regards'
         : (c?.name||'') + "'s " + r.type + ' renewal is OVERDUE.\nDue: ' + fmtDate(r.date) + ' (' + daysOver + 'd ago)\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
       const slack = '🔴 *Overdue Renewal — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · ' + daysOver + 'd overdue';
-      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email));
+      const meta = {
+        icon: '🔴', accentColor: '#dc2626',
+        fields: [
+          { label: 'Client', value: c?.name||'—' },
+          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Renewal Type', value: r.type },
+          { label: 'Amount', value: fmt(r.amount), highlight: true },
+          { label: 'Was Due', value: fmtDate(r.date) },
+          { label: 'Days Overdue', value: daysOver + ' days', highlight: true },
+        ].filter(f => f.value && f.value !== '—')
+      };
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email, meta));
     });
 
   } else if (rule.trigger === 'renewal-due-soon' || rule.trigger === 'renewal-due-soon-client') {
@@ -4653,7 +4725,18 @@ async function executeSchedRule(rule, force = false) {
         ? 'Dear ' + (c?.contact||c?.name||'') + ',\n\nThis is a reminder that your ' + r.type + ' is due for renewal on ' + fmtDate(r.date) + ' (' + d + ' days from now).\n\nAmount: ' + fmt(r.amount) + '\n\nPlease do not hesitate to contact us with any questions.\n\nBest regards'
         : (c?.name||'') + "'s " + r.type + ' renewal is due in ' + d + ' days.\nDate: ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
       const slack = '🔔 *Renewal Due Soon — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · in ' + d + 'd';
-      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email));
+      const meta = {
+        icon: '🔔', accentColor: '#d97706',
+        fields: [
+          { label: 'Client', value: c?.name||'—' },
+          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Renewal Type', value: r.type },
+          { label: 'Amount', value: fmt(r.amount), highlight: true },
+          { label: 'Renewal Date', value: fmtDate(r.date) },
+          { label: 'Days Remaining', value: d + ' days', highlight: true },
+        ].filter(f => f.value && f.value !== '—')
+      };
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email, meta));
     });
 
   } else if (rule.trigger === 'stale-contact') {
@@ -4669,7 +4752,18 @@ async function executeSchedRule(rule, force = false) {
       const subj = '📵 No Contact — ' + (c?.name||'');
       const body = (c?.name||'') + ' has not been contacted' + (lc ? ' in '+lc+' days' : ' yet') + '.\n' + r.type + ' renews ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
       const slack = '📵 *No Contact — ' + (c?.name||'') + '*\n' + r.type + ' · renews ' + fmtDate(r.date);
-      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null));
+      const meta = {
+        icon: '📵', accentColor: '#7c3aed',
+        fields: [
+          { label: 'Client', value: c?.name||'—' },
+          { label: 'Contact', value: c?.contact||'—' },
+          { label: 'Renewal Type', value: r.type },
+          { label: 'Renewal Date', value: fmtDate(r.date) },
+          { label: 'Last Contact', value: r.lastContact ? fmtDate(r.lastContact) + ' (' + lc + 'd ago)' : 'Never recorded', highlight: true },
+          { label: 'Amount', value: fmt(r.amount) },
+        ].filter(f => f.value && f.value !== '—')
+      };
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null, meta));
     });
   }
 
@@ -4694,7 +4788,7 @@ async function executeSchedRule(rule, force = false) {
         if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured — add email in rule or Email Alerts → Recipients');
         if (!getMailgunKey()) throw new Error('No Mailgun API key — add it in Email Alerts → Settings');
         if (!getMailgunDomain()) throw new Error('No Mailgun domain — add it in Email Alerts → Settings');
-        const result = await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body });
+        const result = await mailgunSend({ to: toEmail, from: fromEmail, subject: item.subject, text: item.body, html: item.htmlBody });
         sentTo.push(toEmail);
         console.log('Mailgun accepted:', toEmail, result);
       }
@@ -4973,9 +5067,4 @@ function saveSchedRule() {
 </div>
 
 <!-- SYNC STATUS INDICATOR -->
-<div id="sync-indicator" style="position:fixed;bottom:16px;right:16px;background:white;border:1px solid #e8e5df;border-radius:20px;padding:6px 12px;font-size:11px;color:#8a8580;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);z-index:100;display:none">
-  <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#86efac;display:inline-block"></span>
-  <span id="sync-label">Synced</span>
-</div>
-</body>
-</html>
+<div id="sync-indicator" style="position:fixed;bottom:16px;right:16px;background:white;border:1px solid #e8e5df;border-radius:20px;padding:6px 12px;font-size:11px;color:#8a8580;display:flex;align-items:center;gap:6px;box-shadow:
