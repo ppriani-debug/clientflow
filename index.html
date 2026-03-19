@@ -465,6 +465,8 @@
           <button class="btn btn-ghost" onclick="sendReportEmail('invoices')" title="Email Invoice Report">✉ Invoice Report</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('renewals')" title="Send Renewal Report to Slack">💬 Renewal Report</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('renewals')" title="Email Renewal Report">✉ Renewal Report</button>
+          <button class="btn btn-ghost" onclick="sendReportSlack('upsells')" title="Send Upsell Report to Slack">💬 Upsell Report</button>
+          <button class="btn btn-ghost" onclick="sendReportEmail('upsells')" title="Email Upsell Report">✉ Upsell Report</button>
         </div>
       </div>
       <div class="stats-grid" id="report-stats"></div>
@@ -506,6 +508,18 @@
           <div class="card-header"><div class="card-title">Revenue by Client</div></div>
           <div id="revenue-by-client"></div>
         </div>
+      </div>
+
+      <!-- UPSELL REPORT -->
+      <div class="card mb20" style="margin-top:20px">
+        <div class="card-header">
+          <div class="card-title">Upsell Pipeline Report</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="sendReportSlack('upsells')">💬 Slack</button>
+            <button class="btn btn-ghost btn-sm" onclick="sendReportEmail('upsells')">✉ Email</button>
+          </div>
+        </div>
+        <div id="upsell-report-content"></div>
       </div>
     </div>
 
@@ -2147,6 +2161,10 @@ function renderReports() {
   document.getElementById('revenue-by-client').innerHTML = ent.length
     ? `<table><thead><tr><th>Client</th><th>Revenue</th></tr></thead><tbody>${ent.map(([n,a])=>`<tr><td>${n}</td><td class="mono" style="font-weight:500">${fmtF(a)}</td></tr>`).join('')}</tbody></table>`
     : `<div class="empty-state"><div class="empty-icon">↗</div><div class="empty-text">No data yet</div></div>`;
+
+  // ── UPSELL REPORT ──
+  const upsellEl = document.getElementById('upsell-report-content');
+  if (upsellEl) upsellEl.innerHTML = buildUpsellReportHtml();
 }
 // ─── BANK ACCOUNTS ──────────────────────────────────────────────────────────
 function getFxRates() { try { return JSON.parse(localStorage.getItem('fx-rates') || '{}'); } catch(e) { return {}; } }
@@ -2376,7 +2394,11 @@ function buildRenewalReportText() {
     const dLabel = df < 0 ? `${Math.abs(df)}d overdue` : df === 0 ? 'today' : df === 1 ? 'tomorrow' : `in ${df}d`;
     const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
     const lcLabel = !r.lastContact ? 'never contacted ⚠️' : lc === 0 ? 'today' : lc === 1 ? 'yesterday' : `${lc}d ago${lc>7?' ⚠️':''}`;
-    return `   ${idx+1}. ${rc?.name||'Unknown'} — ${r.type}\n      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
+    const lastComment = (r.comments||[]).slice(-1)[0]?.text || '';
+    let entry = `   ${idx+1}. ${rc?.name||'Unknown'} — ${r.type}\n`;
+    entry += `      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
+    if (lastComment) entry += `      💬 ${lastComment}\n`;
+    return entry;
   };
 
   const dayGroup = (label, items) => {
@@ -2394,7 +2416,8 @@ function buildRenewalReportText() {
   t += `🔄 RENEWAL REPORT\n`;
   t += `${dateStr}\n`;
   t += `${divider}\n`;
-  t += `Active Pipeline: ${fmt(pipeline)} | Total renewals: ${data.renewals.length}`;
+  const pipelineCount = data.renewals.filter(r=>r.status!=='Renewed').length;
+  t += `💰 Active Pipeline: ${fmt(pipeline)} (${pipelineCount} renewal${pipelineCount!==1?'s':''})`;
   if (staleTotal) t += ` | ⚠️ ${staleTotal} with no recent contact`;
   t += `\n\n`;
 
@@ -2426,26 +2449,46 @@ function buildRenewalReportText() {
 async function sendReportSlack(type) {
   const webhook = localStorage.getItem('slack-webhook') || '';
   if (!webhook) { toast('No Slack webhook configured — add it in Email Alerts → Settings'); return; }
-  const text = type === 'invoices' ? buildInvoiceReportText() : buildRenewalReportText();
+  const labels = { invoices: 'Invoice', renewals: 'Renewal', upsells: 'Upsell Pipeline' };
+  const text = type === 'invoices' ? buildInvoiceReportText()
+             : type === 'upsells'  ? buildUpsellReportText()
+             : buildRenewalReportText();
   try {
     await slackSend(webhook, text);
-    toast(`${type === 'invoices' ? 'Invoice' : 'Renewal'} report sent to Slack ✓`);
+    toast(`${labels[type]||type} report sent to Slack ✓`);
   } catch(e) { toast('Slack send failed: ' + e.message); }
 }
 
 async function sendReportEmail(type) {
   const key = getMailgunKey(), domain = getMailgunDomain(), from = getFromEmail();
   if (!key || !domain || !from) { toast('Configure Mailgun settings in Email Alerts → Settings first'); return; }
-  const subject = type === 'invoices'
-    ? `Invoice Report — ${new Date().toLocaleDateString()}`
-    : `Renewal Report — ${new Date().toLocaleDateString()}`;
-  const text = type === 'invoices' ? buildInvoiceReportText() : buildRenewalReportText();
-  const to = prompt('Send to email address:');
-  if (!to) return;
-  try {
-    await mailgunSend({ to, from, subject, text });
-    toast(`${type === 'invoices' ? 'Invoice' : 'Renewal'} report emailed ✓`);
-  } catch(e) { toast('Email send failed: ' + e.message); }
+
+  const labels = { invoices: 'Invoice', renewals: 'Renewal', upsells: 'Upsell Pipeline' };
+  const label = labels[type] || type;
+  const subject = `${label} Report — ${new Date().toLocaleDateString()}`;
+  const text = type === 'invoices' ? buildInvoiceReportText()
+             : type === 'upsells'  ? buildUpsellReportText()
+             : buildRenewalReportText();
+
+  // Default to global recipients, allow override
+  const defaultTo = emailRecipients.join(', ');
+  const toInput = prompt(`Send ${label} Report to (comma-separated for multiple):`, defaultTo);
+  if (!toInput) return;
+
+  // Support multiple recipients — send to each individually for better deliverability
+  const recipients = toInput.split(',').map(e => e.trim()).filter(Boolean);
+  if (!recipients.length) return;
+
+  let sent = 0;
+  for (const to of recipients) {
+    try {
+      await mailgunSend({ to, from, subject, text });
+      sent++;
+    } catch(e) {
+      toast('Failed to send to ' + to + ': ' + e.message);
+    }
+  }
+  if (sent) toast(`${label} report sent to ${sent} recipient${sent!==1?'s':''} ✓`);
 }
 // ─── EXPORT CSV ──────────────────────────────────────────────────────────────
 function exportCSV() {
@@ -5976,6 +6019,131 @@ function duplicatePnlLine(id) {
   toast('Line duplicated to ' + (newLine.date || 'next month') + ' ✓');
 }
 
+
+// ─── UPSELL REPORT ────────────────────────────────────────────────────────────
+function buildUpsellReportText() {
+  if (!data.upsells) return 'No upsell data.';
+  const divider = '─'.repeat(36);
+  const now = new Date();
+  let t = `*📈 Upsell Pipeline Report*
+_${now.toLocaleDateString('es-MX', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}_
+
+${divider}
+
+`;
+
+  const active = data.upsells.filter(u => u.stage !== 'Won' && u.stage !== 'Lost');
+  const won    = data.upsells.filter(u => u.stage === 'Won');
+  const lost   = data.upsells.filter(u => u.stage === 'Lost');
+  const pipeline = active.reduce((s,u) => s + (u.value||0), 0);
+  const wonVal   = won.reduce((s,u) => s + (u.value||0), 0);
+
+  t += `*📊 Summary*
+`;
+  t += `   Active opportunities: *${active.length}* · Pipeline: *${fmt(pipeline)}*
+`;
+  t += `   Won: *${won.length}* · Value: *${fmt(wonVal)}*
+`;
+  t += `   Lost: *${lost.length}*
+
+${divider}
+
+`;
+
+  const stages = ['Identified','Contacted','Proposal','Negotiating'];
+  stages.forEach(stage => {
+    const items = active.filter(u => u.stage === stage);
+    if (!items.length) return;
+    const stageVal = items.reduce((s,u) => s + (u.value||0), 0);
+    t += `*${stage}* (${items.length} · ${fmt(stageVal)})
+`;
+    items.forEach(u => {
+      const c = data.clients.find(x => x.id === u.clientId);
+      const plans = Array.isArray(u.targetPlans) ? u.targetPlans.join(', ') : '';
+      const lc = u.lastContact ? Math.round((new Date()-new Date(u.lastContact))/86400000) : null;
+      t += `   • ${c?.name||'?'}${plans?' → '+plans:''}`;
+      t += ` · ${fmt(u.value||0)}`;
+      t += lc !== null ? ` · contact ${lc}d ago` : ' · no contact';
+      if (u.notes) t += `
+     _${u.notes}_`;
+      t += '\n';
+    });
+    t += '\n';
+  });
+
+  if (won.length) {
+    t += `*✅ Won*
+`;
+    won.forEach(u => {
+      const c = data.clients.find(x => x.id === u.clientId);
+      t += `   • ${c?.name||'?'} · ${fmt(u.value||0)}
+`;
+    });
+    t += '\n';
+  }
+
+  t += `${divider}
+_Sent from ClientFlow_`;
+  return t;
+}
+
+function buildUpsellReportHtml() {
+  if (!data.upsells || !data.upsells.length) {
+    return '<div class="empty-state" style="padding:32px"><div class="empty-icon">↑</div><div>No upsell opportunities yet</div></div>';
+  }
+
+  const active = data.upsells.filter(u => u.stage !== 'Won' && u.stage !== 'Lost');
+  const won    = data.upsells.filter(u => u.stage === 'Won');
+  const lost   = data.upsells.filter(u => u.stage === 'Lost');
+  const pipeline = active.reduce((s,u) => s + (u.value||0), 0);
+  const wonVal   = won.reduce((s,u) => s + (u.value||0), 0);
+
+  let html = `<div style="display:flex;gap:0;border-bottom:1px solid var(--border-soft)">
+    <div style="flex:1;padding:16px 20px;border-right:1px solid var(--border-soft)">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Active Pipeline</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--accent)">${fmt(pipeline)}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${active.length} opportunit${active.length!==1?'ies':'y'}</div>
+    </div>
+    <div style="flex:1;padding:16px 20px;border-right:1px solid var(--border-soft)">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Won</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--green)">${fmt(wonVal)}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${won.length} deal${won.length!==1?'s':''}</div>
+    </div>
+    <div style="flex:1;padding:16px 20px">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Lost</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--red)">${lost.length}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">opportunit${lost.length!==1?'ies':'y'}</div>
+    </div>
+  </div>`;
+
+  const stages = ['Identified','Contacted','Proposal','Negotiating','Won'];
+  const stageColors = { Identified:'#6366f1', Contacted:'#2563eb', Proposal:'#d97706', Negotiating:'#ea580c', Won:'var(--green)' };
+
+  stages.forEach(stage => {
+    const items = data.upsells.filter(u => u.stage === stage);
+    if (!items.length) return;
+    const stageVal = items.reduce((s,u) => s + (u.value||0), 0);
+    html += `<div style="padding:10px 20px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${stageColors[stage]||'var(--text-muted)'};background:var(--bg)">${stage} — ${fmt(stageVal)}</div>`;
+    items.forEach(u => {
+      const c = data.clients.find(x => x.id === u.clientId);
+      const plans = Array.isArray(u.targetPlans) ? u.targetPlans.join(', ') : '';
+      const lc = u.lastContact ? Math.round((new Date()-new Date(u.lastContact))/86400000) : null;
+      const stale = lc === null || lc > 7;
+      html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border-soft)">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">${c?.name||'?'}${plans?` <span style="font-size:11px;color:var(--accent)">→ ${plans}</span>`:''}</div>
+          ${u.notes?`<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${u.notes}</div>`:''}
+        </div>
+        <div style="text-align:right;font-size:13px">
+          <div style="font-weight:600">${fmt(u.value||0)}</div>
+          <div style="font-size:11px;color:${stale?'var(--red)':'var(--green)'}">${lc!==null?lc+'d ago':'no contact'}</div>
+        </div>
+      </div>`;
+    });
+  });
+
+  return html;
+}
 
 (async()=>{
   // Always connect to Firebase with hardcoded config
