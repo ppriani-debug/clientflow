@@ -5877,30 +5877,39 @@ function advanceOneMonth(dateStr) {
 function duplicateInvoice(id, event) {
   if (event) event.stopPropagation();
   const inv = data.invoices.find(i => i.id === id);
-  if (!inv) return;
+  if (!inv) { toast('Invoice not found \u2717'); return; }
 
-  // Build next invoice number
-  const nums = data.invoices.map(i => parseInt((i.number||'').replace(/\D/g,''))).filter(Boolean);
-  const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+  // Build next number keeping same prefix (e.g. INV-)
   const prefix = (inv.number||'INV-').replace(/\d+$/, '');
-  const newNumber = prefix + String(nextNum).padStart(String(Math.max(...nums)).length || 4, '0');
+  const nums = data.invoices
+    .map(i => parseInt((i.number||'').replace(/\D/g,'')))
+    .filter(Boolean);
+  const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+  const padLen = Math.max(String(Math.max(...nums,1)).length, 4);
+  const newNumber = prefix + String(nextNum).padStart(padLen, '0');
 
+  // Explicitly copy fields to avoid any accidental overrides
   const newInv = {
-    ...inv,
-    id: data.nextId++,
+    id: ++data.nextId,
+    clientId: inv.clientId,
     number: newNumber,
     dueDate: advanceOneMonth(inv.dueDate),
+    amount: inv.amount,
     status: 'Pre-Invoice',
     statusLocked: false,
+    billingName: inv.billingName || '',
+    concept: inv.concept || '',
     paidDate: null,
     lastContact: null,
-    comments: []
+    comments: [],
+    followupTo: inv.followupTo || ''
   };
   data.invoices.push(newInv);
   saveData();
   renderPage(currentPage);
   updateBadges();
-  toast('Invoice duplicated as ' + newNumber + ' ✓');
+  const clientName = data.clients.find(c=>c.id===inv.clientId)?.name || 'client';
+  toast('Duplicated as ' + newNumber + ' \u2014 ' + clientName + ' \u2713');
 }
 
 function duplicateCfExpense(id) {
