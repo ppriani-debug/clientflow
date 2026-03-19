@@ -1978,7 +1978,7 @@ function renderInvoices() {
     ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
         <td class="mono" style="font-weight:500">${i.number}</td>
         <td><div class="client-name">${clientName(i.clientId)}</div>${i.billingName&&i.billingName!==clientName(i.clientId)?`<div style="font-size:11px;color:var(--text-muted)">Bill to: ${i.billingName}</div>`:''} ${i.concept?`<div style="font-size:11px;color:var(--text-soft);font-style:italic">${i.concept}</div>`:''}</td>
-        <td><div>${i.dueDate?fmtDate(i.dueDate):'<span style="color:var(--text-soft);font-size:12px">No due date</span>'}</div><div style="font-size:11px;color:var(--text-soft)">${i.dueDate?daysLabel(i.dueDate):''}</div></td>
+        <td><div>${i.dueDate?fmtDate(i.dueDate):'<span style="color:var(--text-soft);font-size:12px">No due date</span>'}</div><div style="font-size:11px;color:var(--text-soft)">${i.dueDate?daysLabel(i.dueDate):''}${i.creditDays?' · '+i.creditDays+'d credit':''}</div></td>
         <td class="mono">${fmtF(i.amount)}</td>
         <td>${statusBadge(i.status)}${i.status==='Paid'&&i.paidDate?`<div style="font-size:11px;color:var(--green);margin-top:2px">paid ${fmtDate(i.paidDate)}</div>`:''}</td>
         <td>${(()=>{
@@ -2008,6 +2008,20 @@ function setInvoiceSort(col) {
   renderInvoices();
 }
 function editInvoice(id,e) { e.stopPropagation(); openModal('invoice', data.invoices.find(x=>x.id===id)); }
+function calcDueDate() {
+  const dateEl = document.getElementById('f-invoice-date');
+  const daysEl = document.getElementById('f-credit-days');
+  const dueEl  = document.getElementById('f-due');
+  if (!dateEl || !daysEl || !dueEl) return;
+  const dateVal = dateEl.value;
+  const days = parseInt(daysEl.value);
+  if (dateVal && !isNaN(days) && days >= 0) {
+    const d = new Date(dateVal + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    dueEl.value = d.toISOString().split('T')[0];
+  }
+}
+
 function togglePaidDate(status) {
   const g = document.getElementById('f-paid-date-group');
   if (g) g.style.display = status === 'Paid' ? 'block' : 'none';
@@ -3174,7 +3188,9 @@ function openModal(type, existing) {
           <select class="form-input" id="f-billing-name">${billingOpts}</select>
         </div>
         <div class="form-group"><label class="form-label">Invoice #</label><input class="form-input" id="f-number" value="${existing?.number||nextNum}"></div>
-        <div class="form-group"><label class="form-label">Due Date <span style="font-size:11px;color:var(--text-muted)">(optional for Pre-Invoice)</span></label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
+        <div class="form-group"><label class="form-label">Invoice Date</label><input class="form-input" id="f-invoice-date" type="date" value="${existing?.invoiceDate||new Date().toISOString().split('T')[0]}" onchange="calcDueDate()"></div>
+        <div class="form-group"><label class="form-label">Credit Days</label><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="f-credit-days" type="number" min="0" max="365" placeholder="e.g. 30" value="${existing?.creditDays??''}" onchange="calcDueDate()" style="width:90px"><div style="display:flex;gap:4px">${[0,15,30,45,60,90,120].map(d=>`<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('f-credit-days').value=${d};calcDueDate()" style="padding:3px 7px;font-size:11px">${d}d</button>`).join('')}</div></div></div>
+        <div class="form-group"><label class="form-label">Due Date <span style="font-size:11px;color:var(--text-muted)">(auto-calculated from invoice date + credit days)</span></label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
         <div class="form-group span2"><label class="form-label">Concept <span style="font-size:11px;color:var(--text-muted)">— what this invoice is for</span></label><input class="form-input" id="f-concept" placeholder="e.g. Monthly SaaS license — March 2026" value="${existing?.concept||''}"></div>
         <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
         <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status" onchange="togglePaidDate(this.value)"><option ${existing?.status==='Pre-Invoice'?'selected':''}>Pre-Invoice</option><option ${existing?.status==='Pending'?'selected':''}>Pending</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Paid'?'selected':''}>Paid</option></select></div>
@@ -3234,7 +3250,7 @@ function saveInvoice(id) {
   const conceptEl = document.getElementById('f-concept');
   const paidDateEl = document.getElementById('f-paid-date');
   const statusVal = document.getElementById('f-status').value;
-  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:statusVal,statusLocked:true,billingName:billingNameEl?billingNameEl.value:'',concept:conceptEl?conceptEl.value.trim():'',paidDate:statusVal==='Paid'&&paidDateEl?paidDateEl.value:''};
+  const obj={clientId:parseInt(document.getElementById('f-client').value),number:document.getElementById('f-number').value,invoiceDate:document.getElementById('f-invoice-date')?.value||'',creditDays:parseInt(document.getElementById('f-credit-days')?.value)||0,dueDate:document.getElementById('f-due').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:statusVal,statusLocked:true,billingName:billingNameEl?billingNameEl.value:'',concept:conceptEl?conceptEl.value.trim():'',paidDate:statusVal==='Paid'&&paidDateEl?paidDateEl.value:''};
   if(!obj.number){alert('Invoice number is required.');return;}
   if(!obj.dueDate && obj.status !== 'Pre-Invoice'){alert('Due date is required for non-Pre-Invoice invoices.');return;}
   if(id){Object.assign(data.invoices.find(i=>i.id===id),obj);toast('Invoice updated ✓');}
@@ -3885,6 +3901,8 @@ function openInvoiceDetail(id) {
     ${c?.email ? `<div class='detail-row'><span class='detail-label'>Client Email</span><span class='detail-val'><a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a></span></div>` : ''}
     <div class="detail-row"><span class="detail-label">CS Agent</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Invoice #</span><span class="detail-val" style="font-family:var(--mono)">${inv.number}</span></div>
+    ${inv.invoiceDate ? `<div class="detail-row"><span class="detail-label">Invoice Date</span><span class="detail-val">${fmtDate(inv.invoiceDate)}</span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">Credit Days</span><span class="detail-val">${inv.creditDays ? inv.creditDays + ' days' : '—'}</span></div>
     <div class="detail-row"><span class="detail-label">Due Date</span><span class="detail-val">${fmtDate(inv.dueDate)}</span></div>
     <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--red);font-weight:600">${fmtF(inv.amount)}</span></div>
     <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val">${statusBadge(inv.status)}${inv.status==='Overdue'?` <span style="font-size:11px;color:var(--red)">(${daysOver} days overdue)</span>`:''}</span></div>
