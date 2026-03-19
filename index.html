@@ -1993,6 +1993,7 @@ function renderInvoices() {
         <td><div style="display:flex;gap:5px;align-items:center">
           ${i.status!=='Paid'?`<button class="invoice-paid-btn" onclick="markPaid(${i.id},event)" title="Mark as Paid">✓ Paid</button>`:'<span style="font-size:12px;color:var(--green);font-weight:500">✓ Paid</span>'}
           <div class="row-actions">
+            <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice(${i.id},event)" title="Duplicate invoice">⧉</button>
             <button class="btn btn-ghost btn-sm" onclick="editInvoice(${i.id},event)">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="deleteItem('invoices',${i.id},event)">✕</button>
           </div>
@@ -5435,6 +5436,7 @@ function renderCfExpenseTable() {
     <td style="font-size:12px;color:var(--text-muted)">${e.recurring?'↺ Monthly':fmtDate(e.date)}</td>
     <td>${e.recurring?'<span class="badge badge-blue">Recurring</span>':'<span class="badge badge-gray">One-time</span>'}</td>
     <td><div class="row-actions">
+      <button class="btn btn-ghost btn-sm" onclick="duplicateCfExpense(${e.id})" title="Duplicate">⧉</button>
       <button class="btn btn-ghost btn-sm" onclick="openCfExpenseModal(${e.id})">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="deleteCfExpense(${e.id})">✕</button>
     </div></td>
@@ -5704,6 +5706,7 @@ function renderPnl() {
       <td style="padding:6px 16px;text-align:right;font-family:var(--mono,monospace);font-size:12px;color:var(--text-muted)">${fmtF(displayAmt)}</td>
       <td style="padding:6px 8px;text-align:right">
         <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="duplicatePnlLine(${l.id})" style="font-size:10px;padding:2px 6px" title="Duplicate to next month">⧉</button>
           <button class="btn btn-ghost btn-sm" onclick="editPnlLine(${l.id})" style="font-size:10px;padding:2px 6px">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deletePnlLine(${l.id})" style="font-size:10px;padding:2px 6px">✕</button>
         </div>
@@ -5861,6 +5864,77 @@ function exportPnlCSV() {
   const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'pnl.csv'});
   a.click(); URL.revokeObjectURL(a.href); toast('CSV exported ✓');
 }
+
+// ─── DUPLICATE HELPERS ────────────────────────────────────────────────────────
+
+function advanceOneMonth(dateStr) {
+  if (!dateStr) return dateStr;
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setMonth(d.getMonth() + 1);
+  return d.toISOString().split('T')[0];
+}
+
+function duplicateInvoice(id, event) {
+  if (event) event.stopPropagation();
+  const inv = data.invoices.find(i => i.id === id);
+  if (!inv) return;
+
+  // Build next invoice number
+  const nums = data.invoices.map(i => parseInt((i.number||'').replace(/\D/g,''))).filter(Boolean);
+  const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+  const prefix = (inv.number||'INV-').replace(/\d+$/, '');
+  const newNumber = prefix + String(nextNum).padStart(String(Math.max(...nums)).length || 4, '0');
+
+  const newInv = {
+    ...inv,
+    id: data.nextId++,
+    number: newNumber,
+    dueDate: advanceOneMonth(inv.dueDate),
+    status: 'Pre-Invoice',
+    statusLocked: false,
+    paidDate: null,
+    lastContact: null,
+    comments: []
+  };
+  data.invoices.push(newInv);
+  saveData();
+  renderPage(currentPage);
+  updateBadges();
+  toast('Invoice duplicated as ' + newNumber + ' ✓');
+}
+
+function duplicateCfExpense(id) {
+  const expenses = getCfExpenses();
+  const exp = expenses.find(e => e.id === id);
+  if (!exp) return;
+  const newExp = {
+    ...exp,
+    id: Date.now(),
+    date: exp.recurring ? null : advanceOneMonth(exp.date),
+    name: exp.name + ' (copy)'
+  };
+  expenses.push(newExp);
+  saveCfExpenses(expenses);
+  renderCashflow();
+  toast('Expense duplicated ✓');
+}
+
+function duplicatePnlLine(id) {
+  const lines = getPnlLines();
+  const line = lines.find(l => l.id === id);
+  if (!line) return;
+  const newLine = {
+    ...line,
+    id: Date.now(),
+    date: advanceOneMonth(line.date),
+    name: line.name + ' (copy)'
+  };
+  lines.push(newLine);
+  savePnlLines(lines);
+  renderPnl();
+  toast('Line duplicated to ' + (newLine.date || 'next month') + ' ✓');
+}
+
 
 (async()=>{
   // Always connect to Firebase with hardcoded config
