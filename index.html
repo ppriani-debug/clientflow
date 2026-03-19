@@ -5906,12 +5906,26 @@ function duplicateInvoice(id, event) {
   const padLen = Math.max(String(Math.max(...nums,1)).length, 4);
   const newNumber = prefix + String(nextNum).padStart(padLen, '0');
 
-  // Explicitly copy fields to avoid any accidental overrides
+  // Advance invoice date by 30 days; if none use today as base
+  const baseInvDate = inv.invoiceDate || new Date().toISOString().split('T')[0];
+  const newInvoiceDate = advanceOneMonth(baseInvDate);
+  // Recalculate due date: new invoice date + credit days if set, else advance due date
+  let newDueDate;
+  if (inv.creditDays > 0) {
+    const d = new Date(newInvoiceDate + 'T00:00:00');
+    d.setDate(d.getDate() + inv.creditDays);
+    newDueDate = d.toISOString().split('T')[0];
+  } else {
+    newDueDate = advanceOneMonth(inv.dueDate);
+  }
+
   const newInv = {
     id: ++data.nextId,
     clientId: inv.clientId,
     number: newNumber,
-    dueDate: advanceOneMonth(inv.dueDate),
+    invoiceDate: newInvoiceDate,
+    creditDays: inv.creditDays || 0,
+    dueDate: newDueDate,
     amount: inv.amount,
     status: 'Pre-Invoice',
     statusLocked: false,
