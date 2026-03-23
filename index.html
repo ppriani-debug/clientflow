@@ -3359,3 +3359,242 @@ function duplicateInvoice(id, event) {
 
   const baseInvDate = inv.invoiceDate || new Date().toISOString().split('T')[0];
   const newInvoiceDate = advanceOneMonth(baseInvDate);
+  let newDueDate;
+  if (inv.creditDays > 0) {
+    const d = new Date(newInvoiceDate + 'T00:00:00');
+    d.setDate(d.getDate() + inv.creditDays);
+    newDueDate = d.toISOString().split('T')[0];
+  } else {
+    newDueDate = advanceOneMonth(inv.dueDate);
+  }
+
+  const newInv = {
+    id: ++data.nextId,
+    clientId: inv.clientId,
+    number: newNumber,
+    invoiceDate: newInvoiceDate,
+    creditDays: inv.creditDays || 0,
+    dueDate: newDueDate,
+    amount: inv.amount,
+    status: 'Pre-Invoice',
+    statusLocked: false,
+    billingName: inv.billingName || '',
+    concept: inv.concept || '',
+    paidDate: null,
+    lastContact: null,
+    comments: [],
+    followupTo: inv.followupTo || ''
+  };
+  data.invoices.push(newInv);
+  saveData();
+  renderPage(currentPage);
+  updateBadges();
+  const clientName = data.clients.find(c=>c.id===inv.clientId)?.name || 'client';
+  toast('Duplicated as ' + newNumber + ' \u2014 ' + clientName + ' \u2713');
+}
+
+function duplicateCfExpense(id) {
+  const expenses = getCfExpenses();
+  const exp = expenses.find(e => e.id === id);
+  if (!exp) return;
+  const newExp = {
+    ...exp,
+    id: Date.now(),
+    date: exp.recurring ? null : advanceOneMonth(exp.date),
+    name: exp.name + ' (copy)'
+  };
+  expenses.push(newExp);
+  saveCfExpenses(expenses);
+  renderCashflow();
+  toast('Expense duplicated ✓');
+}
+
+function duplicatePnlLine(id) {
+  const lines = getPnlLines();
+  const line = lines.find(l => l.id === id);
+  if (!line) return;
+  const newLine = {
+    ...line,
+    id: Date.now(),
+    date: advanceOneMonth(line.date),
+    name: line.name + ' (copy)'
+  };
+  lines.push(newLine);
+  savePnlLines(lines);
+  renderPnl();
+  toast('Line duplicated to ' + (newLine.date || 'next month') + ' ✓');
+}
+
+
+// ─── UPSELL REPORT ────────────────────────────────────────────────────────────
+function buildUpsellReportText() {
+  if (!data.upsells) return 'No upsell data.';
+  const divider = '─'.repeat(36);
+  const now = new Date();
+  let t = `*📈 Upsell Pipeline Report*\n_${now.toLocaleDateString('es-MX', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}_\n\n${divider}\n\n`;
+
+  const active = data.upsells.filter(u => u.stage !== 'Won' && u.stage !== 'Lost');
+  const won    = data.upsells.filter(u => u.stage === 'Won');
+  const lost   = data.upsells.filter(u => u.stage === 'Lost');
+  const pipeline = active.reduce((s,u) => s + (u.value||0), 0);
+  const wonVal   = won.reduce((s,u) => s + (u.value||0), 0);
+
+  t += `*📊 Summary*\n`;
+  t += `   Active opportunities: *${active.length}* · Pipeline: *${fmt(pipeline)}*\n`;
+  t += `   Won: *${won.length}* · Value: *${fmt(wonVal)}*\n`;
+  t += `   Lost: *${lost.length}*\n\n${divider}\n\n`;
+
+  const stages = ['Identified','Contacted','Proposal','Negotiating'];
+  stages.forEach(stage => {
+    const items = active.filter(u => u.stage === stage);
+    if (!items.length) return;
+    const stageVal = items.reduce((s,u) => s + (u.value||0), 0);
+    t += `*${stage}* (${items.length} · ${fmt(stageVal)})\n`;
+    items.forEach(u => {
+      const c = data.clients.find(x => x.id === u.clientId);
+      const plans = Array.isArray(u.targetPlans) ? u.targetPlans.join(', ') : '';
+      const lc = u.lastContact ? Math.round((new Date()-new Date(u.lastContact))/86400000) : null;
+      t += `   • ${c?.name||'?'}${plans?' → '+plans:''}`;
+      t += ` · ${fmt(u.value||0)}`;
+      t += lc !== null ? ` · contact ${lc}d ago` : ' · no contact';
+      if (u.notes) t += `\n     _${u.notes}_`;
+      t += '\n';
+    });
+    t += '\n';
+  });
+
+  if (won.length) {
+    t += `*✅ Won*\n`;
+    won.forEach(u => {
+      const c = data.clients.find(x => x.id === u.clientId);
+      t += `   • ${c?.name||'?'} · ${fmt(u.value||0)}\n`;
+    });
+    t += '\n';
+  }
+
+  t += `${divider}\n_Sent from ClientFlow_`;
+  return t;
+}
+
+function buildUpsellReportHtml() {
+  if (!data.upsells || !data.upsells.length) {
+    return '<div class="empty-state" style="padding:32px"><div class="empty-icon">↑</div><div>No upsell opportunities yet</div></div>';
+  }
+
+  const active = data.upsells.filter(u => u.stage !== 'Won' && u.stage !== 'Lost');
+  const won    = data.upsells.filter(u => u.stage === 'Won');
+  const lost   = data.upsells.filter(u => u.stage === 'Lost');
+  const pipeline = active.reduce((s,u) => s + (u.value||0), 0);
+  const wonVal   = won.reduce((s,u) => s + (u.value||0), 0);
+
+  let html = `<div style="display:flex;gap:0;border-bottom:1px solid var(--border-soft)">
+    <div style="flex:1;padding:16px 20px;border-right:1px solid var(--border-soft)">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Active Pipeline</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--accent)">${fmt(pipeline)}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${active.length} opportunit${active.length!==1?'ies':'y'}</div>
+    </div>
+    <div style="flex:1;padding:16px 20px;border-right:1px solid var(--border-soft)">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Won</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--green)">${fmt(wonVal)}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${won.length} deal${won.length!==1?'s':''}</div>
+    </div>
+    <div style="flex:1;padding:16px 20px">
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Lost</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--red)">${lost.length}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">opportunit${lost.length!==1?'ies':'y'}</div>
+    </div>
+  </div>`;
+
+  const stages = ['Identified','Contacted','Proposal','Negotiating','Won'];
+  const stageColors = { Identified:'#6366f1', Contacted:'#2563eb', Proposal:'#d97706', Negotiating:'#ea580c', Won:'var(--green)' };
+
+  stages.forEach(stage => {
+    const items = data.upsells.filter(u => u.stage === stage);
+    if (!items.length) return;
+    const stageVal = items.reduce((s,u) => s + (u.value||0), 0);
+    html += `<div style="padding:10px 20px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${stageColors[stage]||'var(--text-muted)'};background:var(--bg)">${stage} — ${fmt(stageVal)}</div>`;
+    items.forEach(u => {
+      const c = data.clients.find(x => x.id === u.clientId);
+      const plans = Array.isArray(u.targetPlans) ? u.targetPlans.join(', ') : '';
+      const lc = u.lastContact ? Math.round((new Date()-new Date(u.lastContact))/86400000) : null;
+      const stale = lc === null || lc > 7;
+      html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border-soft)">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">${c?.name||'?'}${plans?` <span style="font-size:11px;color:var(--accent)">→ ${plans}</span>`:''}</div>
+          ${u.notes?`<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${u.notes}</div>`:''}
+        </div>
+        <div style="text-align:right;font-size:13px">
+          <div style="font-weight:600">${fmt(u.value||0)}</div>
+          <div style="font-size:11px;color:${stale?'var(--red)':'var(--green)'}">${lc!==null?lc+'d ago':'no contact'}</div>
+        </div>
+      </div>`;
+    });
+  });
+
+  return html;
+}
+
+(async()=>{
+  await initFirebase();
+  await loadSettings();
+
+  await loadData();
+  await loadEmailRecipients();
+  if (!data.upsells) data.upsells = [];
+  loadAutoAlertSettings();
+  startSchedTimer();
+  updateSchedBadge();
+  updateFinanceLockBtn();
+  renderFinanceLockSettings();
+  autoUpdateStatuses();
+  renderDashboard();
+  updateBadges();
+  const urgentCount = buildAlertItems().length;
+  const eb = document.getElementById('email-badge');
+  if (eb) { eb.textContent = urgentCount; eb.style.display = urgentCount ? 'inline' : 'none'; }
+  const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
+  const ub = document.getElementById('upsell-badge');
+  if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
+})();
+</script>
+
+<div id="finance-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)closeFinanceModal()">
+  <div style="background:var(--surface);border-radius:16px;padding:32px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div id="finance-modal-content"></div>
+  </div>
+</div>
+
+<div id="firebase-setup-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;padding:32px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:32px;margin-bottom:8px">🔥</div>
+      <div style="font-size:18px;font-weight:700;color:#1a1916">Connect to Firebase</div>
+      <div style="font-size:13px;color:#8a8580;margin-top:6px">To sync data between all users, paste your Firebase project config below.</div>
+    </div>
+    <div style="background:#f0f4ff;border-radius:8px;padding:12px 14px;font-size:12px;color:#2563eb;margin-bottom:20px;line-height:1.6">
+      <strong>How to get your config:</strong><br>
+      1. Go to <a href="https://console.firebase.google.com" target="_blank" style="color:#2563eb">console.firebase.google.com</a><br>
+      2. Create a project → Add Web App<br>
+      3. Copy the <code>firebaseConfig</code> object<br>
+      4. Enable Firestore in Build → Firestore Database<br>
+      5. Set rules to allow read/write (for team use)
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:#1a1916;display:block;margin-bottom:6px">Firebase Config (JSON)</label>
+      <textarea id="firebase-config-input" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}' style="width:100%;height:120px;border:1px solid #e8e5df;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box"></textarea>
+    </div>
+    <div id="firebase-setup-error" style="display:none;color:#c0392b;font-size:12px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="saveFirebaseConfig()" style="flex:1;background:#2563eb;color:white;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer">Connect</button>
+      <button onclick="skipFirebase()" style="background:#f0ede8;color:#8a8580;border:none;border-radius:8px;padding:12px 16px;font-size:13px;cursor:pointer">Use Local Only</button>
+    </div>
+  </div>
+</div>
+
+<div id="sync-indicator" style="position:fixed;bottom:16px;right:16px;background:white;border:1px solid #e8e5df;border-radius:20px;padding:6px 12px;font-size:11px;color:#8a8580;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:999;display:none">
+  <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#d1d5db"></div>
+  <div id="sync-label">Loading…</div>
+</div>
+
+</body>
+</html>
