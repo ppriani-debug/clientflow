@@ -4853,7 +4853,7 @@ async function executeSchedRule(rule, force = false) {
     try {
       if (rule.channels?.email) {
         if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured');
-        if (!getGasUrl()) throw new Error('No Google Apps Script URL — add it in Email Alerts → Settings');
+        if (!getWebhookUrl()) throw new Error('No Make.com Webhook URL — add it in Email Alerts → Settings');
         
         const result = await webhookSendEmail({ to: toEmail, subject: item.subject, text: item.body, html: item.htmlBody });
         sentTo.push(toEmail);
