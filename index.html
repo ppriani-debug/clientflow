@@ -2513,7 +2513,9 @@ async function geminiFetch(promptText, maxTokens=500) {
   const key = getGeminiKey();
   if (!key) throw new Error('No Gemini API key — ve a Email Alerts → Settings');
   
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+  // ¡Aquí está el cambio! Usando gemini-2.5-flash
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
