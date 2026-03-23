@@ -2603,7 +2603,6 @@ async function webhookSendEmail({ to, subject, text, html }) {
   if (!response.ok) throw new Error('Error al enviar al Webhook');
   return { status: 'success' };
 }
-
 async function sendTestEmail() {
   const url = getWebhookUrl();
   if (!url) { toast('No Webhook URL set ✗'); return; }
