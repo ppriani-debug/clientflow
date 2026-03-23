@@ -594,16 +594,16 @@
               <input class="form-input" id="gemini-api-key" type="password" placeholder="AIzaSy..." style="flex:1;font-family:var(--mono);font-size:12px">
               <button class="btn btn-ghost btn-sm" onclick="saveGeminiKey()">Save</button>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Consigue una gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a>.</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Consíguela gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a>.</div>
           </div>
           
           <div class="form-group" style="margin:0">
-            <label class="form-label">Google Apps Script URL <span style="color:var(--red)">*</span></label>
+            <label class="form-label">Make.com Webhook URL <span style="color:var(--red)">*</span></label>
             <div style="display:flex;gap:8px">
-              <input class="form-input" id="gas-url" placeholder="https://script.google.com/macros/s/.../exec" style="flex:1;font-size:12px">
-              <button class="btn btn-ghost btn-sm" onclick="saveGasUrl()">Save</button>
+              <input class="form-input" id="webhook-url" placeholder="https://hook.us1.make.com/..." style="flex:1;font-size:12px">
+              <button class="btn btn-ghost btn-sm" onclick="saveWebhookUrl()">Save</button>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">La URL de tu Web App de Google Apps Script para enviar correos.</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">URL generada por tu Custom Webhook en Make.</div>
           </div>
 
           <div class="form-group" style="margin:0">
@@ -612,8 +612,10 @@
               <input class="form-input" id="global-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="flex:1;font-size:12px">
               <button class="btn btn-ghost btn-sm" onclick="saveGlobalSlackWebhook()">Save</button>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Opcional para alertas internas en Slack.</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Opcional para alertas internas.</div>
           </div>
+
+        </div>
 
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -2460,7 +2462,7 @@ let generatedAlerts = [];
 
 // ─── API KEY & SETTINGS ──────────────────────────────────────────────────────
 function getGeminiKey() { return localStorage.getItem('gemini-api-key') || ''; }
-function getGasUrl() { return localStorage.getItem('gas-url') || ''; }
+function getWebhookUrl() { return localStorage.getItem('webhook-url') || ''; }
 
 function saveGeminiKey() {
   const val = document.getElementById('gemini-api-key').value.trim();
@@ -2468,11 +2470,11 @@ function saveGeminiKey() {
   localStorage.setItem('gemini-api-key', val);
   saveSettings(); restoreSettings(); toast('Gemini key saved ✓');
 }
-function saveGasUrl() {
-  const val = document.getElementById('gas-url').value.trim();
-  if (!val) { toast('Please enter the Web App URL ✗'); return; }
-  localStorage.setItem('gas-url', val);
-  saveSettings(); restoreSettings(); toast('GAS URL saved ✓');
+function saveWebhookUrl() {
+  const val = document.getElementById('webhook-url').value.trim();
+  if (!val) { toast('Please enter the Webhook URL ✗'); return; }
+  localStorage.setItem('webhook-url', val);
+  saveSettings(); restoreSettings(); toast('Webhook URL saved ✓');
 }
 function saveGlobalSlackWebhook() {
   const val = document.getElementById('global-slack-webhook').value.trim();
@@ -2483,27 +2485,27 @@ function saveGlobalSlackWebhook() {
 
 function restoreSettings() {
   const geminiKey = getGeminiKey();
-  const gasUrl = getGasUrl();
-  const webhook = localStorage.getItem('slack-webhook') || '';
+  const webhookUrl = getWebhookUrl();
+  const slackWebhook = localStorage.getItem('slack-webhook') || '';
 
   const s = id => document.getElementById(id);
   if (s('gemini-api-key')) s('gemini-api-key').value = geminiKey ? '••••••••••••••••' : '';
-  if (s('gas-url')) s('gas-url').value = gasUrl;
-  if (s('global-slack-webhook')) s('global-slack-webhook').value = webhook;
-  if (s('rdp-slack-webhook')) s('rdp-slack-webhook').value = webhook;
-  if (s('idp-slack-webhook')) s('idp-slack-webhook').value = webhook;
+  if (s('webhook-url')) s('webhook-url').value = webhookUrl;
+  if (s('global-slack-webhook')) s('global-slack-webhook').value = slackWebhook;
+  if (s('rdp-slack-webhook')) s('rdp-slack-webhook').value = slackWebhook;
+  if (s('idp-slack-webhook')) s('idp-slack-webhook').value = slackWebhook;
 
   const statusEl = s('settings-status');
   if (!statusEl) return;
   const badges = [
     geminiKey ? '✓ Gemini key set' : '✗ No Gemini key',
-    gasUrl ? '✓ Gmail Script ready' : '✗ GAS URL missing',
-    webhook ? '✓ Slack webhook set' : '○ No Slack webhook',
+    webhookUrl ? '✓ Make.com Webhook ready' : '✗ Webhook URL missing',
+    slackWebhook ? '✓ Slack webhook set' : '○ No Slack webhook',
   ];
   const colors = [
     geminiKey ? 'var(--green)' : 'var(--red)',
-    gasUrl ? 'var(--green)' : 'var(--amber)',
-    webhook ? 'var(--green)' : 'var(--text-muted)',
+    webhookUrl ? 'var(--green)' : 'var(--amber)',
+    slackWebhook ? 'var(--green)' : 'var(--text-muted)',
   ];
   statusEl.innerHTML = badges.map((b,i)=>`<span style="color:${colors[i]};margin-right:16px;font-size:12px">${b}</span>`).join('');
 }
@@ -2513,9 +2515,7 @@ async function geminiFetch(promptText, maxTokens=800) {
   const key = getGeminiKey();
   if (!key) throw new Error('No Gemini API key — ve a Email Alerts → Settings');
   
-  // Usamos el modelo gemini-1.5-flash que es el estándar estable
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-  
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2530,183 +2530,118 @@ async function geminiFetch(promptText, maxTokens=800) {
   return data.candidates[0].content.parts[0].text || '';
 }
 
-// ─── GOOGLE APPS SCRIPT EMAIL SEND ───────────────────────────────────────────
-async function gasSendEmail({ to, subject, text, html }) {
-  const url = getGasUrl();
-  if (!url) throw new Error('Falta la URL de Google Apps Script — ve a Settings');
+// ─── WEBHOOK EMAIL SEND (Make.com) ───────────────────────────────────────────
+async function webhookSendEmail({ to, subject, text, html }) {
+  const url = getWebhookUrl(); 
+  if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
   if (!to) throw new Error('No recipient email specified');
 
   const finalHtml = html || buildHtmlEmail(subject, text, "ClientFlow", null);
 
-  // El modo 'no-cors' evita el error "Failed to fetch" bloqueado por el navegador
-  await fetch(url, {
+  const response = await fetch(url, {
     method: 'POST',
-    mode: 'no-cors', 
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml })
   });
 
-  // Con no-cors no podemos leer la respuesta exacta de Google, asumimos éxito si no hay error de red
+  if (!response.ok) throw new Error('Error al enviar al Webhook');
   return { status: 'success' };
 }
-// Build rich HTML email with structured invoice/renewal data
+
+async function sendTestEmail() {
+  const url = getWebhookUrl();
+  if (!url) { toast('No Webhook URL set ✗'); return; }
+  const to = prompt('Send test email to:', 'tu_correo@gmail.com');
+  if (!to) return;
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await webhookSendEmail({
+      to,
+      subject: 'ClientFlow — Test Email ✓',
+      text: 'This is a test email from ClientFlow.\n\nIf you received this, el Webhook está configurado correctamente.'
+    });
+    toast('Test email sent to ' + to + ' ✓');
+  } catch(e) {
+    toast('Failed: ' + e.message + ' ✗');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '📧 Send Test Email'; }
+}
+
 function buildHtmlEmail(subject, text, fromName, meta) {
   const org = fromName || 'ClientFlow';
   const accentColor = (meta && meta.accentColor) || '#2563eb';
   const icon = (meta && meta.icon) || '';
-
-  const bodyText = text
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\n/g,'<br>');
-
+  const bodyText = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   const infoRows = (meta && meta.fields) ? meta.fields.map(f =>
-    '<tr>'
-    + '<td style="padding:8px 16px;font-size:12px;color:#8a8580;width:40%;border-bottom:1px solid #f0ede8;vertical-align:top">' + f.label + '</td>'
-    + '<td style="padding:8px 16px;font-size:13px;font-weight:' + (f.highlight?'700':'500') + ';color:' + (f.highlight?accentColor:'#1a1916') + ';border-bottom:1px solid #f0ede8">' + f.value + '</td>'
-    + '</tr>'
+    '<tr><td style="padding:8px 16px;font-size:12px;color:#8a8580;width:40%;border-bottom:1px solid #f0ede8;vertical-align:top">' + f.label + '</td>'
+    + '<td style="padding:8px 16px;font-size:13px;font-weight:' + (f.highlight?'700':'500') + ';color:' + (f.highlight?accentColor:'#1a1916') + ';border-bottom:1px solid #f0ede8">' + f.value + '</td></tr>'
   ).join('') : '';
+  const infoTable = infoRows ? ('<table style="width:100%;border-collapse:collapse;background:#f7f6f3;border-radius:8px;overflow:hidden;margin:20px 0">' + infoRows + '</table>') : '';
 
-  const infoTable = infoRows ? (
-    '<table style="width:100%;border-collapse:collapse;background:#f7f6f3;border-radius:8px;overflow:hidden;margin:20px 0">'
-    + infoRows
-    + '</table>'
-  ) : '';
-
-  return '<!DOCTYPE html>'
-    + '<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
     + '<body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;background:#f4f4f5;margin:0;padding:0">'
     + '<div style="max-width:560px;margin:32px auto;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">'
     + '<div style="background:' + accentColor + ';padding:24px 28px">'
     + '<div style="font-size:18px;font-weight:700;color:white;letter-spacing:-0.3px">' + icon + (icon?' ':'') + org + '</div>'
-    + '<div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px">' + subject + '</div>'
-    + '</div>'
-    + '<div style="padding:28px">'
-    + '<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1916">' + bodyText + '</p>'
-    + infoTable
-    + '</div>'
+    + '<div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px">' + subject + '</div></div>'
+    + '<div style="padding:28px"><p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1916">' + bodyText + '</p>' + infoTable + '</div>'
     + '<div style="padding:16px 28px;background:#f7f6f3;border-top:1px solid #e8e5df">'
-    + '<p style="margin:0;font-size:11px;color:#8a8580">Sent by ' + org + '</p>'
-    + '</div>'
-    + '</div></body></html>';
+    + '<p style="margin:0;font-size:11px;color:#8a8580">Sent by ' + org + '</p></div></div></body></html>';
 }
 
-// Shared Slack send
 async function slackSend(webhook, text) {
-  if (!webhook || !webhook.startsWith('https://hooks.slack.com')) throw new Error('Invalid Slack webhook URL — paste it in Email Alerts → Settings');
-  await fetch(webhook, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text })
-  });
+  if (!webhook || !webhook.startsWith('https://hooks.slack.com')) throw new Error('Invalid Slack webhook URL');
+  await fetch(webhook, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
 }
 
-async function loadEmailRecipients() {
-  try { const r = await storage.get('clientflow-recipients'); if(r?.value) emailRecipients = JSON.parse(r.value); } catch(e){}
-}
-async function saveEmailRecipients() {
-  try { await storage.set('clientflow-recipients', JSON.stringify(emailRecipients)); } catch(e){}
-}
-
+async function loadEmailRecipients() { try { const r = await storage.get('clientflow-recipients'); if(r?.value) emailRecipients = JSON.parse(r.value); } catch(e){} }
+async function saveEmailRecipients() { try { await storage.set('clientflow-recipients', JSON.stringify(emailRecipients)); } catch(e){} }
 function addRecipient() {
   const input = document.getElementById('recipient-input');
   const val = input.value.trim().toLowerCase();
   if (!val || !val.includes('@')) { toast('Please enter a valid email ✗'); return; }
   if (emailRecipients.includes(val)) { toast('Already added ✗'); return; }
-  emailRecipients.push(val);
-  saveEmailRecipients();
-  input.value = '';
-  renderRecipientsList();
-  toast('Recipient added ✓');
+  emailRecipients.push(val); saveEmailRecipients(); input.value = ''; renderRecipientsList(); toast('Recipient added ✓');
 }
-
-function removeRecipient(email) {
-  emailRecipients = emailRecipients.filter(e=>e!==email);
-  saveEmailRecipients();
-  renderRecipientsList();
-}
-
+function removeRecipient(email) { emailRecipients = emailRecipients.filter(e=>e!==email); saveEmailRecipients(); renderRecipientsList(); }
 function renderRecipientsList() {
   const el = document.getElementById('recipients-list');
   if (!el) return;
-  el.innerHTML = emailRecipients.length
-    ? emailRecipients.map(e=>`<div class="recipient-tag">✉ ${e}<button onclick="removeRecipient('${e}')" title="Remove">✕</button></div>`).join('')
-    : `<div style="font-size:12px;color:var(--text-soft);padding:4px 0">No recipients added yet.</div>`;
+  el.innerHTML = emailRecipients.length ? emailRecipients.map(e=>`<div class="recipient-tag">✉ ${e}<button onclick="removeRecipient('${e}')" title="Remove">✕</button></div>`).join('') : `<div style="font-size:12px;color:var(--text-soft);padding:4px 0">No recipients added yet.</div>`;
 }
 
-function renderEmailAlerts() {
-  renderRecipientsList();
-  if (generatedAlerts.length) renderAlertCards();
-}
+function renderEmailAlerts() { renderRecipientsList(); if (generatedAlerts.length) renderAlertCards(); }
 
 function buildAlertItems() {
   const items = [];
   data.renewals.forEach(r => {
-    const d = daysUntil(r.date);
-    const c = data.clients.find(x=>x.id===r.clientId);
-    const latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
-    if (r.status === 'Overdue') {
-      items.push({ type:'urgent', label:'Renewal Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} was due ${fmtDate(r.date)} (${Math.abs(d)} days ago)`, amount: fmt(r.amount), id: 'r-'+r.id, latestComment });
-    } else if (r.status === 'Due Soon' || (d >= 0 && d <= 14)) {
-      items.push({ type:'renewal', label:'Renewal Due Soon', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} renews ${fmtDate(r.date)} (in ${d} days)`, amount: fmt(r.amount), id: 'r-'+r.id, latestComment });
-    }
-    // Stale contact
+    const d = daysUntil(r.date); const c = data.clients.find(x=>x.id===r.clientId); const latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
+    if (r.status === 'Overdue') items.push({ type:'urgent', label:'Renewal Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} was due ${fmtDate(r.date)} (${Math.abs(d)} days ago)`, amount: fmt(r.amount), id: 'r-'+r.id, latestComment });
+    else if (r.status === 'Due Soon' || (d >= 0 && d <= 14)) items.push({ type:'renewal', label:'Renewal Due Soon', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} renews ${fmtDate(r.date)} (in ${d} days)`, amount: fmt(r.amount), id: 'r-'+r.id, latestComment });
     const daysSince = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
-    if (r.status !== 'Renewed' && (!r.lastContact || daysSince > 7)) {
-      items.push({ type:'stale', label:'No Recent Contact', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} · last contact ${r.lastContact ? daysSince+' days ago' : 'never recorded'}`, amount: '', id: 'stale-'+r.id, renewalId: r.id, latestComment });
-    }
+    if (r.status !== 'Renewed' && (!r.lastContact || daysSince > 7)) items.push({ type:'stale', label:'No Recent Contact', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${r.type} · last contact ${r.lastContact ? daysSince+' days ago' : 'never recorded'}`, amount: '', id: 'stale-'+r.id, renewalId: r.id, latestComment });
   });
   data.invoices.forEach(i => {
-    const d = daysUntil(i.dueDate);
-    const c = data.clients.find(x=>x.id===i.clientId);
-    const latestComment = (i.comments||[]).slice(-1)[0]?.text || '';
+    const d = daysUntil(i.dueDate); const c = data.clients.find(x=>x.id===i.clientId); const latestComment = (i.comments||[]).slice(-1)[0]?.text || '';
     if (i.status === 'Pre-Invoice') return;
-    if (i.status === 'Overdue') {
-      items.push({ type:'urgent', label:'Invoice Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} was due ${fmtDate(i.dueDate)} (${Math.abs(d)} days ago)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
-    } else if (i.status === 'Pending' && d >= 0 && d <= 7) {
-      items.push({ type:'warning', label:'Invoice Due Soon', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} is due ${fmtDate(i.dueDate)} (in ${d} days)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
-    }
+    if (i.status === 'Overdue') items.push({ type:'urgent', label:'Invoice Overdue', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} was due ${fmtDate(i.dueDate)} (${Math.abs(d)} days ago)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
+    else if (i.status === 'Pending' && d >= 0 && d <= 7) items.push({ type:'warning', label:'Invoice Due Soon', client: c?.name||'Unknown', contact: c?.contact||'', email: c?.email||'', detail: `${i.number} is due ${fmtDate(i.dueDate)} (in ${d} days)`, amount: fmt(i.amount), id: 'i-'+i.id, latestComment });
   });
   return items;
 }
 
 async function generateAllAlerts() {
   const items = buildAlertItems();
-  if (!items.length) {
-    document.getElementById('email-alerts-content').innerHTML = `<div class="no-alerts-msg"><div style="font-size:28px;margin-bottom:8px">🎉</div><div style="font-weight:500">All clear!</div><div style="font-size:12px;margin-top:4px">No overdue or due-soon items require alerts right now.</div></div>`;
-    return;
-  }
-  generatedAlerts = items.map(item => {
-    const subject = `${item.label} — ${item.client}`;
-    const commentLine = item.latestComment ? `\n\nLatest note: ${item.latestComment}` : '';
-    const body = `${item.detail}${item.amount ? '\nAmount: ' + item.amount : ''}${commentLine}`;
-    return { ...item, subject, body, loading: false };
-  });
+  if (!items.length) { document.getElementById('email-alerts-content').innerHTML = `<div class="no-alerts-msg"><div style="font-size:28px;margin-bottom:8px">🎉</div><div style="font-weight:500">All clear!</div></div>`; return; }
+  generatedAlerts = items.map(item => { return { ...item, subject: `${item.label} — ${item.client}`, body: `${item.detail}${item.amount ? '\nAmount: ' + item.amount : ''}`, loading: false }; });
   renderAlertCards();
 }
 
-function generateEmailForAlert() {} // no-op
-
 async function regenerateAlert(idx) {
   const a = generatedAlerts[idx];
-  let latestComment = a.latestComment || '';
-  if (a.id && a.id.startsWith('r-')) {
-    const rid = parseInt(a.id.replace('r-',''));
-    const r = data.renewals.find(x=>x.id===rid);
-    if (r) latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
-  } else if (a.id && a.id.startsWith('stale-')) {
-    const rid = parseInt(a.id.replace('stale-',''));
-    const r = data.renewals.find(x=>x.id===rid);
-    if (r) latestComment = (r.comments||[]).slice(-1)[0]?.text || '';
-  } else if (a.id && a.id.startsWith('i-')) {
-    const iid = parseInt(a.id.replace('i-',''));
-    const inv = data.invoices.find(x=>x.id===iid);
-    if (inv) latestComment = (inv.comments||[]).slice(-1)[0]?.text || '';
-  }
-  const commentLine = latestComment ? `\n\nLatest note: ${latestComment}` : '';
-  generatedAlerts[idx] = { ...a, latestComment, body: `${a.detail}${a.amount ? '\nAmount: ' + a.amount : ''}${commentLine}`, loading: false };
-  renderAlertCards();
-  toast('Refreshed from latest data ✓');
+  generatedAlerts[idx] = { ...a, loading: false };
+  renderAlertCards(); toast('Refreshed ✓');
 }
 
 function renderAlertCards() {
@@ -2719,86 +2654,141 @@ function renderAlertCards() {
       <div style="font-size:13px;color:var(--text-muted)">${generatedAlerts.length} alert${generatedAlerts.length!==1?'s':''} generated</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${recipientTo ? `<button class="btn btn-primary btn-sm" onclick="sendAllEmails()">✉ Send All Email</button>` : `<span style="font-size:12px;color:var(--amber)">⚠ Add recipients to enable email</span>`}
-        ${webhook ? `<button class="btn btn-success btn-sm" onclick="sendAllSlack()">💬 Send All to Slack</button>` : `<span style="font-size:12px;color:var(--text-muted)">○ Add Slack webhook to enable Slack</span>`}
+        ${webhook ? `<button class="btn btn-success btn-sm" onclick="sendAllSlack()">💬 Send All to Slack</button>` : ``}
       </div>
     </div>
     <div class="alert-cards-grid">
       ${generatedAlerts.map((a,i) => `
         <div class="alert-card ${a.type}" id="alert-card-${i}">
           <div class="alert-card-header">
-            <div>
-              <div class="alert-card-title">${a.label}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">${a.client} · ${a.amount}</div>
-            </div>
+            <div><div class="alert-card-title">${a.label}</div><div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">${a.client} · ${a.amount}</div></div>
             <span class="badge ${a.type==='urgent'?'badge-red':a.type==='warning'?'badge-amber':a.type==='stale'?'badge-purple':'badge-blue'}">${a.type==='urgent'?'Urgent':a.type==='warning'?'Warning':a.type==='stale'?'Stale':'Renewal'}</span>
           </div>
-          <div class="alert-card-body" id="alert-body-${i}">
-            ${a.loading ? `<div class="generating-pulse"><div class="dot-pulse"></div> Drafting message…</div>` : escapeHtml(a.body)}
-          </div>
+          <div class="alert-card-body" id="alert-body-${i}">${escapeHtml(a.body)}</div>
           <div class="alert-card-footer">
-            ${a.loading ? '' : `
-              <button class="btn btn-ghost btn-sm" onclick="copyAlert(${i})">⎘ Copy</button>
-              ${recipientTo ? `<button class="btn btn-primary btn-sm" onclick="sendSingleEmail(${i})">✉ Email</button>` : ''}
-              ${webhook ? `<button class="btn btn-success btn-sm" onclick="sendSingleSlack(${i})">💬 Slack</button>` : ''}
-              <button class="btn btn-ghost btn-sm" onclick="regenerateAlert(${i})">↺</button>
-            `}
+            <button class="btn btn-ghost btn-sm" onclick="copyAlert(${i})">⎘ Copy</button>
+            ${recipientTo ? `<button class="btn btn-primary btn-sm" onclick="sendSingleEmail(${i})">✉ Email</button>` : ''}
+            ${webhook ? `<button class="btn btn-success btn-sm" onclick="sendSingleSlack(${i})">💬 Slack</button>` : ''}
           </div>
         </div>`).join('')}
     </div>`;
 }
 
 function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
-
-function copyAlert(idx) {
-  const a = generatedAlerts[idx];
-  const text = `Subject: ${a.subject}\n\n${a.body}`;
-  navigator.clipboard.writeText(text).then(()=>toast('Email copied to clipboard ✓')).catch(()=>toast('Copy failed — try manually ✗'));
-}
+function copyAlert(idx) { const a = generatedAlerts[idx]; navigator.clipboard.writeText(`Subject: ${a.subject}\n\n${a.body}`).then(()=>toast('Copied ✓')); }
 
 async function sendSingleEmail(idx) {
   const a = generatedAlerts[idx];
-  const to = emailRecipients.join(',');
-
-  try {
-    await gasSendEmail({ to, subject: a.subject, text: a.body });
-    toast(`Email sent for ${a.client} ✓`);
-  } catch(e) {
-    toast(e.message || 'Send failed ✗');
-  }
+  try { await webhookSendEmail({ to: emailRecipients.join(','), subject: a.subject, text: a.body }); toast(`Email sent ✓`); } catch(e) { toast(e.message || 'Send failed ✗'); }
 }
-
 async function sendAllEmails() {
-  if (!emailRecipients.length) { toast('Add at least one recipient first ✗'); return; }
+  if (!emailRecipients.length) return;
   const ready = generatedAlerts.filter(a=>!a.loading);
-  if (!ready.length) { toast('Emails still generating…'); return; }
-  const to = emailRecipients.join(',');
   let sent = 0, failed = 0;
-  for (const a of ready) {
-    try { await gasSendEmail({ to, subject: a.subject, text: a.body }); sent++; }
-    catch(e) { failed++; }
-  }
+  for (const a of ready) { try { await webhookSendEmail({ to: emailRecipients.join(','), subject: a.subject, text: a.body }); sent++; } catch(e) { failed++; } }
   toast(`${sent} sent${failed ? `, ${failed} failed` : ''} ✓`);
 }
-
 async function sendSingleSlack(idx) {
   const a = generatedAlerts[idx];
-  const webhook = localStorage.getItem('slack-webhook') || '';
-  try {
-    await slackSend(webhook, `*${a.label} — ${a.client}*\n${a.body}${a.amount ? `\n_${a.amount}_` : ''}`);
-    toast(`Slack sent for ${a.client} ✓`);
-  } catch(e) { toast(e.message || 'Slack send failed ✗'); }
+  try { await slackSend(localStorage.getItem('slack-webhook'), `*${a.label} — ${a.client}*\n${a.body}`); toast(`Slack sent ✓`); } catch(e) { toast('Slack send failed ✗'); }
+}
+async function sendAllSlack() {
+  const ready = generatedAlerts.filter(a=>!a.loading);
+  let sent = 0;
+  for (const a of ready) { try { await slackSend(localStorage.getItem('slack-webhook'), `*${a.label} — ${a.client}*\n${a.body}`); sent++; } catch(e) {} }
+  toast(`${sent} sent to Slack ✓`);
 }
 
-async function sendAllSlack() {
-  const webhook = localStorage.getItem('slack-webhook') || '';
-  const ready = generatedAlerts.filter(a=>!a.loading);
-  if (!ready.length) { toast('Messages still generating…'); return; }
-  let sent = 0, failed = 0;
-  for (const a of ready) {
-    try { await slackSend(webhook, `*${a.label} — ${a.client}*\n${a.body}${a.amount ? `\n_${a.amount}_` : ''}`); sent++; }
-    catch(e) { failed++; }
-  }
-  toast(`${sent} sent to Slack${failed ? `, ${failed} failed` : ''} ✓`);
+// ─── GENERATE AI FUNCTIONS ───────────────────────────────────────────────────
+async function generateRenewalAlert() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const c = data.clients.find(x=>x.id===r?.clientId);
+  if (!r || !c) return;
+  const genBtn = document.getElementById('rdp-gen-btn');
+  if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generando…'; }
+  const prompt = `Eres un gerente de cuentas. Escribe SOLO el cuerpo del correo en español al cliente sobre su próxima renovación. No incluyas "Asunto:".
+  Cliente: ${c.name} | Servicio: ${r.type} | Fecha: ${fmtDate(r.date)} | Monto: ${fmt(r.amount)}`;
+  try {
+    const msg = await geminiFetch(prompt, 400);
+    document.getElementById('rdp-msg-text').value = msg.trim();
+    document.getElementById('rdp-generated-msg').style.display = 'block';
+    document.getElementById('rdp-send-email-btn').style.display = 'inline-flex';
+    document.getElementById('rdp-send-slack-btn').style.display = 'inline-flex';
+  } catch(e) { toast('Error de IA ✗'); }
+  if (genBtn) { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Message'; }
+}
+
+async function generateInvoiceFollowup() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  if (!inv || !c) return;
+  const btn = document.getElementById('idp-gen-btn');
+  btn.disabled = true; btn.textContent = 'Generando…';
+  const prompt = `Eres un ejecutivo de cobranza. Escribe SOLO el cuerpo del correo en español para cobrar una factura vencida. No incluyas "Asunto:".
+  Cliente: ${c.name} | Factura: ${inv.number} | Monto: ${fmt(inv.amount)} | Venció: ${fmtDate(inv.dueDate)}`;
+  try {
+    const text = await geminiFetch(prompt, 400);
+    const toVal = document.getElementById('idp-email-to').value.trim();
+    if (toVal) { const inv2 = data.invoices.find(x=>x.id===activeInvoiceId); if(inv2) { inv2.followupTo=toVal; saveData(); } }
+    document.getElementById('idp-msg-text').value = text.trim();
+    document.getElementById('idp-generated-msg').style.display = 'block';
+    document.getElementById('idp-send-email-btn').style.display = 'inline-flex';
+    document.getElementById('idp-send-slack-btn').style.display = 'inline-flex';
+  } catch(e) { toast('Error de IA ✗'); }
+  btn.disabled = false; btn.textContent = '⚡ Generate Message';
+}
+
+async function sendInvoiceEmail() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  const to = document.getElementById('idp-email-to').value.trim();
+  const msg = document.getElementById('idp-msg-text').value.trim();
+  if (!msg) { toast('Generate a message first ✗'); return; }
+  const btn = document.getElementById('idp-send-email-btn');
+  const statusEl = document.getElementById('idp-sending-status');
+  btn.disabled = true; statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+  const subject = `Recordatorio de Pago: ${inv?.number} — ${c?.name}`;
+  const html = buildHtmlEmail(subject, msg, "ClientFlow", { icon: '⚠️', accentColor: '#dc2626', fields: [ { label: 'Cliente', value: c?.name||'—' }, { label: 'Factura #', value: inv?.number||'—' }, { label: 'Monto a Pagar', value: fmtF(inv?.amount), highlight: true }, { label: 'Vencimiento', value: fmtDate(inv?.dueDate) } ]});
+  try {
+    await webhookSendEmail({ to, subject, text: msg, html });
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; toast('Email sent ✓');
+  } catch(e) { statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; toast('Email failed ✗'); }
+  btn.disabled = false;
+}
+
+async function sendRenewalEmail() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const c = data.clients.find(x=>x.id===r?.clientId);
+  const to = document.getElementById('rdp-email-to').value.trim();
+  const msg = document.getElementById('rdp-msg-text').value.trim();
+  if (!msg) { toast('Generate a message first ✗'); return; }
+  const btn = document.getElementById('rdp-send-email-btn');
+  const statusEl = document.getElementById('rdp-sending-status');
+  btn.disabled = true; statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+  const subject = `Renovación: ${c?.name} — ${r?.type}`;
+  const html = buildHtmlEmail(subject, msg, "ClientFlow", { icon: '↻', accentColor: '#2563eb', fields: [ { label: 'Cliente', value: c?.name||'—' }, { label: 'Servicio', value: r?.type||'—' }, { label: 'Monto', value: fmtF(r?.amount), highlight: true }, { label: 'Fecha', value: fmtDate(r?.date) } ]});
+  try {
+    await webhookSendEmail({ to, subject, text: msg, html });
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; toast('Email sent ✓');
+  } catch(e) { statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; toast('Email failed ✗'); }
+  btn.disabled = false;
+}
+
+async function sendInvoiceSlack() {
+  const webhook = document.getElementById('idp-slack-webhook').value.trim() || localStorage.getItem('slack-webhook') || '';
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  const msg = document.getElementById('idp-msg-text').value.trim();
+  const statusEl = document.getElementById('idp-sending-status');
+  try { await slackSend(webhook, `*Cobranza — ${c?.name}*\n${msg}\n\n_Factura ${inv?.number} · ${fmtF(inv?.amount)}_`); statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack</span>'; } catch(e) { statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ Error</span>`; }
+}
+async function sendRenewalSlack() {
+  const webhook = document.getElementById('rdp-slack-webhook').value.trim() || localStorage.getItem('slack-webhook') || '';
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  const c = data.clients.find(x=>x.id===r?.clientId);
+  const msg = document.getElementById('rdp-msg-text').value.trim();
+  const statusEl = document.getElementById('rdp-sending-status');
+  try { await slackSend(webhook, `*Renovación — ${c?.name}*\n${msg}\n\n_${r?.type} · ${fmtF(r?.amount)}_`); statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack</span>'; } catch(e) { statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ Error</span>`; }
 }
 
 // ─── AUTO-ALERT SCHEDULER ────────────────────────────────────────────────────
