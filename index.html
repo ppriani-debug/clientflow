@@ -2386,17 +2386,19 @@ async function sendReportSlack(type) {
 }
 
 async function sendReportEmail(type) {
-  const url = getGasUrl();
-  if (!url) { toast('Configure Google Apps Script URL in Email Alerts → Settings first'); return; }
+  // 1. Get the new Make.com Webhook URL instead of the old GAS one
+  const url = getWebhookUrl();
+  if (!url) { toast('Configure Make.com Webhook URL in Email Alerts → Settings first'); return; }
 
   const labels = { invoices: 'Invoice', renewals: 'Renewal', upsells: 'Upsell Pipeline' };
   const label = labels[type] || type;
   const subject = `${label} Report — ${new Date().toLocaleDateString()}`;
+  
   const text = type === 'invoices' ? buildInvoiceReportText()
              : type === 'upsells'  ? buildUpsellReportText()
              : buildRenewalReportText();
 
-  // Default to global recipients, allow override
+  // Default to your global recipients, but allow you to type a different one
   const defaultTo = emailRecipients.join(', ');
   const toInput = prompt(`Send ${label} Report to (comma-separated for multiple):`, defaultTo);
   if (!toInput) return;
@@ -2407,6 +2409,7 @@ async function sendReportEmail(type) {
   let sent = 0;
   for (const to of recipients) {
     try {
+      // 2. Send via the Make.com Webhook
       await webhookSendEmail({ to, subject, text });
       sent++;
     } catch(e) {
