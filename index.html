@@ -2207,6 +2207,7 @@ function renderBankAccounts() {
 }
 
 // ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
+// ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
 function buildInvoiceReportText() {
   const now = new Date();
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
@@ -2230,11 +2231,8 @@ function buildInvoiceReportText() {
   };
 
   let t = '';
-  t += `*📊 Reporte Ejecutivo*\n`;
-  t += `Información al: ${dateStr}\n`;
-  t += `${divider}\n\n`;
+  t += `*📊 Reporte Ejecutivo*\nInformación al: ${dateStr}\n${divider}\n\n`;
 
-  // Bank balances first
   if (accounts.length) {
     t += `*🏦 Disponibilidad en Bancos*\n`;
     const fxRates = getFxRates();
@@ -2246,12 +2244,9 @@ function buildInvoiceReportText() {
     });
     const totalMXN = accounts.reduce((s,a) => s + toMXN(a.balance, a.currency), 0);
     const hasForeign = accounts.some(a => a.currency !== 'MXN');
-    t += `   ${'─'.repeat(34)}\n`;
-    t += `   *TOTAL DISPONIBLE: ${fmt(totalMXN)} MXN*${hasForeign ? ' _(convertido a MXN)_' : ''}\n`;
-    t += `\n${divider}\n\n`;
+    t += `   ${'─'.repeat(34)}\n   *TOTAL DISPONIBLE: ${fmt(totalMXN)} MXN*${hasForeign ? ' _(convertido a MXN)_' : ''}\n\n${divider}\n\n`;
   }
 
-  // Top debtors (pending/due soon) sorted by amount desc
   const pendingGroups = groupByClient(pending);
   t += `*🔔 Top Clientes por Cobrar*\n`;
   if (pendingGroups.length) {
@@ -2263,19 +2258,15 @@ function buildInvoiceReportText() {
       t += `   ${idx+1}. *${g.name}* |  Vence: ${soonest?.dueDate?fmtDate(soonest.dueDate):'—'} (${dLabel})  |  *${fmt(g.total)}*\n`;
     });
   } else { t += `   _Sin facturas pendientes._\n`; }
-
   t += `\n${divider}\n\n`;
 
-  // Pre-invoices (only if any)
   const preGroups = groupByClient(preinvoices);
   if (preGroups.length) {
-    t += `*🟣 Pre-Facturas (Proyectadas)*\n`;
-    t += `_${preGroups.length} cliente${preGroups.length!==1?'s':''} · Total proyectado: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))}_\n\n`;
+    t += `*🟣 Pre-Facturas (Proyectadas)*\n_${preGroups.length} cliente${preGroups.length!==1?'s':''} · Total proyectado: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))}_\n\n`;
     preGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}* |  *${fmt(g.total)}*\n`);
     t += `\n${divider}\n\n`;
   }
 
-  // Overdue — with days past due, total at bottom
   const overdueGroups = groupByClient(overdue);
   t += `*⚠️ Facturas Vencidas Acumuladas*\n`;
   if (overdueGroups.length) {
@@ -2285,24 +2276,19 @@ function buildInvoiceReportText() {
       const days = oldest?.dueDate ? Math.abs(daysUntil(oldest.dueDate)) : null;
       t += `   ${idx+1}. *${g.name}* |  Atraso: ${days!==null?days+' día'+(days!==1?'s':''):'—'}  |  *${fmt(g.total)}*\n`;
     });
-    t += `   ${'─'.repeat(34)}\n`;
-    t += `   *TOTAL VENCIDO GENERAL: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))}*\n`;
+    t += `   ${'─'.repeat(34)}\n   *TOTAL VENCIDO GENERAL: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))}*\n`;
   } else { t += `   _Sin facturas vencidas. ✅_\n`; }
-
   t += `\n${divider}\n\n`;
 
-  // Payments this month
   const paidGroups = groupByClient(paidThisMonth);
   t += `*✅ Pagos Recibidos — ${monthName}*\n`;
   if (paidGroups.length) {
     t += `\n`;
     paidGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}* |  *${fmt(g.total)}*\n`);
-    t += `   ${'─'.repeat(34)}\n`;
-    t += `   *TOTAL RECIBIDO: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))}*\n`;
+    t += `   ${'─'.repeat(34)}\n   *TOTAL RECIBIDO: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))}*\n`;
   } else { t += `   _No hay pagos este mes._\n`; }
 
-  t += `\n${divider}\n`;
-  t += `_Reporte generado por ClientFlow_`;
+  t += `\n${divider}\n_Reporte generado por ClientFlow_`;
   return t;
 }
 
@@ -2321,8 +2307,7 @@ function buildRenewalReportText() {
     const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
     const lcLabel = !r.lastContact ? 'never contacted ⚠️' : lc === 0 ? 'today' : lc === 1 ? 'yesterday' : `${lc}d ago${lc>7?' ⚠️':''}`;
     const lastComment = (r.comments||[]).slice(-1)[0]?.text || '';
-    let entry = `   ${idx+1}. ${rc?.name||'Unknown'} — ${r.type}\n`;
-    entry += `      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
+    let entry = `   ${idx+1}. ${rc?.name||'Unknown'} — ${r.type}\n      Date: ${fmtDate(r.date)} (${dLabel}) | Amount: ${fmt(r.amount)} | Last contact: ${lcLabel}\n`;
     if (lastComment) entry += `      💬 ${lastComment}\n`;
     return entry;
   };
@@ -2338,10 +2323,7 @@ function buildRenewalReportText() {
   const pipeline = data.renewals.filter(r=>r.status!=='Renewed').reduce((s,r)=>s+r.amount,0);
   const staleTotal = data.renewals.filter(r=>{const lc=r.lastContact?Math.round((new Date()-new Date(r.lastContact))/86400000):null;return r.status!=='Renewed'&&(!r.lastContact||lc>7);}).length;
 
-  let t = '';
-  t += `🔄 RENEWAL REPORT\n`;
-  t += `${dateStr}\n`;
-  t += `${divider}\n`;
+  let t = `🔄 RENEWAL REPORT\n${dateStr}\n${divider}\n`;
   const pipelineCount = data.renewals.filter(r=>r.status!=='Renewed').length;
   t += `💰 Active Pipeline: ${fmt(pipeline)} (${pipelineCount} renewal${pipelineCount!==1?'s':''})`;
   if (staleTotal) t += ` | ⚠️ ${staleTotal} with no recent contact`;
@@ -2372,6 +2354,7 @@ function buildRenewalReportText() {
   t += `Report generated by ClientFlow`;
   return t;
 }
+
 async function sendReportSlack(type) {
   const webhook = localStorage.getItem('slack-webhook') || '';
   if (!webhook) { toast('No Slack webhook configured — add it in Email Alerts → Settings'); return; }
@@ -2385,22 +2368,93 @@ async function sendReportSlack(type) {
   } catch(e) { toast('Slack send failed: ' + e.message); }
 }
 
+function buildInvoiceReportHtml() {
+  const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+  
+  let html = `<table style="width:100%; border-collapse:collapse; margin-top:24px; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
+  html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; letter-spacing:0.5px; font-size:11px;">
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Factura</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Vencimiento</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:center;">Estatus</th>
+  </tr></thead><tbody>`;
+
+  const drawRow = (i, isOverdue) => {
+    const c = data.clients.find(x=>x.id===i.clientId);
+    const color = isOverdue ? '#dc2626' : '#d97706';
+    const statusText = isOverdue ? 'Vencida' : 'Pendiente';
+    html += `<tr>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; font-weight:500; color:#1a1916;">${c?.name||'Unknown'}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; color:#8a8580;">${i.number}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:600; color:${isOverdue?'#dc2626':'#1a1916'};">${fmt(i.amount)}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; color:#8a8580;">${fmtDate(i.dueDate)}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:center;"><span style="background-color:${isOverdue?'#fef2f2':'#fffbeb'}; color:${color}; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:600;">${statusText}</span></td>
+    </tr>`;
+  };
+
+  if(overdue.length) {
+    html += `<tr><td colspan="5" style="padding:16px 12px 8px; font-size:12px; font-weight:bold; color:#dc2626; text-transform:uppercase;">⚠️ Facturas Vencidas</td></tr>`;
+    overdue.forEach(i => drawRow(i, true));
+  }
+  if(pending.length) {
+    html += `<tr><td colspan="5" style="padding:16px 12px 8px; font-size:12px; font-weight:bold; color:#d97706; text-transform:uppercase;">⏳ Facturas Pendientes</td></tr>`;
+    pending.forEach(i => drawRow(i, false));
+  }
+  html += `</tbody></table>`;
+  return html;
+}
+
+function buildRenewalReportHtml() {
+  const active = data.renewals.filter(r=>r.status!=='Renewed').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  let html = `<table style="width:100%; border-collapse:collapse; margin-top:24px; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
+  html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; letter-spacing:0.5px; font-size:11px;">
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Servicio</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Fecha</th>
+    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:center;">Estatus</th>
+  </tr></thead><tbody>`;
+
+  active.forEach(r => {
+    const c = data.clients.find(x=>x.id===r.clientId);
+    const isOverdue = r.status === 'Overdue';
+    const isSoon = r.status === 'Due Soon';
+    const color = isOverdue ? '#dc2626' : isSoon ? '#d97706' : '#2563eb';
+    const bg = isOverdue ? '#fef2f2' : isSoon ? '#fffbeb' : '#eff4ff';
+    
+    html += `<tr>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; font-weight:500; color:#1a1916;">${c?.name||'Unknown'}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; color:#8a8580;">${r.type}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:600; color:#1a1916;">${fmt(r.amount)}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; color:#8a8580;">${fmtDate(r.date)}</td>
+      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:center;"><span style="background-color:${bg}; color:${color}; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:600;">${r.status}</span></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+
 async function sendReportEmail(type) {
-  // 1. Get the new Make.com Webhook URL instead of the old GAS one
   const url = getWebhookUrl();
   if (!url) { toast('Configure Make.com Webhook URL in Email Alerts → Settings first'); return; }
 
-  const labels = { invoices: 'Invoice', renewals: 'Renewal', upsells: 'Upsell Pipeline' };
+  const labels = { invoices: 'Facturas', renewals: 'Renovaciones', upsells: 'Ventas (Upsell)' };
   const label = labels[type] || type;
-  const subject = `${label} Report — ${new Date().toLocaleDateString()}`;
+  const subject = `Reporte de ${label} — ${new Date().toLocaleDateString('es-MX')}`;
   
-  const text = type === 'invoices' ? buildInvoiceReportText()
-             : type === 'upsells'  ? buildUpsellReportText()
-             : buildRenewalReportText();
+  const introText = `Aquí se encuentra la información del reporte de ${label} correspondiente al día de hoy.`;
 
-  // Default to your global recipients, but allow you to type a different one
+  const reportHtmlContent = type === 'invoices' ? buildInvoiceReportHtml()
+                          : type === 'upsells'  ? buildUpsellReportHtml()
+                          : buildRenewalReportHtml();
+
+  let finalHtml = buildHtmlEmail(subject, introText, "ClientFlow", null);
+  finalHtml = finalHtml.replace('</p>', '</p>' + reportHtmlContent);
+
   const defaultTo = emailRecipients.join(', ');
-  const toInput = prompt(`Send ${label} Report to (comma-separated for multiple):`, defaultTo);
+  const toInput = prompt(`Enviar Reporte de ${label} a (separado por comas para varios):`, defaultTo);
   if (!toInput) return;
 
   const recipients = toInput.split(',').map(e => e.trim()).filter(Boolean);
@@ -2409,15 +2463,15 @@ async function sendReportEmail(type) {
   let sent = 0;
   for (const to of recipients) {
     try {
-      // 2. Send via the Make.com Webhook
-      await webhookSendEmail({ to, subject, text });
+      await webhookSendEmail({ to, subject, text: introText, html: finalHtml });
       sent++;
     } catch(e) {
-      toast('Failed to send to ' + to + ': ' + e.message);
+      toast('Error al enviar a ' + to + ': ' + e.message);
     }
   }
-  if (sent) toast(`${label} report sent to ${sent} recipient${sent!==1?'s':''} ✓`);
+  if (sent) toast(`Reporte enviado a ${sent} destinatario(s) ✓`);
 }
+
 // ─── EXPORT CSV ──────────────────────────────────────────────────────────────
 function exportCSV() {
   const rows = [['Type','Client','Reference','Date','Amount','Status']];
