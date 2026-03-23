@@ -2702,16 +2702,29 @@ async function sendAllSlack() {
 }
 
 // ─── GENERATE AI FUNCTIONS ───────────────────────────────────────────────────
+// ─── GENERATE AI FUNCTIONS ───────────────────────────────────────────────────
 async function generateRenewalAlert() {
   const r = data.renewals.find(x=>x.id===activeRenewalId);
   const c = data.clients.find(x=>x.id===r?.clientId);
   if (!r || !c) return;
   const genBtn = document.getElementById('rdp-gen-btn');
   if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generando…'; }
-  const prompt = `Eres un gerente de cuentas. Escribe SOLO el cuerpo del correo en español al cliente sobre su próxima renovación. No incluyas "Asunto:".
-  Cliente: ${c.name} | Servicio: ${r.type} | Fecha: ${fmtDate(r.date)} | Monto: ${fmt(r.amount)}`;
+  
+  const prompt = `Eres un ejecutivo de Customer Success. Escribe un correo persuasivo, cálido y profesional (de 2 a 3 párrafos) dirigido al cliente para hablar sobre su próxima renovación.
+  
+  Datos del contexto:
+  - Cliente: ${c.name}
+  - Servicio a renovar: ${r.type}
+  - Estatus: ${r.status}
+  
+  Reglas estrictas:
+  1. Escribe SOLO el cuerpo del correo en español, empezando directamente con el saludo (ej. "Estimado equipo de ${c.name}").
+  2. Agradece su confianza, resalta el valor de seguir trabajando juntos e invítalos a contactarte si tienen dudas.
+  3. IMPORTANTE: NO escribas el monto, la fecha ni los datos del servicio en forma de lista. El sistema ya adjuntará una tabla con esos datos debajo de tu mensaje.
+  4. No incluyas la palabra "Asunto:".`;
+  
   try {
-    const msg = await geminiFetch(prompt, 400);
+    const msg = await geminiFetch(prompt, 800);
     document.getElementById('rdp-msg-text').value = msg.trim();
     document.getElementById('rdp-generated-msg').style.display = 'block';
     document.getElementById('rdp-send-email-btn').style.display = 'inline-flex';
@@ -2726,10 +2739,21 @@ async function generateInvoiceFollowup() {
   if (!inv || !c) return;
   const btn = document.getElementById('idp-gen-btn');
   btn.disabled = true; btn.textContent = 'Generando…';
-  const prompt = `Eres un ejecutivo de cobranza. Escribe SOLO el cuerpo del correo en español para cobrar una factura vencida. No incluyas "Asunto:".
-  Cliente: ${c.name} | Factura: ${inv.number} | Monto: ${fmt(inv.amount)} | Venció: ${fmtDate(inv.dueDate)}`;
+  
+  const prompt = `Eres un ejecutivo de cobranza. Escribe un correo persuasivo, profesional y claro (de 2 a 3 párrafos) dirigido al cliente para solicitar el pago de una factura.
+  
+  Datos del contexto:
+  - Cliente: ${c.name}
+  - Estatus de la factura: ${inv.status}
+  
+  Reglas estrictas:
+  1. Escribe SOLO el cuerpo del correo en español, empezando directamente con el saludo (ej. "Estimado equipo de ${c.name}").
+  2. Sé amable pero firme sobre la importancia de regularizar el saldo en su cuenta a la brevedad.
+  3. IMPORTANTE: NO escribas el número de factura, el monto, ni la fecha en el texto. El sistema ya adjuntará una tabla con esos datos exactos debajo de tu mensaje.
+  4. No incluyas la palabra "Asunto:".`;
+
   try {
-    const text = await geminiFetch(prompt, 400);
+    const text = await geminiFetch(prompt, 800);
     const toVal = document.getElementById('idp-email-to').value.trim();
     if (toVal) { const inv2 = data.invoices.find(x=>x.id===activeInvoiceId); if(inv2) { inv2.followupTo=toVal; saveData(); } }
     document.getElementById('idp-msg-text').value = text.trim();
@@ -2740,6 +2764,49 @@ async function generateInvoiceFollowup() {
   btn.disabled = false; btn.textContent = '⚡ Generate Message';
 }
 
+async function generateSchedMessage() {
+  const trigger = document.getElementById('sr-trigger')?.value;
+  const ruleName = document.getElementById('sr-name')?.value || 'Alert';
+  const triggerDef = SCHED_TRIGGERS.find(t=>t.key===trigger);
+  const isClient = triggerDef?.client || false;
+  const btn = document.getElementById('sr-ai-btn');
+  const textarea = document.getElementById('sr-message-body');
+  if (!btn || !textarea) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Generando…';
+
+  const context = {
+    'invoice-overdue': 'recordatorio de pago de factura vencida',
+    'invoice-overdue-client': 'recordatorio de pago amable pero firme enviado directo al cliente por una factura vencida',
+    'renewal-overdue': 'alerta interna sobre una renovación vencida',
+    'renewal-overdue-client': 'aviso de renovación enviado directo al cliente cuyo contrato ya venció',
+    'renewal-due-soon': 'alerta interna sobre una próxima renovación',
+    'renewal-due-soon-client': 'recordatorio amable de renovación enviado directo al cliente',
+    'stale-contact': 'recordatorio interno de que un cliente no ha sido contactado recientemente',
+  };
+
+  const audience = isClient ? 'el cliente (redacta 2 párrafos profesionales, amables pero claros)' : 'tu equipo interno (redacta 1 párrafo conciso y directo)';
+  const promptText = 'Escribe un mensaje para una regla de alertas automáticas llamada "' + ruleName + '".'
+    + ' El propósito del correo es: ' + (context[trigger] || trigger) + '.'
+    + ' El mensaje va dirigido a ' + audience + '.'
+    + ' \n\nReglas estrictas:'
+    + ' \n1. Escribe SOLO el cuerpo del mensaje en ESPAÑOL, empezando con el saludo.'
+    + ' \n2. NO incluyas el Asunto.'
+    + ' \n3. IMPORTANTE: El sistema ya adjuntará una tabla HTML con los datos exactos (monto, fechas, etc.) debajo de tu mensaje. NO hagas listas con estos datos en tu texto para no ser redundante.'
+    + ' \n4. Usa estos marcadores solo si es estrictamente necesario integrarlos en el párrafo: {{client}} para el nombre del cliente, {{type}} para el servicio.';
+
+  try {
+    const msg = await geminiFetch(promptText, 800);
+    textarea.value = msg.trim();
+    toast('Message generated ✓');
+  } catch(e) {
+    toast('AI generate failed: ' + e.message + ' ✗');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ AI Generate';
+}
 async function sendInvoiceEmail() {
   const inv = data.invoices.find(x=>x.id===activeInvoiceId);
   const c = data.clients.find(x=>x.id===inv?.clientId);
