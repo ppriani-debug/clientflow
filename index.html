@@ -2385,96 +2385,22 @@ async function sendReportSlack(type) {
   } catch(e) { toast('Slack send failed: ' + e.message); }
 }
 
-async function sendReportEmail(type) {function buildInvoiceReportHtml() {
-  const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  
-  let html = `<table style="width:100%; border-collapse:collapse; margin-top:24px; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
-  html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; letter-spacing:0.5px; font-size:11px;">
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Factura</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Vencimiento</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:center;">Estatus</th>
-  </tr></thead><tbody>`;
-
-  const drawRow = (i, isOverdue) => {
-    const c = data.clients.find(x=>x.id===i.clientId);
-    const color = isOverdue ? '#dc2626' : '#d97706';
-    const statusText = isOverdue ? 'Vencida' : 'Pendiente';
-    html += `<tr>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; font-weight:500; color:#1a1916;">${c?.name||'Unknown'}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; color:#8a8580;">${i.number}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:600; color:${isOverdue?'#dc2626':'#1a1916'};">${fmt(i.amount)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; color:#8a8580;">${fmtDate(i.dueDate)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:center;"><span style="background-color:${isOverdue?'#fef2f2':'#fffbeb'}; color:${color}; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:600;">${statusText}</span></td>
-    </tr>`;
-  };
-
-  if(overdue.length) {
-    html += `<tr><td colspan="5" style="padding:16px 12px 8px; font-size:12px; font-weight:bold; color:#dc2626; text-transform:uppercase;">⚠️ Facturas Vencidas</td></tr>`;
-    overdue.forEach(i => drawRow(i, true));
-  }
-  if(pending.length) {
-    html += `<tr><td colspan="5" style="padding:16px 12px 8px; font-size:12px; font-weight:bold; color:#d97706; text-transform:uppercase;">⏳ Facturas Pendientes</td></tr>`;
-    pending.forEach(i => drawRow(i, false));
-  }
-  html += `</tbody></table>`;
-  return html;
-}
-
-function buildRenewalReportHtml() {
-  const active = data.renewals.filter(r=>r.status!=='Renewed').sort((a,b)=>new Date(a.date)-new Date(b.date));
-  let html = `<table style="width:100%; border-collapse:collapse; margin-top:24px; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
-  html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; letter-spacing:0.5px; font-size:11px;">
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Servicio</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Fecha</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:center;">Estatus</th>
-  </tr></thead><tbody>`;
-
-  active.forEach(r => {
-    const c = data.clients.find(x=>x.id===r.clientId);
-    const isOverdue = r.status === 'Overdue';
-    const isSoon = r.status === 'Due Soon';
-    const color = isOverdue ? '#dc2626' : isSoon ? '#d97706' : '#2563eb';
-    const bg = isOverdue ? '#fef2f2' : isSoon ? '#fffbeb' : '#eff4ff';
-    
-    html += `<tr>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; font-weight:500; color:#1a1916;">${c?.name||'Unknown'}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; color:#8a8580;">${r.type}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:600; color:#1a1916;">${fmt(r.amount)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; color:#8a8580;">${fmtDate(r.date)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:center;"><span style="background-color:${bg}; color:${color}; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:600;">${r.status}</span></td>
-    </tr>`;
-  });
-  html += `</tbody></table>`;
-  return html;
-}
-
 async function sendReportEmail(type) {
+  // 1. Get the new Make.com Webhook URL instead of the old GAS one
   const url = getWebhookUrl();
   if (!url) { toast('Configure Make.com Webhook URL in Email Alerts → Settings first'); return; }
 
-  const labels = { invoices: 'Facturas', renewals: 'Renovaciones', upsells: 'Ventas (Upsell)' };
+  const labels = { invoices: 'Invoice', renewals: 'Renewal', upsells: 'Upsell Pipeline' };
   const label = labels[type] || type;
-  const subject = `Reporte de ${label} — ${new Date().toLocaleDateString('es-MX')}`;
+  const subject = `${label} Report — ${new Date().toLocaleDateString()}`;
   
-  // El texto simple que pediste
-  const introText = `Aquí se encuentra la información del reporte de ${label} correspondiente al día de hoy.`;
+  const text = type === 'invoices' ? buildInvoiceReportText()
+             : type === 'upsells'  ? buildUpsellReportText()
+             : buildRenewalReportText();
 
-  // Construimos la tabla en formato HTML dependiendo del tipo
-  const reportHtmlContent = type === 'invoices' ? buildInvoiceReportHtml()
-                          : type === 'upsells'  ? buildUpsellReportHtml()
-                          : buildRenewalReportHtml();
-
-  // Insertamos la tabla HTML hermosa justo debajo de tu texto simple
-  let finalHtml = buildHtmlEmail(subject, introText, "ClientFlow", null);
-  finalHtml = finalHtml.replace('</p>', '</p>' + reportHtmlContent);
-
+  // Default to your global recipients, but allow you to type a different one
   const defaultTo = emailRecipients.join(', ');
-  const toInput = prompt(`Enviar Reporte de ${label} a (separado por comas para varios):`, defaultTo);
+  const toInput = prompt(`Send ${label} Report to (comma-separated for multiple):`, defaultTo);
   if (!toInput) return;
 
   const recipients = toInput.split(',').map(e => e.trim()).filter(Boolean);
@@ -2483,13 +2409,14 @@ async function sendReportEmail(type) {
   let sent = 0;
   for (const to of recipients) {
     try {
-      await webhookSendEmail({ to, subject, text: introText, html: finalHtml });
+      // 2. Send via the Make.com Webhook
+      await webhookSendEmail({ to, subject, text });
       sent++;
     } catch(e) {
-      toast('Error al enviar a ' + to + ': ' + e.message);
+      toast('Failed to send to ' + to + ': ' + e.message);
     }
   }
-  if (sent) toast(`Reporte enviado a ${sent} destinatario(s) ✓`);
+  if (sent) toast(`${label} report sent to ${sent} recipient${sent!==1?'s':''} ✓`);
 }
 // ─── EXPORT CSV ──────────────────────────────────────────────────────────────
 function exportCSV() {
