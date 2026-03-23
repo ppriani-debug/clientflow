@@ -569,7 +569,7 @@
       <div class="alerts-list" id="alerts-list"></div>
     </div>
 
-    <div class="page" id="page-email-alerts">
+<div class="page" id="page-email-alerts">
       <div class="page-header">
         <div><div class="page-title">Email Alerts</div><div class="page-subtitle">Send automated alert emails for overdue invoices and upcoming renewals</div></div>
         <button class="btn btn-primary" onclick="generateAllAlerts()">⚡ Generate All Alerts</button>
@@ -586,8 +586,8 @@
             <button class="btn btn-ghost btn-sm" onclick="openFirebaseSettings()">Configure</button>
           </div>
         </div>
+        
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:4px 0">
-          
           <div class="form-group" style="margin:0">
             <label class="form-label">Gemini API Key <span style="color:var(--red)">*</span></label>
             <div style="display:flex;gap:8px">
@@ -614,13 +614,11 @@
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Opcional para alertas internas.</div>
           </div>
-
         </div>
 
-        </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <div id="settings-status" style="font-size:12.5px;flex:1"></div>
-          <button class="btn btn-ghost btn-sm" onclick="sendTestEmail()" title="Send a test email to verify GAS is configured correctly">📧 Send Test Email</button>
+          <button class="btn btn-ghost btn-sm" onclick="sendTestEmail()" title="Send a test email to verify your Webhook is working">📧 Send Test Email</button>
         </div>
       </div>
 
@@ -651,7 +649,7 @@
 
       <div class="email-config">
         <div class="email-config-title">Recipients</div>
-        <div class="email-config-sub">Add the email addresses that should receive alert notifications.</div>
+        <div class="email-config-sub">Add the email addresses that should receive internal alert notifications.</div>
         <div class="email-recipients">
           <div class="form-group">
             <label class="form-label">Add Email Address</label>
@@ -2409,7 +2407,7 @@ async function sendReportEmail(type) {
   let sent = 0;
   for (const to of recipients) {
     try {
-      await gasSendEmail({ to, subject, text });
+      await webhookSendEmail({ to, subject, text });
       sent++;
     } catch(e) {
       toast('Failed to send to ' + to + ': ' + e.message);
@@ -3914,7 +3912,7 @@ async function sendInvoiceEmail() {
     ].filter(Boolean)
   });
   try {
-    await gasSendEmail({ to, subject, text: msg, html });
+    await webhookSendEmail({ to, subject, text: msg, html });
     statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Gmail</span>';
     toast('Email sent ✓');
   } catch(e) {
@@ -4734,7 +4732,7 @@ async function executeSchedRule(rule, force = false) {
         if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured');
         if (!getGasUrl()) throw new Error('No Google Apps Script URL — add it in Email Alerts → Settings');
         
-        const result = await gasSendEmail({ to: toEmail, subject: item.subject, text: item.body, html: item.htmlBody });
+        const result = await webhookSendEmail({ to: toEmail, subject: item.subject, text: item.body, html: item.htmlBody });
         sentTo.push(toEmail);
       }
       if (rule.channels?.slack && webhook) {
