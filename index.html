@@ -2509,12 +2509,12 @@ function restoreSettings() {
 }
 
 // ─── GEMINI AI FETCH ─────────────────────────────────────────────────────────
-async function geminiFetch(promptText, maxTokens=500) {
+async function geminiFetch(promptText, maxTokens=800) {
   const key = getGeminiKey();
   if (!key) throw new Error('No Gemini API key — ve a Email Alerts → Settings');
   
-  // ¡Aquí está el cambio! Usando gemini-2.5-flash
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  // Usamos el modelo gemini-1.5-flash que es el estándar estable
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
   
   const response = await fetch(url, {
     method: 'POST',
@@ -2538,43 +2538,17 @@ async function gasSendEmail({ to, subject, text, html }) {
 
   const finalHtml = html || buildHtmlEmail(subject, text, "ClientFlow", null);
 
-  // Usamos text/plain para evitar errores de CORS
-  const response = await fetch(url, {
+  // El modo 'no-cors' evita el error "Failed to fetch" bloqueado por el navegador
+  await fetch(url, {
     method: 'POST',
+    mode: 'no-cors', 
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml })
   });
 
-  const json = await response.json().catch(() => ({}));
-  if (json.status === 'error') throw new Error(json.message);
-  return json;
+  // Con no-cors no podemos leer la respuesta exacta de Google, asumimos éxito si no hay error de red
+  return { status: 'success' };
 }
-
-async function sendTestEmail() {
-  const url = getGasUrl();
-  if (!url) { toast('No Google Apps Script URL set ✗'); return; }
-
-  const to = prompt('Send test email to:', 'tu_correo@gmail.com');
-  if (!to) return;
-
-  const btn = event?.target;
-  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-
-  try {
-    await gasSendEmail({
-      to,
-      subject: 'ClientFlow — Test Email ✓',
-      text: 'This is a test email from ClientFlow.\n\nIf you received this, Google Apps Script is configured correctly.'
-    });
-    toast('Test email sent to ' + to + ' ✓');
-  } catch(e) {
-    toast('Failed: ' + e.message + ' ✗');
-    console.error('Test email error:', e);
-  }
-
-  if (btn) { btn.disabled = false; btn.textContent = '📧 Send Test Email'; }
-}
-
 // Build rich HTML email with structured invoice/renewal data
 function buildHtmlEmail(subject, text, fromName, meta) {
   const org = fromName || 'ClientFlow';
@@ -3689,26 +3663,28 @@ async function generateRenewalAlert() {
   const c = data.clients.find(x=>x.id===r?.clientId);
   if (!r || !c) return;
 
-  const daysSinceContact = r.lastContact ? Math.round((new Date() - new Date(r.lastContact)) / 86400000) : null;
   const daysToRenewal = daysUntil(r.date);
-  const latestComment = (r.comments||[]).slice(-1)[0]?.text || 'None';
+  const latestComment = (r.comments||[]).slice(-1)[0]?.text || 'Ninguno';
 
   const genBtn = document.getElementById('rdp-gen-btn');
-  if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating…'; }
+  if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generando…'; }
 
-  const prompt = `You are an account manager. Write a short internal follow-up note (3-4 sentences) about this renewal that needs attention.
-
-Client: ${c.name} | Contact: ${c.contact}
-Renewal: ${r.type} on ${fmtDate(r.date)} (${daysToRenewal >= 0 ? 'in '+daysToRenewal+' days' : Math.abs(daysToRenewal)+' days overdue'})
-Status: ${r.status}
-Last contact: ${r.lastContact ? fmtDate(r.lastContact)+' ('+daysSinceContact+' days ago)' : 'Never recorded'}
-Latest comment: ${latestComment}
-
-Be direct. Include one clear next step. Do not use placeholders like [Name].`;
+  const prompt = `Eres un gerente de cuentas. Escribe un correo de seguimiento profesional directamente al cliente sobre su próxima renovación.
+  Cliente: ${c.name}
+  Contacto: ${c.contact || 'Cliente'}
+  Servicio a renovar: ${r.type}
+  Fecha de renovación: ${fmtDate(r.date)}
+  Monto: ${fmt(r.amount)}
+  
+  Instrucciones estrictas:
+  - Escribe SOLO el cuerpo del correo en español.
+  - NO escribas la línea de "Asunto".
+  - Sé educado, claro y menciona el monto y la fecha exacta.
+  - Firma como "El Equipo de Administración".`;
 
   try {
-    const msg = await geminiFetch(prompt, 350);
-    document.getElementById('rdp-msg-text').value = msg;
+    const msg = await geminiFetch(prompt, 400);
+    document.getElementById('rdp-msg-text').value = msg.trim();
     document.getElementById('rdp-generated-msg').style.display = 'block';
     document.getElementById('rdp-send-email-btn').style.display = 'inline-flex';
     document.getElementById('rdp-send-slack-btn').style.display = 'inline-flex';
@@ -3717,39 +3693,43 @@ Be direct. Include one clear next step. Do not use placeholders like [Name].`;
   if (genBtn) { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Message'; }
 }
 
-async function sendRenewalEmail() {
-  const r = data.renewals.find(x=>x.id===activeRenewalId);
-  const c = data.clients.find(x=>x.id===r?.clientId);
-  const to = document.getElementById('rdp-email-to').value.trim();
-  const msg = document.getElementById('rdp-msg-text').value.trim();
-  if (!msg) { toast('Generate a message first ✗'); return; }
+async function generateInvoiceFollowup() {
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  const c = data.clients.find(x=>x.id===inv?.clientId);
+  if (!inv || !c) return;
 
-  const btn = document.getElementById('rdp-send-email-btn');
-  const statusEl = document.getElementById('rdp-sending-status');
-  btn.disabled = true;
-  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+  const daysOver = daysUntil(inv.dueDate);
+  const latestNote = (inv.comments||[]).slice(-1)[0]?.text || 'Ninguna';
 
-  const subject = `Follow-up: ${c?.name} — ${r?.type}`;
-  const html = buildHtmlEmail(subject, msg, "ClientFlow", {
-    icon: '↻', accentColor: '#2563eb',
-    fields: [
-      { label: 'Client', value: c?.name||'—' },
-      { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
-      { label: 'Renewal Type', value: r?.type||'—' },
-      { label: 'Amount', value: fmtF(r?.amount), highlight: true },
-      { label: 'Renewal Date', value: fmtDate(r?.date) },
-      { label: 'Status', value: r?.status||'—' },
-    ]
-  });
+  const btn = document.getElementById('idp-gen-btn');
+  btn.disabled = true; btn.textContent = 'Generando…';
+
+  const prompt = `Eres un ejecutivo de cobranza. Escribe un correo profesional pero firme para cobrar una factura vencida.
+  Cliente: ${c.name}
+  Contacto: ${c.contact || 'Cliente'}
+  Factura: ${inv.number}
+  Monto: ${fmt(inv.amount)}
+  Fecha de vencimiento: ${fmtDate(inv.dueDate)} (${Math.abs(daysOver)} días de atraso)
+  Notas internas: ${latestNote}
+
+  Instrucciones estrictas:
+  - Escribe SOLO el cuerpo del correo en español.
+  - NO escribas la línea de "Asunto".
+  - Solicita el pago de manera urgente pero educada incluyendo los datos exactos de la factura.
+  - Firma como "El Equipo de Cobranza".`;
+
   try {
-    await gasSendEmail({ to, subject, text: msg, html });
-    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Gmail</span>';
-    toast('Email sent ✓');
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
-    toast('Email failed ✗');
-  }
-  btn.disabled = false;
+    const text = await geminiFetch(prompt, 400);
+    const toVal = document.getElementById('idp-email-to').value.trim();
+    if (toVal) { const inv2 = data.invoices.find(x=>x.id===activeInvoiceId); if(inv2) { inv2.followupTo=toVal; saveData(); } }
+
+    document.getElementById('idp-msg-text').value = text.trim();
+    document.getElementById('idp-generated-msg').style.display = 'block';
+    document.getElementById('idp-send-email-btn').style.display = 'inline-flex';
+    document.getElementById('idp-send-slack-btn').style.display = 'inline-flex';
+  } catch(e) { toast(e.message || 'Failed to generate message ✗'); console.error(e); }
+
+  btn.disabled = false; btn.textContent = '⚡ Generate Message';
 }
 
 // ─── INVOICE DETAIL PANEL ────────────────────────────────────────────────────
