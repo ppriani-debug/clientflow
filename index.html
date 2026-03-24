@@ -1816,7 +1816,6 @@ function renderRenewals() {
 
   let rows = data.renewals.filter(r=>(renewalFilter==='All'||r.status===renewalFilter)&&(!renewalSearch||clientName(r.clientId).toLowerCase().includes(renewalSearch)||r.type.toLowerCase().includes(renewalSearch)));
 
-  // Sort
   const sd = renewalSort.dir === 'asc' ? 1 : -1;
   rows = rows.slice().sort((a,b) => {
     if (renewalSort.col === 'client') return sd * clientName(a.clientId).localeCompare(clientName(b.clientId));
@@ -1852,7 +1851,11 @@ function renderRenewals() {
           ? `<div style="font-size:13px">${fmtDate(r.lastContact)}</div>${isStale(r)?'<div style="font-size:11px;color:var(--red);font-weight:500">⚠ Overdue</div>':'<div style="font-size:11px;color:var(--green)">✓ Recent</div>'}`
           : `<span style="font-size:12px;color:var(--text-soft)">Never</span>`}
         </td>
-        <td>${statusBadge(r.status)}</td>
+        <td>
+          ${statusBadge(r.status)}
+          ${r.subStatus ? `<div style="margin-top:5px;font-size:10.5px;color:var(--text-muted);font-weight:600">↳ ${r.subStatus}</div>` : ''}
+          ${r.csMeeting ? `<div style="margin-top:2px;font-size:10px;color:var(--green);font-weight:600">✓ Junta CS</div>` : ''}
+        </td>
         <td><div class="row-actions">
           <button class="btn btn-ghost btn-sm" onclick="editRenewal(${r.id},event)">Edit</button>
           <button class="btn btn-amber btn-sm" onclick="duplicateRenewal(${r.id},event)" title="Duplicate for next year">⟳ +1yr</button>
@@ -3137,7 +3140,7 @@ function openModal(type, existing) {
         <div class="form-group"><label class="form-label">Client Since</label><input class="form-input" id="f-since" type="date" value="${existing?.since||new Date().toISOString().split('T')[0]}"></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveClient(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Client'}</button></div>`;
-  } else if(type==='renewal') {
+    } else if(type==='renewal') {
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Renewal</div>
       <div class="form-grid">
@@ -3145,7 +3148,14 @@ function openModal(type, existing) {
         <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
         <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
         <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
-        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
+        <div class="form-group"><label class="form-label">Status (Tiempo)</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
+        
+        <div class="form-group span2" style="margin-bottom:0; margin-top:4px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Seguimiento y Cierre</div></div>
+        
+        <div class="form-group"><label class="form-label">Probabilidad</label><select class="form-input" id="f-substatus"><option value="">— Sin definir —</option><option ${existing?.subStatus==='Confirmado'?'selected':''}>Confirmado</option><option ${existing?.subStatus==='Negociando'?'selected':''}>Negociando</option><option ${existing?.subStatus==='En peligro'?'selected':''}>En peligro</option></select></div>
+        <div class="form-group"><label class="form-label">Contrato / OC</label><select class="form-input" id="f-contract"><option value="">— Pendiente —</option><option ${existing?.contractStatus==='En revisión'?'selected':''}>En revisión</option><option ${existing?.contractStatus==='Firmado/Aprobado'?'selected':''}>Firmado/Aprobado</option></select></div>
+        <div class="form-group"><label class="form-label">Ingreso de Ppto.</label><input class="form-input" id="f-budget-date" type="date" value="${existing?.budgetDate||''}"></div>
+        <div class="form-group" style="justify-content:center"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:14px;font-weight:500"><input type="checkbox" id="f-cs-meeting" ${existing?.csMeeting?'checked':''} style="width:18px;height:18px;accent-color:var(--accent)"> Junta CS Realizada</label></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveRenewal(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Renewal'}</button></div>`;
   } else if(type==='invoice') {
@@ -3198,7 +3208,18 @@ function saveClient(id) {
   saveData();closeModal();renderPage(currentPage);updateBadges();
 }
 function saveRenewal(id) {
-  const obj={clientId:parseInt(document.getElementById('f-client').value),type:document.getElementById('f-type').value,date:document.getElementById('f-date').value,amount:parseFloat(document.getElementById('f-amount').value)||0,status:document.getElementById('f-status').value,statusLocked:true};
+  const obj={
+    clientId:parseInt(document.getElementById('f-client').value),
+    type:document.getElementById('f-type').value,
+    date:document.getElementById('f-date').value,
+    amount:parseFloat(document.getElementById('f-amount').value)||0,
+    status:document.getElementById('f-status').value,
+    statusLocked:true,
+    subStatus: document.getElementById('f-substatus').value,
+    contractStatus: document.getElementById('f-contract').value,
+    budgetDate: document.getElementById('f-budget-date').value,
+    csMeeting: document.getElementById('f-cs-meeting').checked
+  };
   if(!obj.type||!obj.date){alert('Type and date are required.');return;}
   if(id){Object.assign(data.renewals.find(r=>r.id===id),obj);toast('Renewal updated ✓');}
   else{obj.id=++data.nextId;data.renewals.push(obj);toast('Renewal added ✓');}
@@ -3677,14 +3698,22 @@ function openRenewalDetail(id) {
   document.getElementById('rdp-client').textContent = c?.name || 'Unknown';
   document.getElementById('rdp-subtitle').textContent = r.type + ' · ' + fmtDate(r.date);
 
-  document.getElementById('rdp-info').innerHTML = `
+ document.getElementById('rdp-info').innerHTML = `
     <div class="detail-row"><span class="detail-label">Client</span><span class="detail-val">${c?.name||'—'}</span></div>
     ${c?.clientContact ? `<div class='detail-row'><span class='detail-label'>Client Contact</span><span class='detail-val'>${c.clientContact}</span></div>` : ''}
     ${c?.email ? `<div class='detail-row'><span class='detail-label'>Client Email</span><span class='detail-val'><a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a></span></div>` : ''}
     <div class="detail-row"><span class="detail-label">CS Agent</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Renewal Date</span><span class="detail-val">${fmtDate(r.date)}</span></div>
     <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--green);font-weight:600">${fmtF(r.amount)}</span></div>
-    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val">${statusBadge(r.status)}</span></div>`;
+    <div class="detail-row"><span class="detail-label">Status (Time)</span><span class="detail-val">${statusBadge(r.status)}</span></div>
+    
+    <div style="border-top:1px solid var(--border-soft);margin:12px 0 8px"></div>
+    
+    <div class="detail-row"><span class="detail-label">Probabilidad</span><span class="detail-val">${r.subStatus ? `<span class="badge ${r.subStatus==='Confirmado'?'badge-green':r.subStatus==='Negociando'?'badge-amber':'badge-red'}">${r.subStatus}</span>` : '<span style="color:var(--text-soft)">—</span>'}</span></div>
+    <div class="detail-row"><span class="detail-label">Contrato / OC</span><span class="detail-val">${r.contractStatus||'<span style="color:var(--text-soft)">Pendiente</span>'}</span></div>
+    <div class="detail-row"><span class="detail-label">Ingreso Ppto.</span><span class="detail-val">${r.budgetDate ? fmtDate(r.budgetDate) : '<span style="color:var(--text-soft)">—</span>'}</span></div>
+    <div class="detail-row"><span class="detail-label">Junta CS</span><span class="detail-val">${r.csMeeting ? '<span style="color:var(--green);font-weight:600">✓ Realizada</span>' : '<span style="color:var(--text-soft)">Pendiente</span>'}</span></div>
+  `;
 
   document.getElementById('rdp-last-contact').value = r.lastContact || '';
   updateLastContactLabel(r);
