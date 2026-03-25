@@ -2864,6 +2864,9 @@ async function generateSchedMessage() {
   btn.textContent = '⚡ AI Generate';
 }
 async function sendInvoiceEmail() {
+  alert("¡Código nuevo detectado!"); // <-- AGREGA ESTA LÍNEA
+  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
+  // ... resto de tu código
   const inv = data.invoices.find(x=>x.id===activeInvoiceId);
   const c = data.clients.find(x=>x.id===inv?.clientId);
   const to = document.getElementById('idp-email-to').value.trim();
