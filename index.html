@@ -2590,8 +2590,14 @@ async function geminiFetch(promptText, maxTokens=800) {
 }
 
 // ─── WEBHOOK EMAIL SEND (Make.com) ───────────────────────────────────────────
-async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {  // <-- FÍJATE AQUÍ
+async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {
+  
+  // ALERTA ESPÍA:
+  alert("🔎 ESPÍA: El código está mandando la etiqueta: " + type);
+
   const url = getWebhookUrl(); 
+  if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
+  // ... (deja el resto de la función exactamente igual)
   if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
   if (!to) throw new Error('No recipient email specified');
 
