@@ -2738,13 +2738,41 @@ function copyAlert(idx) { const a = generatedAlerts[idx]; navigator.clipboard.wr
 
 async function sendSingleEmail(idx) {
   const a = generatedAlerts[idx];
-  try { await webhookSendEmail({ to: emailRecipients.join(','), subject: a.subject, text: a.body }); toast(`Email sent ✓`); } catch(e) { toast(e.message || 'Send failed ✗'); }
+  // Detectamos mágicamente si es una factura porque su ID empieza con 'i-'
+  const mailType = (a.id && a.id.startsWith('i-')) ? 'invoice' : 'general';
+  
+  try { 
+    await webhookSendEmail({ 
+      to: emailRecipients.join(','), 
+      subject: a.subject, 
+      text: a.body, 
+      type: mailType 
+    }); 
+    toast(`Email sent ✓`); 
+  } catch(e) { 
+    toast(e.message || 'Send failed ✗'); 
+  }
 }
+
 async function sendAllEmails() {
   if (!emailRecipients.length) return;
   const ready = generatedAlerts.filter(a=>!a.loading);
   let sent = 0, failed = 0;
-  for (const a of ready) { try { await webhookSendEmail({ to: emailRecipients.join(','), subject: a.subject, text: a.body }); sent++; } catch(e) { failed++; } }
+  
+  for (const a of ready) { 
+    const mailType = (a.id && a.id.startsWith('i-')) ? 'invoice' : 'general';
+    try { 
+      await webhookSendEmail({ 
+        to: emailRecipients.join(','), 
+        subject: a.subject, 
+        text: a.body, 
+        type: mailType 
+      }); 
+      sent++; 
+    } catch(e) { 
+      failed++; 
+    } 
+  }
   toast(`${sent} sent${failed ? `, ${failed} failed` : ''} ✓`);
 }
 async function sendSingleSlack(idx) {
