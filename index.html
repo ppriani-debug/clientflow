@@ -2869,18 +2869,35 @@ async function sendInvoiceEmail() {
   const to = document.getElementById('idp-email-to').value.trim();
   const msg = document.getElementById('idp-msg-text').value.trim();
   if (!msg) { toast('Generate a message first ✗'); return; }
+  
   const btn = document.getElementById('idp-send-email-btn');
   const statusEl = document.getElementById('idp-sending-status');
-  btn.disabled = true; statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+  btn.disabled = true; 
+  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
+  
   const subject = `Recordatorio de Pago: ${inv?.number} — ${c?.name}`;
-  const html = buildHtmlEmail(subject, msg, "ClientFlow", { icon: '⚠️', accentColor: '#dc2626', fields: [ { label: 'Cliente', value: c?.name||'—' }, { label: 'Factura #', value: inv?.number||'—' }, { label: 'Monto a Pagar', value: fmtF(inv?.amount), highlight: true }, { label: 'Vencimiento', value: fmtDate(inv?.dueDate) } ]});
+  const html = buildHtmlEmail(subject, msg, "ClientFlow", { 
+    icon: '⚠️', accentColor: '#dc2626', 
+    fields: [ 
+      { label: 'Cliente', value: c?.name||'—' }, 
+      { label: 'Factura #', value: inv?.number||'—' }, 
+      { label: 'Monto a Pagar', value: fmtF(inv?.amount), highlight: true }, 
+      { label: 'Vencimiento', value: fmtDate(inv?.dueDate) } 
+    ]
+  });
+  
   try {
+    // AQUÍ ESTÁ LA MAGIA: Le forzamos la etiqueta type: 'invoice'
     await webhookSendEmail({ to, subject, text: msg, html, type: 'invoice' });
-    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; toast('Email sent ✓');
-  } catch(e) { statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; toast('Email failed ✗'); }
+    
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; 
+    toast('Email sent ✓');
+  } catch(e) { 
+    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; 
+    toast('Email failed ✗'); 
+  }
   btn.disabled = false;
 }
-
 async function sendRenewalEmail() {
   const r = data.renewals.find(x=>x.id===activeRenewalId);
   const c = data.clients.find(x=>x.id===r?.clientId);
