@@ -4747,9 +4747,9 @@ async function executeSchedRule(rule, force = false) {
   const markSent = (itemKey) => { rule.lastRunDates[itemKey] = now.toISOString(); };
   const isSelected = (key) => !rule.selectedIds || rule.selectedIds.includes(key);
 
-  const makeItem = (key, vars, defaultSubject, defaultBody, defaultSlack, clientEmail, meta) => {
+  const makeItem = (key, vars, defaultSubject, defaultBody, defaultSlack, clientEmail, meta, extraText = '') => {
     const customBody = rule.messageBody ? applyMsgTemplate(rule.messageBody, vars) : null;
-    const finalBody = customBody || defaultBody;
+    const finalBody = (customBody || defaultBody) + (extraText ? '\n\n' + extraText : '');
     const finalSubject = customBody ? (rule.name + ' — ' + (vars.client||'')) : defaultSubject;
     const htmlBody = buildHtmlEmail(finalSubject, finalBody, "ClientFlow", meta);
     return {
@@ -4757,87 +4757,106 @@ async function executeSchedRule(rule, force = false) {
       subject: finalSubject,
       body: finalBody,
       htmlBody,
-      slackMsg: customBody ? ('*' + rule.name + ' — ' + (vars.client||'') + '*\n' + customBody) : defaultSlack,
+      slackMsg: customBody ? ('*' + rule.name + ' — ' + (vars.client||'') + '*\n' + customBody + (extraText ? '\n\n' + extraText : '')) : defaultSlack,
       clientEmail
     };
   };
 
   let items = [];
 
+  // 1. FACTURAS VENCIDAS (AGRUPADAS POR CLIENTE)
   if (rule.trigger === 'invoice-overdue' || rule.trigger === 'invoice-overdue-client') {
-    data.invoices.filter(i => i.status === 'Overdue' && isDue('inv-'+i.id) && isSelected('inv-'+i.id)).forEach(i => {
-      const c = data.clients.find(x=>x.id===i.clientId);
-      const daysOver = Math.abs(daysUntil(i.dueDate));
-      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(i.amount), date: fmtDate(i.dueDate), days: daysOver, number: i.number, type: 'invoice' };
-      const subj = isClientTrigger ? 'Payment Reminder: Invoice ' + i.number : '⚠️ Overdue Invoice ' + i.number + ' — ' + (c?.name||'');
+    const matched = data.invoices.filter(i => i.status === 'Overdue' && isDue('inv-'+i.id) && isSelected('inv-'+i.id));
+    const grouped = {};
+    matched.forEach(i => { if(!grouped[i.clientId]) grouped[i.clientId]=[]; grouped[i.clientId].push(i); });
+
+    Object.keys(grouped).forEach(clientId => {
+      const invs = grouped[clientId];
+      const c = data.clients.find(x=>x.id===parseInt(clientId));
+      const totalAmt = invs.reduce((s,i)=>s+i.amount, 0);
+      const numbers = invs.map(i=>i.number).join(', ');
+      
+      const oldest = invs.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, invs[0]);
+      const daysOver = Math.abs(daysUntil(oldest.dueDate));
+      const isMultiple = invs.length > 1;
+      
+      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(totalAmt), date: fmtDate(oldest.dueDate), days: daysOver, number: numbers, type: isMultiple ? 'facturas' : 'factura' };
+      const subj = isClientTrigger ? (isMultiple ? 'Recordatorio de Pago: Facturas Vencidas' : 'Recordatorio de Pago: Factura ' + numbers) : '⚠️ Facturas Vencidas — ' + (c?.name||'');
+      
+      const invListText = isMultiple 
+        ? 'Detalle de facturas:\n' + invs.map(i=>`• ${i.number} | Vence: ${fmtDate(i.dueDate)} | ${fmt(i.amount)}`).join('\n')
+        : '';
+
       const body = isClientTrigger
-        ? 'Dear ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nThis is a reminder that invoice ' + i.number + ' for ' + fmt(i.amount) + ' was due on ' + fmtDate(i.dueDate) + ' (' + daysOver + ' days ago) and remains unpaid.\n\nPlease arrange payment at your earliest convenience.\n\nBest regards'
-        : 'Invoice ' + i.number + ' for ' + (c?.name||'') + ' is OVERDUE.\nAmount: ' + fmt(i.amount) + '\nDue: ' + fmtDate(i.dueDate) + ' (' + daysOver + 'd ago)\n\n— ClientFlow';
-      const slack = '⚠️ *Overdue Invoice — ' + (c?.name||'') + '*\nInvoice *' + i.number + '* · *' + fmt(i.amount) + '* · ' + daysOver + 'd overdue';
+        ? 'Estimado/a ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nEste es un recordatorio de que ' + (isMultiple ? 'las siguientes facturas se encuentran vencidas:' : 'la factura ' + numbers + ' se encuentra vencida por el monto de ' + fmt(totalAmt) + '.') + '\n\nPor favor, ayúdanos a regularizar este saldo a la brevedad.\n\nSaludos cordiales,'
+        : (c?.name||'') + " tiene " + invs.length + " factura(s) VENCIDA(S).\nTotal a cobrar: " + fmt(totalAmt) + "\n\n— ClientFlow";
+        
+      const slack = '⚠️ *Facturas Vencidas — ' + (c?.name||'') + '*\n' + (isMultiple ? invListText : `Factura *${numbers}* · *${fmt(totalAmt)}* · ${daysOver}d de atraso`) + (isMultiple ? '\n*Total a cobrar: ' + fmt(totalAmt) + '*' : '');
+      
       const meta = {
         icon: '⚠️', accentColor: isClientTrigger ? '#2563eb' : '#dc2626',
         fields: [
-          { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
-          { label: 'Invoice #', value: i.number },
-          { label: 'Amount Due', value: fmt(i.amount), highlight: true },
-          { label: 'Due Date', value: fmtDate(i.dueDate) },
-          { label: 'Days Overdue', value: daysOver + ' days', highlight: true },
-          { label: 'Status', value: i.status },
+          { label: 'Cliente', value: c?.name||'—' },
+          { label: isMultiple ? 'Facturas' : 'Factura #', value: numbers },
+          { label: 'Monto Total', value: fmt(totalAmt), highlight: true },
+          { label: isMultiple ? 'Vencimiento (Más antigua)' : 'Vencimiento', value: fmtDate(oldest.dueDate) + ` (${daysOver}d atrás)` },
+          { label: 'Estatus', value: 'Vencida' },
         ].filter(f => f.value && f.value !== '—')
       };
-      items.push(makeItem('inv-'+i.id, vars, subj, body, slack, c?.email, meta));
+      
+      const item = makeItem('grouped-inv-'+clientId, vars, subj, body, slack, c?.email, meta, invListText);
+      item.keys = invs.map(i=>'inv-'+i.id); // Guardamos todas las IDs para marcarlas como enviadas
+      items.push(item);
     });
 
+  // 2. RENOVACIONES VENCIDAS
   } else if (rule.trigger === 'renewal-overdue' || rule.trigger === 'renewal-overdue-client') {
     data.renewals.filter(r => r.status === 'Overdue' && isDue('ren-'+r.id) && isSelected('ren-'+r.id)).forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const daysOver = Math.abs(daysUntil(r.date));
       const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: daysOver, type: r.type };
-      const subj = isClientTrigger ? 'Action Required: ' + r.type + ' Renewal Overdue' : '🔴 Overdue Renewal — ' + (c?.name||'');
+      const subj = isClientTrigger ? 'Acción Requerida: Renovación Vencida (' + r.type + ')' : '🔴 Renovación Vencida — ' + (c?.name||'');
       const body = isClientTrigger
-        ? 'Dear ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nYour ' + r.type + ' renewal was due on ' + fmtDate(r.date) + ' (' + daysOver + ' days ago). Please contact us to renew.\n\nBest regards'
-        : (c?.name||'') + "'s " + r.type + ' renewal is OVERDUE.\nDue: ' + fmtDate(r.date) + ' (' + daysOver + 'd ago)\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
-      const slack = '🔴 *Overdue Renewal — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · ' + daysOver + 'd overdue';
+        ? 'Estimado/a ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nTu renovación de ' + r.type + ' venció el ' + fmtDate(r.date) + ' (' + daysOver + ' días atrás). Por favor contáctanos para proceder con la renovación.\n\nSaludos cordiales,'
+        : (c?.name||'') + " — La renovación de " + r.type + ' está VENCIDA.\nVenció: ' + fmtDate(r.date) + ' (' + daysOver + 'd atrás)\nMonto: ' + fmt(r.amount) + '\n\n— ClientFlow';
+      const slack = '🔴 *Renovación Vencida — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · ' + daysOver + 'd de atraso';
       const meta = {
         icon: '🔴', accentColor: '#dc2626',
         fields: [
-          { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
-          { label: 'Renewal Type', value: r.type },
-          { label: 'Amount', value: fmt(r.amount), highlight: true },
-          { label: 'Was Due', value: fmtDate(r.date) },
-          { label: 'Days Overdue', value: daysOver + ' days', highlight: true },
+          { label: 'Cliente', value: c?.name||'—' },
+          { label: 'Renovación', value: r.type },
+          { label: 'Monto', value: fmt(r.amount), highlight: true },
+          { label: 'Fecha Vencida', value: fmtDate(r.date) + ` (${daysOver}d atrás)` },
         ].filter(f => f.value && f.value !== '—')
       };
       items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email, meta));
     });
 
+  // 3. RENOVACIONES PRÓXIMAS
   } else if (rule.trigger === 'renewal-due-soon' || rule.trigger === 'renewal-due-soon-client') {
     const threshold = rule.thresholdDays || 14;
     data.renewals.filter(r => { const d=daysUntil(r.date); return d>=0&&d<=threshold&&r.status!=='Renewed'&&isDue('ren-'+r.id)&&isSelected('ren-'+r.id); }).forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const d = daysUntil(r.date);
       const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: d, type: r.type };
-      const subj = isClientTrigger ? 'Upcoming Renewal: ' + r.type + ' — ' + fmtDate(r.date) : '🔔 Renewal Due Soon — ' + (c?.name||'') + ' (' + d + 'd)';
+      const subj = isClientTrigger ? 'Próxima Renovación: ' + r.type + ' — ' + fmtDate(r.date) : '🔔 Renovación Próxima — ' + (c?.name||'') + ' (' + d + 'd)';
       const body = isClientTrigger
-        ? 'Dear ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nThis is a reminder that your ' + r.type + ' is due for renewal on ' + fmtDate(r.date) + ' (' + d + ' days from now).\n\nAmount: ' + fmt(r.amount) + '\n\nPlease do not hesitate to contact us with any questions.\n\nBest regards'
-        : (c?.name||'') + "'s " + r.type + ' renewal is due in ' + d + ' days.\nDate: ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
-      const slack = '🔔 *Renewal Due Soon — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · in ' + d + 'd';
+        ? 'Estimado/a ' + (c?.clientContact||c?.contact||c?.name||'') + ',\n\nEste es un recordatorio de que tu servicio ' + r.type + ' se renovará el ' + fmtDate(r.date) + ' (en ' + d + ' días).\n\nMonto: ' + fmt(r.amount) + '\n\nCualquier duda, estamos a tus órdenes.\n\nSaludos cordiales,'
+        : (c?.name||'') + " — La renovación de " + r.type + ' es en ' + d + ' días.\nFecha: ' + fmtDate(r.date) + '\nMonto: ' + fmt(r.amount) + '\n\n— ClientFlow';
+      const slack = '🔔 *Renovación Próxima — ' + (c?.name||'') + '*\n' + r.type + ' · *' + fmt(r.amount) + '* · en ' + d + 'd';
       const meta = {
         icon: '🔔', accentColor: '#d97706',
         fields: [
-          { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
-          { label: 'Renewal Type', value: r.type },
-          { label: 'Amount', value: fmt(r.amount), highlight: true },
-          { label: 'Renewal Date', value: fmtDate(r.date) },
-          { label: 'Days Remaining', value: d + ' days', highlight: true },
+          { label: 'Cliente', value: c?.name||'—' },
+          { label: 'Renovación', value: r.type },
+          { label: 'Monto', value: fmt(r.amount), highlight: true },
+          { label: 'Fecha', value: fmtDate(r.date) + ` (en ${d}d)` },
         ].filter(f => f.value && f.value !== '—')
       };
       items.push(makeItem('ren-'+r.id, vars, subj, body, slack, c?.email, meta));
     });
 
+  // 4. FALTA DE CONTACTO
   } else if (rule.trigger === 'stale-contact') {
     const threshold = rule.thresholdDays || 7;
     data.renewals.filter(r => {
@@ -4848,18 +4867,15 @@ async function executeSchedRule(rule, force = false) {
       const c = data.clients.find(x=>x.id===r.clientId);
       const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
       const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: lc||'unknown', type: r.type };
-      const subj = '📵 No Contact — ' + (c?.name||'');
-      const body = (c?.name||'') + ' has not been contacted' + (lc ? ' in '+lc+' days' : ' yet') + '.\n' + r.type + ' renews ' + fmtDate(r.date) + '\nAmount: ' + fmt(r.amount) + '\n\n— ClientFlow';
-      const slack = '📵 *No Contact — ' + (c?.name||'') + '*\n' + r.type + ' · renews ' + fmtDate(r.date);
+      const subj = '📵 Falta de Contacto — ' + (c?.name||'');
+      const body = (c?.name||'') + ' no ha sido contactado' + (lc ? ' en '+lc+' días' : ' nunca') + '.\nRenovación: ' + r.type + ' el ' + fmtDate(r.date) + '\nMonto: ' + fmt(r.amount) + '\n\n— ClientFlow';
+      const slack = '📵 *Falta de Contacto — ' + (c?.name||'') + '*\n' + r.type + ' · se renueva el ' + fmtDate(r.date);
       const meta = {
         icon: '📵', accentColor: '#7c3aed',
         fields: [
-          { label: 'Client', value: c?.name||'—' },
-          { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
-          { label: 'Renewal Type', value: r.type },
-          { label: 'Renewal Date', value: fmtDate(r.date) },
-          { label: 'Last Contact', value: r.lastContact ? fmtDate(r.lastContact) + ' (' + lc + 'd ago)' : 'Never recorded', highlight: true },
-          { label: 'Amount', value: fmt(r.amount) },
+          { label: 'Cliente', value: c?.name||'—' },
+          { label: 'Renovación', value: r.type },
+          { label: 'Último Contacto', value: r.lastContact ? fmtDate(r.lastContact) + ` (${lc}d atrás)` : 'Nunca', highlight: true },
         ].filter(f => f.value && f.value !== '—')
       };
       items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null, meta));
@@ -4876,15 +4892,13 @@ async function executeSchedRule(rule, force = false) {
   let sent = 0, failed = 0, lastError = '', sentTo = [];
 
   for (const item of items) {
-    const toEmail = isClientTrigger
-      ? item.clientEmail
-      : (rule.emailTo || emailRecipients.join(','));
+    const toEmail = isClientTrigger ? item.clientEmail : (rule.emailTo || emailRecipients.join(','));
     try {
       if (rule.channels?.email) {
         if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured');
         if (!getWebhookUrl()) throw new Error('No Make.com Webhook URL — add it in Email Alerts → Settings');
         
-        const result = await webhookSendEmail({ to: toEmail, subject: item.subject, text: item.body, html: item.htmlBody });
+        await webhookSendEmail({ to: toEmail, subject: item.subject, text: item.body, html: item.htmlBody });
         sentTo.push(toEmail);
       }
       if (rule.channels?.slack && webhook) {
@@ -4893,7 +4907,11 @@ async function executeSchedRule(rule, force = false) {
       if (!rule.channels?.email && !rule.channels?.slack) {
         throw new Error('No send channel selected');
       }
-      markSent(item.key);
+      
+      // Marcar como enviadas (una o múltiples facturas)
+      if (item.keys) item.keys.forEach(k => markSent(k));
+      else markSent(item.key);
+      
       sent++;
     } catch(e) {
       console.error('Sched rule send failed', e);
