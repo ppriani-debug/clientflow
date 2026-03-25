@@ -2591,26 +2591,26 @@ async function geminiFetch(promptText, maxTokens=800) {
 
 // ─── WEBHOOK EMAIL SEND (Make.com) ───────────────────────────────────────────
 async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {
-  
-  // ALERTA ESPÍA:
-  alert("🔎 ESPÍA: El código está mandando la etiqueta: " + type);
-
   const url = getWebhookUrl(); 
-  if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
-  // ... (deja el resto de la función exactamente igual)
   if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
   if (!to) throw new Error('No recipient email specified');
 
   const finalHtml = html || buildHtmlEmail(subject, text, "ClientFlow", null);
+  
+  // Magia: Separamos los correos por comas y limpiamos los espacios
+  const recipients = to.split(',').map(e => e.trim()).filter(Boolean);
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // Y FÍJATE AQUÍ AL FINAL QUE DIGA type: type
-    body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml, type: type }) 
-  });
+  // Enviamos uno por uno a Make.com
+  for (const recipient of recipients) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: recipient, subject: subject, text: text, html: finalHtml, type: type })
+    });
 
-  if (!response.ok) throw new Error('Error al enviar al Webhook');
+    if (!response.ok) throw new Error(`Error al enviar al Webhook para ${recipient}`);
+  }
+  
   return { status: 'success' };
 }
 async function sendTestEmail() {
