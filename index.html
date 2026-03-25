@@ -2466,7 +2466,7 @@ async function sendReportEmail(type) {
   let sent = 0;
   for (const to of recipients) {
     try {
-      await webhookSendEmail({ to, subject, text: introText, html: finalHtml });
+      await webhookSendEmail({ to, subject, text: introText, html: finalHtml, type: type === 'invoices' ? 'invoice' : 'general' });
       sent++;
     } catch(e) {
       toast('Error al enviar a ' + to + ': ' + e.message);
@@ -2590,7 +2590,7 @@ async function geminiFetch(promptText, maxTokens=800) {
 }
 
 // ─── WEBHOOK EMAIL SEND (Make.com) ───────────────────────────────────────────
-async function webhookSendEmail({ to, subject, text, html }) {
+async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {
   const url = getWebhookUrl(); 
   if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
   if (!to) throw new Error('No recipient email specified');
@@ -2600,7 +2600,7 @@ async function webhookSendEmail({ to, subject, text, html }) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml })
+    body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml, type: type })
   });
 
   if (!response.ok) throw new Error('Error al enviar al Webhook');
@@ -2875,7 +2875,7 @@ async function sendInvoiceEmail() {
   const subject = `Recordatorio de Pago: ${inv?.number} — ${c?.name}`;
   const html = buildHtmlEmail(subject, msg, "ClientFlow", { icon: '⚠️', accentColor: '#dc2626', fields: [ { label: 'Cliente', value: c?.name||'—' }, { label: 'Factura #', value: inv?.number||'—' }, { label: 'Monto a Pagar', value: fmtF(inv?.amount), highlight: true }, { label: 'Vencimiento', value: fmtDate(inv?.dueDate) } ]});
   try {
-    await webhookSendEmail({ to, subject, text: msg, html });
+    await webhookSendEmail({ to, subject, text: msg, html, type: 'invoice' });
     statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; toast('Email sent ✓');
   } catch(e) { statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; toast('Email failed ✗'); }
   btn.disabled = false;
@@ -4898,7 +4898,13 @@ async function executeSchedRule(rule, force = false) {
         if (!toEmail) throw new Error(isClientTrigger ? 'Client has no email address on file' : 'No recipients configured');
         if (!getWebhookUrl()) throw new Error('No Make.com Webhook URL — add it in Email Alerts → Settings');
         
-        await webhookSendEmail({ to: toEmail, subject: item.subject, text: item.body, html: item.htmlBody });
+        await webhookSendEmail({ 
+          to: toEmail, 
+          subject: item.subject, 
+          text: item.body, 
+          html: item.htmlBody, 
+          type: rule.trigger.includes('invoice') ? 'invoice' : 'general' 
+        });
         sentTo.push(toEmail);
       }
       if (rule.channels?.slack && webhook) {
