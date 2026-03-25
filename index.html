@@ -2898,41 +2898,6 @@ async function generateSchedMessage() {
   btn.disabled = false;
   btn.textContent = '⚡ AI Generate';
 }
-async function sendInvoiceEmail() {
-  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
-  const c = data.clients.find(x=>x.id===inv?.clientId);
-  const to = document.getElementById('idp-email-to').value.trim();
-  const msg = document.getElementById('idp-msg-text').value.trim();
-  if (!msg) { toast('Generate a message first ✗'); return; }
-  
-  const btn = document.getElementById('idp-send-email-btn');
-  const statusEl = document.getElementById('idp-sending-status');
-  btn.disabled = true; 
-  statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
-  
-  const subject = `Recordatorio de Pago: ${inv?.number} — ${c?.name}`;
-  const html = buildHtmlEmail(subject, msg, "ClientFlow", { 
-    icon: '⚠️', accentColor: '#dc2626', 
-    fields: [ 
-      { label: 'Cliente', value: c?.name||'—' }, 
-      { label: 'Factura #', value: inv?.number||'—' }, 
-      { label: 'Monto a Pagar', value: fmtF(inv?.amount), highlight: true }, 
-      { label: 'Vencimiento', value: fmtDate(inv?.dueDate) } 
-    ]
-  });
-  
-  try {
-    // AQUÍ ESTÁ LA MAGIA: Le forzamos la etiqueta type: 'invoice'
-    await webhookSendEmail({ to, subject, text: msg, html, type: 'invoice' });
-    
-    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; 
-    toast('Email sent ✓');
-  } catch(e) { 
-    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; 
-    toast('Email failed ✗'); 
-  }
-  btn.disabled = false;
-}
 async function sendRenewalEmail() {
   const r = data.renewals.find(x=>x.id===activeRenewalId);
   const c = data.clients.find(x=>x.id===r?.clientId);
@@ -4095,33 +4060,32 @@ async function sendInvoiceEmail() {
   const to = document.getElementById('idp-email-to').value.trim();
   const msg = document.getElementById('idp-msg-text').value.trim();
   if (!msg) { toast('Generate a message first ✗'); return; }
-
+  
   const btn = document.getElementById('idp-send-email-btn');
   const statusEl = document.getElementById('idp-sending-status');
-  btn.disabled = true;
+  btn.disabled = true; 
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
-
-  const subject = `Payment Follow-up: ${inv?.number} — ${c?.name}`;
-  const html = buildHtmlEmail(subject, msg, "ClientFlow", {
-    icon: '⚠️', accentColor: '#dc2626',
-    fields: [
-      { label: 'Client', value: c?.name||'—' },
-      { label: 'Contact', value: c?.clientContact||c?.contact||'—' },
-      { label: 'Invoice #', value: inv?.number||'—' },
-      { label: 'Amount Due', value: fmtF(inv?.amount), highlight: true },
-      { label: 'Due Date', value: fmtDate(inv?.dueDate) },
-      { label: 'Days Overdue', value: Math.abs(daysUntil(inv?.dueDate)) + ' days', highlight: true },
-      inv?.billingName ? { label: 'Bill To', value: inv.billingName } : null,
-      inv?.concept ? { label: 'Concept', value: inv.concept } : null,
-    ].filter(Boolean)
+  
+  const subject = `Recordatorio de Pago: ${inv?.number} — ${c?.name}`;
+  const html = buildHtmlEmail(subject, msg, "ClientFlow", { 
+    icon: '⚠️', accentColor: '#dc2626', 
+    fields: [ 
+      { label: 'Cliente', value: c?.name||'—' }, 
+      { label: 'Factura #', value: inv?.number||'—' }, 
+      { label: 'Monto a Pagar', value: fmtF(inv?.amount), highlight: true }, 
+      { label: 'Vencimiento', value: fmtDate(inv?.dueDate) } 
+    ]
   });
+  
   try {
-    await webhookSendEmail({ to, subject, text: msg, html });
-    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email sent via Gmail</span>';
+    // AQUÍ ESTÁ LA ETIQUETA QUE MAKE NECESITA
+    await webhookSendEmail({ to: to, subject: subject, text: msg, html: html, type: 'invoice' });
+    
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Email enviado (vía Make)</span>'; 
     toast('Email sent ✓');
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
-    toast('Email failed ✗');
+  } catch(e) { 
+    statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`; 
+    toast('Email failed ✗'); 
   }
   btn.disabled = false;
 }
