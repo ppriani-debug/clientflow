@@ -2590,7 +2590,7 @@ async function geminiFetch(promptText, maxTokens=800) {
 }
 
 // ─── WEBHOOK EMAIL SEND (Make.com) ───────────────────────────────────────────
-async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {
+async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {  // <-- FÍJATE AQUÍ
   const url = getWebhookUrl(); 
   if (!url) throw new Error('Falta la URL del Webhook (Make.com) — ve a Settings');
   if (!to) throw new Error('No recipient email specified');
@@ -2600,7 +2600,8 @@ async function webhookSendEmail({ to, subject, text, html, type = 'general' }) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml, type: type })
+    // Y FÍJATE AQUÍ AL FINAL QUE DIGA type: type
+    body: JSON.stringify({ to: to, subject: subject, text: text, html: finalHtml, type: type }) 
   });
 
   if (!response.ok) throw new Error('Error al enviar al Webhook');
@@ -2864,9 +2865,6 @@ async function generateSchedMessage() {
   btn.textContent = '⚡ AI Generate';
 }
 async function sendInvoiceEmail() {
-  alert("¡Código nuevo detectado!"); // <-- AGREGA ESTA LÍNEA
-  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
-  // ... resto de tu código
   const inv = data.invoices.find(x=>x.id===activeInvoiceId);
   const c = data.clients.find(x=>x.id===inv?.clientId);
   const to = document.getElementById('idp-email-to').value.trim();
