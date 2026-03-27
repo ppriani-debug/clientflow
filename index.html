@@ -2258,20 +2258,6 @@ function buildInvoiceReportText() {
   return t;
 }
 
-  const overdueGroups = groupByClient(overdue);
-  t += `*⚠️ Facturas Vencidas Acumuladas*\n`;
-  if (overdueGroups.length) {
-    // ... unas cuantas líneas más ...
-  } else { t += `   _Sin facturas vencidas. ✅_\n`; }
-  t += `\n${divider}\n\n`;
-
-  const paidGroups = groupByClient(paidThisMonth);
-  t += `*✅ Pagos Recibidos — ${monthName}*\n`;
-  // ... más líneas ...
-  
-  return t;
-}
-
 function buildRenewalReportText() {
   const now = new Date(); now.setHours(0,0,0,0);
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
