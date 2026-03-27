@@ -455,6 +455,7 @@
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost" onclick="exportCSV()">↓ Export CSV</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('invoices')" title="Send Invoice Report to Slack">💬 Invoice Report</button>
+          <button class="btn btn-ghost" onclick="openBankModal()">🏦 Editar Saldos</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('invoices')" title="Email Invoice Report">✉ Invoice Report</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('renewals')" title="Send Renewal Report to Slack">💬 Renewal Report</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('renewals')" title="Email Renewal Report">✉ Renewal Report</button>
@@ -2212,63 +2213,48 @@ function renderBankAccounts() {
 // ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
 // ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
 function buildInvoiceReportText() {
-  const now = new Date();
-  const thisMonth = now.getMonth(), thisYear = now.getFullYear();
-  const monthName = now.toLocaleString('es-MX',{month:'long',year:'numeric'});
-  const dateStr = now.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const overdue     = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const pending     = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const paidThisMonth = data.invoices.filter(i=>i.status==='Paid').filter(i=>{const d=new Date(i.paidDate||i.dueDate);return d.getMonth()===thisMonth&&d.getFullYear()===thisYear;});
-  const preinvoices = data.invoices.filter(i=>i.status==='Pre-Invoice');
-  const accounts    = getBankAccounts();
-  const divider = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-
-  const groupByClient = (invoices) => {
+  const groupInvs = (invs) => {
     const map = {};
-    invoices.forEach(i => {
-      if (!map[i.clientId]) map[i.clientId] = { name: clientName(i.clientId), total: 0, invoices: [] };
+    invs.forEach(i => {
+      if(!map[i.clientId]) map[i.clientId] = { client: data.clients.find(x=>x.id===i.clientId)?.name||'Unknown', total: 0, count: 0, refs: [] };
       map[i.clientId].total += i.amount;
-      map[i.clientId].invoices.push(i);
+      map[i.clientId].count++;
+      map[i.clientId].refs.push(i.number);
     });
-    return Object.values(map).sort((a,b) => b.total - a.total);
+    return Object.values(map).sort((a,b)=>b.total-a.total); // Ordena de mayor a menor monto
   };
 
-  let t = '';
-  t += `*📊 Reporte Ejecutivo*\nInformación al: ${dateStr}\n${divider}\n\n`;
+  let t = `💰 REPORTE DE COBRANZA Y FACTURACIÓN\n─────────────────────────────────────\n\n`;
+  
+  // 1. Bancos (Ajusta los montos/nombres aquí)
+  const bankAccounts = [ { name: 'BBVA MXN', balance: 0 }, { name: 'Banamex MXN', balance: 0 } ];
+  const bankTotal = bankAccounts.reduce((s,a)=>s+a.balance, 0);
+  
+  t += `🏦 SALDO EN CUENTAS BANCARIAS\n`;
+  bankAccounts.forEach(a => t += `• ${a.name}: ${fmt(a.balance)}\n`);
+  t += `Total MXN: ${fmt(bankTotal)}\n\n`;
 
-  if (accounts.length) {
-    t += `*🏦 Disponibilidad en Bancos*\n`;
-    const fxRates = getFxRates();
-    const toMXN = (bal, cur) => { if (!cur || cur === 'MXN') return bal; const r = parseFloat(fxRates[cur] || 0); return r ? bal * r : bal; };
-    accounts.forEach(a => {
-      const mxn = toMXN(a.balance, a.currency);
-      const rateNote = a.currency !== 'MXN' && fxRates[a.currency] ? ` → ${fmt(mxn)} MXN @ ${parseFloat(fxRates[a.currency]).toFixed(2)}` : a.currency !== 'MXN' ? ' (sin tipo de cambio)' : '';
-      t += `   ${a.name}${a.bank?' ('+a.bank+')':''}: *${a.currency} ${fmt(a.balance)}*${rateNote}\n`;
-    });
-    const totalMXN = accounts.reduce((s,a) => s + toMXN(a.balance, a.currency), 0);
-    const hasForeign = accounts.some(a => a.currency !== 'MXN');
-    t += `   ${'─'.repeat(34)}\n   *TOTAL DISPONIBLE: ${fmt(totalMXN)} MXN*${hasForeign ? ' _(convertido a MXN)_' : ''}\n\n${divider}\n\n`;
-  }
+  // 2. Vencidas (Agrupadas)
+  const overdueGrouped = groupInvs(data.invoices.filter(i=>i.status==='Overdue'));
+  const overdueTotal = overdueGrouped.reduce((s,g)=>s+g.total, 0);
+  t += `🔴 FACTURAS VENCIDAS (Total MXN: ${fmt(overdueTotal)})\n`;
+  if(!overdueGrouped.length) t += `   Ninguna factura vencida.\n`;
+  overdueGrouped.forEach(g => {
+    t += `• ${g.client} | ${g.count} facturas (${g.refs.join(', ')}) | ${fmt(g.total)}\n`;
+  });
+  t += `\n`;
 
-  const pendingGroups = groupByClient(pending);
-  t += `*🔔 Top Clientes por Cobrar*\n`;
-  if (pendingGroups.length) {
-    t += `_${pendingGroups.length} cliente${pendingGroups.length!==1?'s':''} · Total: ${fmt(pending.reduce((s,i)=>s+i.amount,0))}_\n\n`;
-    pendingGroups.forEach((g, idx) => {
-      const soonest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
-      const d = soonest?.dueDate ? daysUntil(soonest.dueDate) : null;
-      const dLabel = d===null?'—':d===0?'hoy':d===1?'mañana':`${d}d`;
-      t += `   ${idx+1}. *${g.name}* |  Vence: ${soonest?.dueDate?fmtDate(soonest.dueDate):'—'} (${dLabel})  |  *${fmt(g.total)}*\n`;
-    });
-  } else { t += `   _Sin facturas pendientes._\n`; }
-  t += `\n${divider}\n\n`;
+  // 3. Pendientes (Top 10)
+  const pendingGrouped = groupInvs(data.invoices.filter(i=>i.status==='Pending')).slice(0, 10);
+  const pendingTotal = pendingGrouped.reduce((s,g)=>s+g.total, 0);
+  t += `🟡 PENDIENTES - TOP 10 (Total Top 10 MXN: ${fmt(pendingTotal)})\n`;
+  if(!pendingGrouped.length) t += `   Ninguna factura pendiente.\n`;
+  pendingGrouped.forEach(g => {
+    t += `• ${g.client} | ${g.count} facturas (${g.refs.join(', ')}) | ${fmt(g.total)}\n`;
+  });
 
-  const preGroups = groupByClient(preinvoices);
-  if (preGroups.length) {
-    t += `*🟣 Pre-Facturas (Proyectadas)*\n_${preGroups.length} cliente${preGroups.length!==1?'s':''} · Total proyectado: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))}_\n\n`;
-    preGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}* |  *${fmt(g.total)}*\n`);
-    t += `\n${divider}\n\n`;
-  }
+  return t;
+}
 
   const overdueGroups = groupByClient(overdue);
   t += `*⚠️ Facturas Vencidas Acumuladas*\n`;
@@ -2297,11 +2283,35 @@ function buildInvoiceReportText() {
 
 function buildRenewalReportText() {
   const now = new Date(); now.setHours(0,0,0,0);
-  const dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
+  
+  let t = `🔄 REPORTE DE RENOVACIONES\n─────────────────────────────────────\n\n`;
+  
+  const groups = [
+    { label: 'VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed' },
+    { label: '0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' },
+    { label: '31 a 60 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed' },
+    { label: '61 a 90 Días', filter: r => daysFrom(r) > 60 && daysFrom(r) <= 90 && r.status !== 'Renewed' }
+  ];
 
-  const statuses = ['Overdue','Due Soon','Renewed'];
-  const divider = '─────────────────────────────────────';
+  groups.forEach(g => {
+    const items = data.renewals.filter(g.filter).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(!items.length) return;
+    
+    t += `[ ${g.label} — ${items.length} ]\n`;
+    items.forEach(r => {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
+      const lc = r.lastContact ? fmtDate(r.lastContact) : 'Nunca';
+      const lastComment = (r.comments||[]).slice(-1)[0]?.text || 'Sin comentarios';
+      
+      t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Contacto: ${lc} | ${r.status}\n`;
+      t += `  💬 Último comentario: ${lastComment}\n`;
+    });
+    t += `\n`;
+  });
+  return t;
+}
 
   const renewalEntry = (r, idx) => {
     const rc = data.clients.find(x=>x.id===r.clientId);
@@ -2372,73 +2382,111 @@ async function sendReportSlack(type) {
 }
 
 function buildInvoiceReportHtml() {
-  const overdue = data.invoices.filter(i=>i.status==='Overdue').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  const pending = data.invoices.filter(i=>i.status==='Pending'||i.status==='Due Soon').sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
-  
-  let html = `<table style="width:100%; border-collapse:collapse; margin-top:24px; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
-  html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; letter-spacing:0.5px; font-size:11px;">
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Factura</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Vencimiento</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:center;">Estatus</th>
-  </tr></thead><tbody>`;
-
-  const drawRow = (i, isOverdue) => {
-    const c = data.clients.find(x=>x.id===i.clientId);
-    const color = isOverdue ? '#dc2626' : '#d97706';
-    const statusText = isOverdue ? 'Vencida' : 'Pendiente';
-    html += `<tr>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; font-weight:500; color:#1a1916;">${c?.name||'Unknown'}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; color:#8a8580;">${i.number}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:600; color:${isOverdue?'#dc2626':'#1a1916'};">${fmt(i.amount)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; color:#8a8580;">${fmtDate(i.dueDate)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:center;"><span style="background-color:${isOverdue?'#fef2f2':'#fffbeb'}; color:${color}; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:600;">${statusText}</span></td>
-    </tr>`;
+  const groupInvs = (invs) => {
+    const map = {};
+    invs.forEach(i => {
+      if(!map[i.clientId]) map[i.clientId] = { client: data.clients.find(x=>x.id===i.clientId)?.name||'Unknown', total: 0, count: 0, refs: [] };
+      map[i.clientId].total += i.amount;
+      map[i.clientId].count++;
+      map[i.clientId].refs.push(i.number);
+    });
+    return Object.values(map).sort((a,b)=>b.total-a.total);
   };
 
-  if(overdue.length) {
-    html += `<tr><td colspan="5" style="padding:16px 12px 8px; font-size:12px; font-weight:bold; color:#dc2626; text-transform:uppercase;">⚠️ Facturas Vencidas</td></tr>`;
-    overdue.forEach(i => drawRow(i, true));
-  }
-  if(pending.length) {
-    html += `<tr><td colspan="5" style="padding:16px 12px 8px; font-size:12px; font-weight:bold; color:#d97706; text-transform:uppercase;">⏳ Facturas Pendientes</td></tr>`;
-    pending.forEach(i => drawRow(i, false));
-  }
-  html += `</tbody></table>`;
+  let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
+
+  // 1. Bancos (Ajusta los montos/nombres aquí también)
+ const bankAccounts = [ { name: 'BBVA MXN', balance: 0 }, { name: 'Banamex MXN', balance: 0 } ];
+  const bankTotal = bankAccounts.reduce((s,a)=>s+a.balance, 0);
+  
+  html += `<h3 style="color:#1a1916; font-size:14px; text-transform:uppercase; border-bottom:1px solid #e8e5df; padding-bottom:8px; margin-top:20px;">🏦 Saldo en Cuentas Bancarias</h3>`;
+  html += `<ul style="list-style:none; padding:0; margin:0 0 24px 0; width:350px;">`;
+  bankAccounts.forEach(a => {
+    html += `<li style="display:flex; justify-content:space-between; padding:4px 0; color:#4a4540;"><span>${a.name}</span> <strong style="color:#1a1916;">${fmt(a.balance)}</strong></li>`;
+  });
+  html += `<li style="display:flex; justify-content:space-between; padding:8px 0; margin-top:4px; border-top:1px dashed #d0c8c0; font-weight:bold; color:#1a1916;"><span>Total Bancos MXN</span> <span>${fmt(bankTotal)}</span></li></ul>`;
+
+  // Función interna para dibujar tablas agrupadas
+  const renderTable = (title, color, groupedData) => {
+    const total = groupedData.reduce((s,g)=>s+g.total, 0);
+    let t = `<h3 style="color:${color}; font-size:14px; text-transform:uppercase; margin-bottom:8px;">${title} (Total: ${fmt(total)})</h3>`;
+    if(!groupedData.length) return t + `<p style="color:#8a8580; margin-bottom:24px;">No hay facturas en esta categoría.</p>`;
+    
+    t += `<table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:12px;">`;
+    t += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Facturas</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:right;">Total MXN</th>
+    </tr></thead><tbody>`;
+    
+    groupedData.forEach(g => {
+      t += `<tr>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; font-weight:600; color:#1a1916;">${g.client}</td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; color:#4a4540;">${g.count} invs <span style="font-size:10px;color:#8a8580;">(${g.refs.join(', ')})</span></td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; text-align:right; font-weight:700; color:${color};">${fmt(g.total)}</td>
+      </tr>`;
+    });
+    t += `</tbody></table>`;
+    return t;
+  };
+
+  // 2. Overdue & 3. Pending (Top 10)
+  html += renderTable('🔴 Vencidas (Overdue)', '#dc2626', groupInvs(data.invoices.filter(i=>i.status==='Overdue')));
+  html += renderTable('🟡 Pendientes - TOP 10', '#d97706', groupInvs(data.invoices.filter(i=>i.status==='Pending')).slice(0, 10));
+
+  html += `</div>`;
   return html;
 }
 
 function buildRenewalReportHtml() {
-  const active = data.renewals.filter(r=>r.status!=='Renewed').sort((a,b)=>new Date(a.date)-new Date(b.date));
-  let html = `<table style="width:100%; border-collapse:collapse; margin-top:24px; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
-  html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; letter-spacing:0.5px; font-size:11px;">
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:left;">Servicio</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:right;">Fecha</th>
-    <th style="padding:12px; border-bottom:1px solid #e8e5df; text-align:center;">Estatus</th>
-  </tr></thead><tbody>`;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
+  
+  const groups = [
+    { label: '🔴 VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed', color: '#dc2626' },
+    { label: '🟠 0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed', color: '#ea580c' },
+    { label: '🟡 31 a 60 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed', color: '#d97706' },
+    { label: '🔵 61 a 90 Días', filter: r => daysFrom(r) > 60 && daysFrom(r) <= 90 && r.status !== 'Renewed', color: '#2563eb' }
+  ];
 
-  active.forEach(r => {
-    const c = data.clients.find(x=>x.id===r.clientId);
-    const isOverdue = r.status === 'Overdue';
-    const isSoon = r.status === 'Due Soon';
-    const color = isOverdue ? '#dc2626' : isSoon ? '#d97706' : '#2563eb';
-    const bg = isOverdue ? '#fef2f2' : isSoon ? '#fffbeb' : '#eff4ff';
+  let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;">`;
+  
+  groups.forEach(g => {
+    const items = data.renewals.filter(g.filter).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(!items.length) return;
     
-    html += `<tr>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; font-weight:500; color:#1a1916;">${c?.name||'Unknown'}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; color:#8a8580;">${r.type}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:600; color:#1a1916;">${fmt(r.amount)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:right; color:#8a8580;">${fmtDate(r.date)}</td>
-      <td style="padding:12px; border-bottom:1px solid #f0ede8; text-align:center;"><span style="background-color:${bg}; color:${color}; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:600;">${r.status}</span></td>
-    </tr>`;
-  });
-  html += `</tbody></table>`;
-  return html;
-}
+    html += `<h3 style="color:${g.color}; font-size:14px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:0.5px;">${g.label} (${items.length})</h3>`;
+    html += `<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:16px;">`;
+    html += `<thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Client</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Type</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Renewal Date</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Last Contact</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Status</th>
+      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Last Comment</th>
+    </tr></thead><tbody>`;
 
+    items.forEach(r => {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      const isDanger = r.subStatus === 'En peligro';
+      const rowStyle = isDanger ? 'background-color:#fef2f2;' : '';
+      const nameStyle = isDanger ? 'color:#dc2626; font-weight:700;' : 'color:#1a1916; font-weight:600;';
+      const lc = r.lastContact ? fmtDate(r.lastContact) : '<span style="color:#8a8580">Nunca</span>';
+      const lastComment = (r.comments||[]).slice(-1)[0]?.text || '<span style="color:#8a8580; font-style:italic;">Sin comentarios</span>';
+
+      html += `<tr style="${rowStyle}">
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; ${nameStyle}">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8;">${fmtDate(r.date)}</td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8;">${lc}</td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; font-weight:600;">${r.status}</td>
+        <td style="padding:10px; border-bottom:1px solid #f0ede8; color:#4a4540;">${lastComment}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  });
+  return html + `</div>`;
+}
 async function sendReportEmail(type) {
   const url = getWebhookUrl();
   if (!url) { toast('Configure Make.com Webhook URL in Email Alerts → Settings first'); return; }
@@ -6103,5 +6151,34 @@ function buildUpsellReportHtml() {
   <div id="sync-label">Loading…</div>
 </div>
 
+  // ─── BANK BALANCES MODAL ─────────────────────────────────────────────────
+function openBankModal() {
+  if(!data.bankAccounts) data.bankAccounts = [ { name: 'BBVA MXN', balance: 0 }, { name: 'Banamex MXN', balance: 0 } ];
+  let html = `<div class="modal-title">🏦 Actualizar Saldos Bancarios</div><div class="form-grid">`;
+  
+  data.bankAccounts.forEach((b, i) => {
+    html += `<div class="form-group">
+      <label class="form-label">${b.name}</label>
+      <input type="number" class="form-input" id="bank-bal-${i}" value="${b.balance}">
+    </div>`;
+  });
+  
+  html += `</div>
+  <div class="modal-actions">
+    <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveBankBalances()">Guardar Saldos</button>
+  </div>`;
+  openModal(html);
+}
+
+function saveBankBalances() {
+  data.bankAccounts.forEach((b, i) => {
+    b.balance = parseFloat(document.getElementById(`bank-bal-${i}`).value) || 0;
+  });
+  saveData();
+  closeModal();
+  toast('Saldos actualizados ✓');
+}
+  
 </body>
 </html>
