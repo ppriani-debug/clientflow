@@ -2215,7 +2215,6 @@ function renderBankAccounts() {
 }
 
 // ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
-// ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
 function buildInvoiceReportText() {
   const groupInvs = (invs) => {
     const map = {};
@@ -2230,13 +2229,18 @@ function buildInvoiceReportText() {
 
   let t = `💰 REPORTE DE COBRANZA Y FACTURACIÓN\n─────────────────────────────────────\n\n`;
   
-  // 1. Bancos (Ajusta los montos/nombres aquí)
-  const bankAccounts = [ { name: 'BBVA MXN', balance: 0 }, { name: 'Banamex MXN', balance: 0 } ];
-  const bankTotal = bankAccounts.reduce((s,a)=>s+a.balance, 0);
+  // 1. Bancos (Conectado a tu base de datos real de ClientFlow)
+  const bankAccounts = typeof getBankAccounts === 'function' ? getBankAccounts() : [];
   
   t += `🏦 SALDO EN CUENTAS BANCARIAS\n`;
-  bankAccounts.forEach(a => t += `• ${a.name}: ${fmt(a.balance)}\n`);
-  t += `Total MXN: ${fmt(bankTotal)}\n\n`;
+  if (bankAccounts.length === 0) {
+    t += `  (No hay cuentas registradas)\n`;
+  } else {
+    bankAccounts.forEach(a => {
+      t += `• ${a.name} (${a.currency}): ${fmt(a.balance)}\n`;
+    });
+  }
+  t += `\n`;
 
   // 2. Vencidas (Agrupadas)
   const overdueGrouped = groupInvs(data.invoices.filter(i=>i.status==='Overdue'));
@@ -2257,31 +2261,6 @@ function buildInvoiceReportText() {
     t += `• ${g.client} | ${g.count} facturas (${g.refs.join(', ')}) | ${fmt(g.total)}\n`;
   });
 
-  return t;
-}
-
-  const overdueGroups = groupByClient(overdue);
-  t += `*⚠️ Facturas Vencidas Acumuladas*\n`;
-  if (overdueGroups.length) {
-    t += `\n`;
-    overdueGroups.forEach((g, idx) => {
-      const oldest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
-      const days = oldest?.dueDate ? Math.abs(daysUntil(oldest.dueDate)) : null;
-      t += `   ${idx+1}. *${g.name}* |  Atraso: ${days!==null?days+' día'+(days!==1?'s':''):'—'}  |  *${fmt(g.total)}*\n`;
-    });
-    t += `   ${'─'.repeat(34)}\n   *TOTAL VENCIDO GENERAL: ${fmt(overdue.reduce((s,i)=>s+i.amount,0))}*\n`;
-  } else { t += `   _Sin facturas vencidas. ✅_\n`; }
-  t += `\n${divider}\n\n`;
-
-  const paidGroups = groupByClient(paidThisMonth);
-  t += `*✅ Pagos Recibidos — ${monthName}*\n`;
-  if (paidGroups.length) {
-    t += `\n`;
-    paidGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}* |  *${fmt(g.total)}*\n`);
-    t += `   ${'─'.repeat(34)}\n   *TOTAL RECIBIDO: ${fmt(paidThisMonth.reduce((s,i)=>s+i.amount,0))}*\n`;
-  } else { t += `   _No hay pagos este mes._\n`; }
-
-  t += `\n${divider}\n_Reporte generado por ClientFlow_`;
   return t;
 }
 
