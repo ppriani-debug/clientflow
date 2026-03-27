@@ -2183,8 +2183,13 @@ function renderBankAccounts() {
       fxContainer.style.display = 'none';
     }
   }
+  function renderBankAccounts() {       // <-- ESTA ES LA LÍNEA QUE FALTABA
   const tbody = document.getElementById('bank-tbody');
   if (!tbody) return;
+  
+  // ... aquí seguramente sigue el resto de tu código de los bancos ...
+  
+} // <-- Y asegúrate de que al final del bloque de bancos haya una llave que cierre
   tbody.innerHTML = accounts.length ? accounts.map((a, i) => {
     const mxn = mxnValues[i];
     const isForeign = a.currency !== 'MXN';
