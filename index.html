@@ -455,7 +455,6 @@
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost" onclick="exportCSV()">↓ Export CSV</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('invoices')" title="Send Invoice Report to Slack">💬 Invoice Report</button>
-          <button class="btn btn-ghost" onclick="openBankModal()">🏦 Editar Saldos</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('invoices')" title="Email Invoice Report">✉ Invoice Report</button>
           <button class="btn btn-ghost" onclick="sendReportSlack('renewals')" title="Send Renewal Report to Slack">💬 Renewal Report</button>
           <button class="btn btn-ghost" onclick="sendReportEmail('renewals')" title="Email Renewal Report">✉ Renewal Report</button>
@@ -6150,35 +6149,6 @@ function buildUpsellReportHtml() {
   <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#d1d5db"></div>
   <div id="sync-label">Loading…</div>
 </div>
-
-  // ─── BANK BALANCES MODAL ─────────────────────────────────────────────────
-function openBankModal() {
-  if(!data.bankAccounts) data.bankAccounts = [ { name: 'BBVA MXN', balance: 0 }, { name: 'Banamex MXN', balance: 0 } ];
-  let html = `<div class="modal-title">🏦 Actualizar Saldos Bancarios</div><div class="form-grid">`;
-  
-  data.bankAccounts.forEach((b, i) => {
-    html += `<div class="form-group">
-      <label class="form-label">${b.name}</label>
-      <input type="number" class="form-input" id="bank-bal-${i}" value="${b.balance}">
-    </div>`;
-  });
-  
-  html += `</div>
-  <div class="modal-actions">
-    <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-primary" onclick="saveBankBalances()">Guardar Saldos</button>
-  </div>`;
-  openModal(html);
-}
-
-function saveBankBalances() {
-  data.bankAccounts.forEach((b, i) => {
-    b.balance = parseFloat(document.getElementById(`bank-bal-${i}`).value) || 0;
-  });
-  saveData();
-  closeModal();
-  toast('Saldos actualizados ✓');
-}
   
 </body>
 </html>
