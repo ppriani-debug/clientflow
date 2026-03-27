@@ -2161,13 +2161,16 @@ function renderBankAccounts() {
   const allRatesSet = mxnValues.every(v => v !== null);
   const totalMXN = allRatesSet ? mxnValues.reduce((s,v) => s+v, 0) : null;
   const totalEl = document.getElementById('bank-total');
+  
   if (totalEl) {
     if (!accounts.length) totalEl.innerHTML = '';
     else if (totalMXN !== null) totalEl.innerHTML = `Total: <strong>${fmt(totalMXN)} MXN</strong>`;
     else totalEl.innerHTML = `Total: <span style="color:var(--amber)">⚠ Set exchange rates below</span>`;
   }
+  
   const foreignCurrencies = [...new Set(accounts.filter(a=>a.currency!=='MXN').map(a=>a.currency))];
   const fxContainer = document.getElementById('fx-rates-container');
+  
   if (fxContainer) {
     if (foreignCurrencies.length) {
       fxContainer.style.display = '';
@@ -2183,13 +2186,10 @@ function renderBankAccounts() {
       fxContainer.style.display = 'none';
     }
   }
-  function renderBankAccounts() {       // <-- ESTA ES LA LÍNEA QUE FALTABA
+
   const tbody = document.getElementById('bank-tbody');
   if (!tbody) return;
-  
-  // ... aquí seguramente sigue el resto de tu código de los bancos ...
-  
-} // <-- Y asegúrate de que al final del bloque de bancos haya una llave que cierre
+
   tbody.innerHTML = accounts.length ? accounts.map((a, i) => {
     const mxn = mxnValues[i];
     const isForeign = a.currency !== 'MXN';
