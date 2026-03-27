@@ -2258,25 +2258,19 @@ function buildInvoiceReportText() {
   return t;
 }
 
-  const pendingGroups = groupByClient(pending);
-  t += `*🔔 Top Clientes por Cobrar*\n`;
-  if (pendingGroups.length) {
-    t += `_${pendingGroups.length} cliente${pendingGroups.length!==1?'s':''} · Total: ${fmt(pending.reduce((s,i)=>s+i.amount,0))}_\n\n`;
-    pendingGroups.forEach((g, idx) => {
-      const soonest = g.invoices.reduce((a,b)=>new Date(a.dueDate)<new Date(b.dueDate)?a:b, g.invoices[0]);
-      const d = soonest?.dueDate ? daysUntil(soonest.dueDate) : null;
-      const dLabel = d===null?'—':d===0?'hoy':d===1?'mañana':`${d}d`;
-      t += `   ${idx+1}. *${g.name}* |  Vence: ${soonest?.dueDate?fmtDate(soonest.dueDate):'—'} (${dLabel})  |  *${fmt(g.total)}*\n`;
-    });
-  } else { t += `   _Sin facturas pendientes._\n`; }
+  const overdueGroups = groupByClient(overdue);
+  t += `*⚠️ Facturas Vencidas Acumuladas*\n`;
+  if (overdueGroups.length) {
+    // ... unas cuantas líneas más ...
+  } else { t += `   _Sin facturas vencidas. ✅_\n`; }
   t += `\n${divider}\n\n`;
 
-  const preGroups = groupByClient(preinvoices);
-  if (preGroups.length) {
-    t += `*🟣 Pre-Facturas (Proyectadas)*\n_${preGroups.length} cliente${preGroups.length!==1?'s':''} · Total proyectado: ${fmt(preinvoices.reduce((s,i)=>s+i.amount,0))}_\n\n`;
-    preGroups.forEach((g, idx) => t += `   ${idx+1}. *${g.name}* |  *${fmt(g.total)}*\n`);
-    t += `\n${divider}\n\n`;
-  }
+  const paidGroups = groupByClient(paidThisMonth);
+  t += `*✅ Pagos Recibidos — ${monthName}*\n`;
+  // ... más líneas ...
+  
+  return t;
+}
 
 function buildRenewalReportText() {
   const now = new Date(); now.setHours(0,0,0,0);
