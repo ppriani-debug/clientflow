@@ -2210,6 +2210,7 @@ function renderBankAccounts() {
 }
 
 // ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
+// ─── REPORT BUILDERS ─────────────────────────────────────────────────────────
 function buildInvoiceReportText() {
   const groupInvs = (invs) => {
     const map = {};
@@ -2224,7 +2225,7 @@ function buildInvoiceReportText() {
 
   let t = `💰 REPORTE DE COBRANZA Y FACTURACIÓN\n─────────────────────────────────────\n\n`;
   
-  // Conectamos a tu BD de bancos real
+  // 1. Bancos
   const accounts = typeof getBankAccounts === 'function' ? getBankAccounts() : [];
   const rates = typeof getFxRates === 'function' ? getFxRates() : {};
   const toMXN = (balance, cur) => cur === 'MXN' ? balance : (parseFloat(rates[cur]||0) ? balance * parseFloat(rates[cur]) : 0);
@@ -2242,6 +2243,28 @@ function buildInvoiceReportText() {
   }
   t += `Total Estimado MXN: ${fmt(bankTotalMXN)}\n\n`;
 
+  // 2. PAGOS DEL MES CORRIENTE (Nuevo)
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  const paidThisMonth = data.invoices.filter(i => {
+    if (i.status !== 'Paid') return false;
+    // Buscamos la fecha de pago (soporta varios nombres de variable por seguridad)
+    const dateStr = i.paidDate || i.paymentDate || i.date; 
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  
+  const paidGrouped = groupInvs(paidThisMonth);
+  const paidTotal = paidGrouped.reduce((s,g)=>s+g.total, 0);
+  t += `✅ PAGOS RECIBIDOS ESTE MES (Total MXN: ${fmt(paidTotal)})\n`;
+  if(!paidGrouped.length) t += `   Ningún pago registrado este mes.\n`;
+  paidGrouped.forEach(g => { t += `• ${g.client} | ${g.count} facturas (${g.refs.join(', ')}) | ${fmt(g.total)}\n`; });
+  t += `\n`;
+
+  // 3. Vencidas
   const overdueGrouped = groupInvs(data.invoices.filter(i=>i.status==='Overdue'));
   const overdueTotal = overdueGrouped.reduce((s,g)=>s+g.total, 0);
   t += `🔴 FACTURAS VENCIDAS (Total MXN: ${fmt(overdueTotal)})\n`;
@@ -2249,6 +2272,7 @@ function buildInvoiceReportText() {
   overdueGrouped.forEach(g => { t += `• ${g.client} | ${g.count} facturas (${g.refs.join(', ')}) | ${fmt(g.total)}\n`; });
   t += `\n`;
 
+  // 4. Pendientes Top 10
   const pendingGrouped = groupInvs(data.invoices.filter(i=>i.status==='Pending')).slice(0, 10);
   const pendingTotal = pendingGrouped.reduce((s,g)=>s+g.total, 0);
   t += `🟡 PENDIENTES - TOP 10 (Total Top 10 MXN: ${fmt(pendingTotal)})\n`;
@@ -2257,7 +2281,6 @@ function buildInvoiceReportText() {
 
   return t;
 }
-
 function buildRenewalReportText() {
   const now = new Date(); now.setHours(0,0,0,0);
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
@@ -2311,7 +2334,6 @@ function buildInvoiceReportHtml() {
 
   let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; font-size:13px;">`;
 
-  // Bancos conectados a BD
   const accounts = typeof getBankAccounts === 'function' ? getBankAccounts() : [];
   const rates = typeof getFxRates === 'function' ? getFxRates() : {};
   const toMXN = (balance, cur) => cur === 'MXN' ? balance : (parseFloat(rates[cur]||0) ? balance * parseFloat(rates[cur]) : 0);
@@ -2352,12 +2374,24 @@ function buildInvoiceReportHtml() {
     return t;
   };
 
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  const paidThisMonth = data.invoices.filter(i => {
+    if (i.status !== 'Paid') return false;
+    const dateStr = i.paidDate || i.paymentDate || i.date; 
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  html += renderTable('✅ Pagos Recibidos Este Mes', '#16a34a', groupInvs(paidThisMonth));
   html += renderTable('🔴 Vencidas (Overdue)', '#dc2626', groupInvs(data.invoices.filter(i=>i.status==='Overdue')));
   html += renderTable('🟡 Pendientes - TOP 10', '#d97706', groupInvs(data.invoices.filter(i=>i.status==='Pending')).slice(0, 10));
   html += `</div>`;
   return html;
 }
-
 function buildRenewalReportHtml() {
   const now = new Date(); now.setHours(0,0,0,0);
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
