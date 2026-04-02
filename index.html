@@ -1993,23 +1993,18 @@ function renderInvoices() {
         : `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">$</div><div class="empty-text">No invoices found</div></div></td></tr>`;
   }
 
-  // 7. ARREGLO DE SCROLL AUTOMÁTICO (Técnica Infalible)
+  // 7. ARREGLO DE SCROLL AUTOMÁTICO (Evita que la pantalla se quede trabada)
   const pageContainer = document.getElementById('page-invoices');
   if (pageContainer) {
-    pageContainer.style.height = 'calc(100vh - 80px)'; // Le decimos exactamente cuánto mide la pantalla
-    pageContainer.style.overflowY = 'auto'; // Forzamos la barra de desplazamiento
-    pageContainer.style.display = 'block'; // Rompemos cualquier candado de Flexbox
+    pageContainer.style.overflowY = 'auto';
+    pageContainer.style.maxHeight = 'calc(100vh - 60px)';
+    pageContainer.style.paddingBottom = '40px';
   }
-  
-  // BONUS: Congelar los encabezados de la tabla para que siempre los veas al bajar
-  const tableHeader = document.querySelector('#page-invoices table thead');
-  if (tableHeader) {
-    tableHeader.style.position = 'sticky';
-    tableHeader.style.top = '0';
-    tableHeader.style.backgroundColor = '#ffffff'; // Fondo blanco para que no se encimen las letras
-    tableHeader.style.zIndex = '10';
-    tableHeader.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)'; // Sombrita elegante
+  const mainContent = document.querySelector('.main-content') || document.querySelector('.content');
+  if (mainContent) {
+    mainContent.style.overflowY = 'auto';
   }
+}
 
 function setInvoiceSort(col) {
   if (invoiceSort.col === col) invoiceSort.dir = invoiceSort.dir === 'asc' ? 'desc' : 'asc';
