@@ -1882,8 +1882,39 @@ function duplicateRenewal(id,e) {
 function filterInvoices(q) { invoiceSearch=q.toLowerCase(); renderInvoices(); }
 function setInvoiceFilter(f) { invoiceFilter=f; renderInvoices(); }
 function renderInvoices() {
-  document.getElementById('invoice-filters').innerHTML = ['All','Pre-Invoice','Pending','Overdue','Paid'].map(s=>
+  // 1. DIBUJAR LOS FILTROS
+  const filterButtons = ['All','Pre-Invoice','Pending','Overdue','Paid'].map(s=>
     `<button class="filter-btn ${invoiceFilter===s?'active':''}" onclick="setInvoiceFilter('${s}')">${s}</button>`).join('');
+
+  // 2. NUEVO: SELECTOR DE MES Y CÁLCULO DE PAGOS RECIBIDOS
+  if (!window.invoiceMonthFilter) {
+    const now = new Date();
+    window.invoiceMonthFilter = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  
+  const paidThisMonth = data.invoices.filter(i => {
+    if (i.status !== 'Paid') return false;
+    const dStr = i.paidDate || i.paymentDate || i.date;
+    if (!dStr) return false;
+    return dStr.startsWith(window.invoiceMonthFilter);
+  });
+  const totalPaidMonth = paidThisMonth.reduce((s,i) => s + i.amount, 0);
+
+  // 3. INYECTAR FILTROS Y SELECTOR EN LA PANTALLA
+  const filtersContainer = document.getElementById('invoice-filters');
+  filtersContainer.style.display = 'flex';
+  filtersContainer.style.alignItems = 'center';
+  filtersContainer.style.flexWrap = 'wrap';
+  filtersContainer.style.gap = '10px';
+  
+  filtersContainer.innerHTML = filterButtons + `
+    <div style="display:flex; align-items:center; gap:12px; margin-left:auto; background:#f0fdf4; padding:6px 16px; border-radius:8px; border:1px solid #bbf7d0;">
+      <span style="font-weight:600; color:#166534; font-size:13px;">✅ Pagos:</span>
+      <input type="month" class="form-input" style="width:130px; padding:2px 6px; font-size:13px; cursor:pointer;" value="${window.invoiceMonthFilter}" onchange="window.invoiceMonthFilter=this.value; renderInvoices();">
+      <span style="font-weight:700; color:#15803d; font-size:15px;">${fmtF(totalPaidMonth)}</span>
+      <span style="font-size:11px; color:#166534;">(${paidThisMonth.length})</span>
+    </div>
+  `;
 
   // AGING
   const ov=data.invoices.filter(i=>i.status==='Overdue');
@@ -5154,24 +5185,45 @@ function mKey(y, m) { return y + '-' + String(m+1).padStart(2,'0'); }
 function isoToMKey(iso) { if (!iso) return null; const d = new Date(iso+'T00:00:00'); return mKey(d.getFullYear(), d.getMonth()); }
 
 function buildCfData() {
-  const months = get12Months();
-  const expenses = getCfExpenses();
-  const accounts = getBankAccounts();
-  const bankBalance = accounts.reduce((s,a) => s + cfToMXN(a.balance, a.currency), 0);
-  const manualBalance = getCfStartingBalance();
+  // MAGIA NUEVA: Generador dinámico de 12 meses
+  if (!window.cfStartMonth) {
+    const now = new Date();
+    window.cfStartMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  
+  const [sy, sm] = window.cfStartMonth.split('-').map(Number);
+  const months = [];
+  let curY = sy, curM = sm - 1;
+  const mNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  
+  for (let i = 0; i < 12; i++) {
+    months.push({ year: curY, month: curM, label: mNames[curM], fullLabel: `${mNames[curM]} ${curY}` });
+    curM++; if (curM > 11) { curM = 0; curY++; }
+  }
+
+  // RESTO DEL CÓDIGO INTACTO
+  const expenses = typeof getCfExpenses === 'function' ? getCfExpenses() : [];
+  const accounts = typeof getBankAccounts === 'function' ? getBankAccounts() : [];
+  const bankBalance = accounts.reduce((s,a) => s + (typeof cfToMXN === 'function' ? cfToMXN(a.balance, a.currency) : a.balance), 0);
+  const manualBalance = typeof getCfStartingBalance === 'function' ? getCfStartingBalance() : null;
   const startingBalance = manualBalance !== null ? manualBalance : bankBalance;
 
   const buckets = {};
   months.forEach(m => {
-    buckets[mKey(m.year, m.month)] = {
+    // Asumo que mKey es una función tuya que arma "2024-03", la replicamos aquí por seguridad
+    const key = `${m.year}-${String(m.month+1).padStart(2,'0')}`;
+    buckets[key] = {
       label: m.label, fullLabel: m.fullLabel,
       invoicesPaid: [], invoicesPending: [], renewalProjected: [],
       expenses: [], expensesProj: []
     };
   });
 
+  // Funciones de ayuda internas por si acaso
+  const getMKey = d => d.substring(0,7); 
+
   data.invoices.filter(i => i.status === 'Paid' && i.paidDate).forEach(i => {
-    const k = isoToMKey(i.paidDate);
+    const k = getMKey(i.paidDate);
     if (buckets[k]) {
       const c = data.clients.find(x=>x.id===i.clientId);
       buckets[k].invoicesPaid.push({ label: i.number + ' — ' + (c?.name||'?'), amount: i.amount, clientId: i.clientId, clientName: c?.name||'?' });
@@ -5179,7 +5231,7 @@ function buildCfData() {
   });
 
   data.invoices.filter(i => i.status !== 'Paid').forEach(i => {
-    const k = isoToMKey(i.dueDate);
+    const k = getMKey(i.dueDate);
     if (buckets[k]) {
       const c = data.clients.find(x=>x.id===i.clientId);
       buckets[k].invoicesPending.push({ label: i.number + ' — ' + (c?.name||'?'), amount: i.amount, status: i.status, clientId: i.clientId, clientName: c?.name||'?' });
@@ -5187,28 +5239,28 @@ function buildCfData() {
   });
 
   data.renewals.filter(r => r.status !== 'Renewed' && r.date).forEach(r => {
-    const k = isoToMKey(r.date);
+    const k = getMKey(r.date);
     if (buckets[k]) {
       const c = data.clients.find(x=>x.id===r.clientId);
       buckets[k].renewalProjected.push({ label: r.type + ' — ' + (c?.name||'?'), amount: r.amount });
     }
   });
 
-  const now = new Date(); now.setHours(0,0,0,0);
+  const nowD = new Date(); nowD.setHours(0,0,0,0);
   expenses.forEach(exp => {
     if (exp.recurring) {
       months.forEach(m => {
-        const k = mKey(m.year, m.month);
+        const k = `${m.year}-${String(m.month+1).padStart(2,'0')}`;
         const monthEnd = new Date(m.year, m.month+1, 0);
-        const isPast = monthEnd < now;
+        const isPast = monthEnd < nowD;
         const bucket = isPast ? buckets[k]?.expenses : buckets[k]?.expensesProj;
         if (bucket) bucket.push({ ...exp });
       });
     } else if (exp.date) {
-      const k = isoToMKey(exp.date);
+      const k = getMKey(exp.date);
       if (buckets[k]) {
         const expDate = new Date(exp.date+'T00:00:00');
-        const isPast = expDate < now;
+        const isPast = expDate < nowD;
         const bucket = isPast ? buckets[k].expenses : buckets[k].expensesProj;
         bucket.push({ ...exp });
       }
@@ -5217,7 +5269,7 @@ function buildCfData() {
 
   let runningBal = startingBalance;
   const rows = months.map(m => {
-    const k = mKey(m.year, m.month);
+    const k = `${m.year}-${String(m.month+1).padStart(2,'0')}`;
     const b = buckets[k];
     const actualIn = b.invoicesPaid.reduce((s,x)=>s+x.amount,0);
     const projIn = b.invoicesPending.reduce((s,x)=>s+x.amount,0) + b.renewalProjected.reduce((s,x)=>s+x.amount,0);
@@ -5233,22 +5285,33 @@ function buildCfData() {
 
   return { rows, startingBalance, manualBalance };
 }
-
+  
 let cfSelectedMonth = null;
 
 function renderCashflow() {
   const { rows, startingBalance, manualBalance } = buildCfData();
-  if (!cfSelectedMonth || !rows.find(r=>r.key===cfSelectedMonth)) cfSelectedMonth = rows[0]?.key;
+  
+  // Mantenemos la selección del mes de detalle, asegurando que exista en la vista actual
+  if (!window.cfSelectedMonth || !rows.find(r=>r.key===window.cfSelectedMonth)) {
+    window.cfSelectedMonth = rows[0]?.key;
+  }
 
   const totalIn12 = rows.reduce((s,r)=>s+r.totalIn,0);
   const totalOut12 = rows.reduce((s,r)=>s+r.totalOut,0);
   const endBal = rows[rows.length-1]?.closeBal || 0;
 
   document.getElementById('cf-stats').innerHTML = `
+    <div style="grid-column: 1 / -1; display:flex; align-items:center; gap:12px; margin-bottom:8px; background:#f8fafc; padding:10px 16px; border-radius:8px; border:1px solid #e2e8f0;">
+      <span style="font-weight:600; color:#475569; font-size:14px;">📅 Proyección iniciando en:</span>
+      <input type="month" class="form-input" style="width:140px; padding:4px 8px; font-size:14px; cursor:pointer;" value="${window.cfStartMonth}" onchange="window.cfStartMonth=this.value; renderCashflow();">
+    </div>
     <div class="stat-card"><div style="display:flex;justify-content:space-between;align-items:center"><div class="stat-label">Starting Balance</div><button class="btn btn-ghost btn-sm" onclick="openCfBalanceModal()" style="font-size:10px;padding:2px 6px">Edit</button></div><div class="stat-value" style="font-size:20px">${fmtF(startingBalance)}</div><div class="stat-delta">${manualBalance!==null?'Manual override':'From bank accounts (MXN)'}</div></div>
     <div class="stat-card"><div class="stat-label">Projected Inflows (12m)</div><div class="stat-value green" style="font-size:20px">${fmtF(totalIn12)}</div><div class="stat-delta">Paid + pending + renewals</div></div>
     <div class="stat-card"><div class="stat-label">Projected Outflows (12m)</div><div class="stat-value red" style="font-size:20px">${fmtF(totalOut12)}</div><div class="stat-delta">From expense entries</div></div>
     <div class="stat-card"><div class="stat-label">Projected End Balance</div><div class="stat-value ${endBal>=0?'green':'red'}" style="font-size:20px">${fmtF(endBal)}</div><div class="stat-delta">in 12 months</div></div>`;
+
+  // Estas variables globales a veces dan lata, así que aseguramos que la gráfica lea la correcta
+  if (typeof cfSelectedMonth !== 'undefined') cfSelectedMonth = window.cfSelectedMonth;
 
   renderCfChart(rows);
   renderCfDetail(rows);
