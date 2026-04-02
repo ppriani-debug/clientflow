@@ -1886,7 +1886,7 @@ function renderInvoices() {
   const filterButtons = ['All','Pre-Invoice','Pending','Overdue','Paid'].map(s=>
     `<button class="filter-btn ${invoiceFilter===s?'active':''}" onclick="setInvoiceFilter('${s}')">${s}</button>`).join('');
 
-  // 2. NUEVO: SELECTOR DE MES Y CÁLCULO DE PAGOS RECIBIDOS
+  // 2. SELECTOR DE MES Y CÁLCULO DE PAGOS RECIBIDOS
   if (!window.invoiceMonthFilter) {
     const now = new Date();
     window.invoiceMonthFilter = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -1902,43 +1902,50 @@ function renderInvoices() {
 
   // 3. INYECTAR FILTROS Y SELECTOR EN LA PANTALLA
   const filtersContainer = document.getElementById('invoice-filters');
-  filtersContainer.style.display = 'flex';
-  filtersContainer.style.alignItems = 'center';
-  filtersContainer.style.flexWrap = 'wrap';
-  filtersContainer.style.gap = '10px';
-  
-  filtersContainer.innerHTML = filterButtons + `
-    <div style="display:flex; align-items:center; gap:12px; margin-left:auto; background:#f0fdf4; padding:6px 16px; border-radius:8px; border:1px solid #bbf7d0;">
-      <span style="font-weight:600; color:#166534; font-size:13px;">✅ Pagos:</span>
-      <input type="month" class="form-input" style="width:130px; padding:2px 6px; font-size:13px; cursor:pointer;" value="${window.invoiceMonthFilter}" onchange="window.invoiceMonthFilter=this.value; renderInvoices();">
-      <span style="font-weight:700; color:#15803d; font-size:15px;">${fmtF(totalPaidMonth)}</span>
-      <span style="font-size:11px; color:#166534;">(${paidThisMonth.length})</span>
-    </div>
-  `;
+  if (filtersContainer) {
+      filtersContainer.style.display = 'flex';
+      filtersContainer.style.alignItems = 'center';
+      filtersContainer.style.flexWrap = 'wrap';
+      filtersContainer.style.gap = '10px';
+      
+      filtersContainer.innerHTML = filterButtons + `
+        <div style="display:flex; align-items:center; gap:12px; margin-left:auto; background:#f0fdf4; padding:6px 16px; border-radius:8px; border:1px solid #bbf7d0;">
+          <span style="font-weight:600; color:#166534; font-size:13px;">✅ Pagos:</span>
+          <input type="month" class="form-input" style="width:130px; padding:2px 6px; font-size:13px; cursor:pointer;" value="${window.invoiceMonthFilter}" onchange="window.invoiceMonthFilter=this.value; renderInvoices();">
+          <span style="font-weight:700; color:#15803d; font-size:15px;">${fmtF(totalPaidMonth)}</span>
+          <span style="font-size:11px; color:#166534;">(${paidThisMonth.length})</span>
+        </div>
+      `;
+  }
 
-  // AGING
+  // 4. AGING (Bloques de vencimiento)
   const ov=data.invoices.filter(i=>i.status==='Overdue');
   const pre=data.invoices.filter(i=>i.status==='Pre-Invoice');
   const b30=ov.filter(i=>daysUntil(i.dueDate)>=-30), b60=ov.filter(i=>daysUntil(i.dueDate)<-30&&daysUntil(i.dueDate)>=-60), b90=ov.filter(i=>daysUntil(i.dueDate)<-60);
   const totalOverdue = ov.reduce((s,i)=>s+i.amount,0);
   const totalPre = pre.reduce((s,i)=>s+i.amount,0);
-  document.getElementById('aging-grid').innerHTML = `
-    <div class="aging-bucket btotal"><div class="aging-label">⚠ Total Overdue</div><div class="aging-amount">${fmtF(totalOverdue)}</div><div class="aging-count">${ov.length} invoice${ov.length!==1?'s':''}</div></div>
-    <div class="aging-bucket b30"><div class="aging-label">1–30 Days</div><div class="aging-amount">${fmtF(b30.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b30.length} invoice${b30.length!==1?'s':''}</div></div>
-    <div class="aging-bucket b60"><div class="aging-label">31–60 Days</div><div class="aging-amount">${fmtF(b60.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b60.length} invoice${b60.length!==1?'s':''}</div></div>
-    <div class="aging-bucket b90"><div class="aging-label">60+ Days</div><div class="aging-amount">${fmtF(b90.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b90.length} invoice${b90.length!==1?'s':''}</div></div>
-    <div class="aging-bucket bpre"><div class="aging-label">📋 Pre-Invoice</div><div class="aging-amount">${fmtF(totalPre)}</div><div class="aging-count">${pre.length} invoice${pre.length!==1?'s':''}</div></div>`;
+  
+  const agingGrid = document.getElementById('aging-grid');
+  if (agingGrid) {
+      agingGrid.innerHTML = `
+        <div class="aging-bucket btotal"><div class="aging-label">⚠ Total Overdue</div><div class="aging-amount">${fmtF(totalOverdue)}</div><div class="aging-count">${ov.length} invoice${ov.length!==1?'s':''}</div></div>
+        <div class="aging-bucket b30"><div class="aging-label">1–30 Days</div><div class="aging-amount">${fmtF(b30.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b30.length} invoice${b30.length!==1?'s':''}</div></div>
+        <div class="aging-bucket b60"><div class="aging-label">31–60 Days</div><div class="aging-amount">${fmtF(b60.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b60.length} invoice${b60.length!==1?'s':''}</div></div>
+        <div class="aging-bucket b90"><div class="aging-label">60+ Days</div><div class="aging-amount">${fmtF(b90.reduce((s,i)=>s+i.amount,0))}</div><div class="aging-count">${b90.length} invoice${b90.length!==1?'s':''}</div></div>
+        <div class="aging-bucket bpre"><div class="aging-label">📋 Pre-Invoice</div><div class="aging-amount">${fmtF(totalPre)}</div><div class="aging-count">${pre.length} invoice${pre.length!==1?'s':''}</div></div>`;
+  }
 
   let rows = data.invoices.filter(i=>(invoiceFilter==='All'||i.status===invoiceFilter)&&(!invoiceSearch||clientName(i.clientId).toLowerCase().includes(invoiceSearch)||i.number.toLowerCase().includes(invoiceSearch)||(i.concept||'').toLowerCase().includes(invoiceSearch)));
 
-  // Sort
+  // 5. ORDENAMIENTO (AQUÍ AGREGAMOS LA FECHA DE PAGO)
   const sd = invoiceSort.dir === 'asc' ? 1 : -1;
   rows = rows.slice().sort((a,b) => {
     if (invoiceSort.col === 'number') return sd * a.number.localeCompare(b.number);
     if (invoiceSort.col === 'client') return sd * clientName(a.clientId).localeCompare(clientName(b.clientId));
-    if (invoiceSort.col === 'dueDate') return sd * (new Date(a.dueDate) - new Date(b.dueDate));
+    if (invoiceSort.col === 'dueDate') return sd * (new Date(a.dueDate||0) - new Date(b.dueDate||0));
     if (invoiceSort.col === 'amount') return sd * (a.amount - b.amount);
     if (invoiceSort.col === 'status') return sd * a.status.localeCompare(b.status);
+    if (invoiceSort.col === 'paidDate') return sd * (new Date(a.paidDate||a.paymentDate||a.date||0) - new Date(b.paidDate||b.paymentDate||b.date||0));
     if (invoiceSort.col === 'lastContact') return sd * (new Date(a.lastContact||0) - new Date(b.lastContact||0));
     return 0;
   });
@@ -1946,34 +1953,57 @@ function renderInvoices() {
   const sortArrow = col => invoiceSort.col === col ? (invoiceSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
   const ith = (col, label) => `<th style="cursor:pointer;user-select:none" onclick="setInvoiceSort('${col}')">${label}<span style="font-size:10px;color:var(--text-soft)">${sortArrow(col)}</span></th>`;
   const ithead = document.querySelector('#page-invoices table thead tr');
-  if (ithead) ithead.innerHTML = ith('number','Invoice #') + ith('client','Client') + ith('dueDate','Due Date') + ith('amount','Amount') + ith('status','Status') + ith('lastContact','Last Contact') + '<th></th>';
+  
+  // 6. ENCABEZADOS DE LA TABLA (AGREGAMOS 'Paid Date')
+  if (ithead) ithead.innerHTML = ith('number','Invoice #') + ith('client','Client') + ith('dueDate','Due Date') + ith('amount','Amount') + ith('status','Status') + ith('paidDate','Paid Date') + ith('lastContact','Last Contact') + '<th></th>';
 
-  document.getElementById('invoices-tbody').innerHTML = rows.length
-    ? rows.map(i=>`<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
-        <td class="mono" style="font-weight:500">${i.number}</td>
-        <td><div class="client-name">${clientName(i.clientId)}</div>${i.billingName&&i.billingName!==clientName(i.clientId)?`<div style="font-size:11px;color:var(--text-muted)">Bill to: ${i.billingName}</div>`:''} ${i.concept?`<div style="font-size:11px;color:var(--text-soft);font-style:italic">${i.concept}</div>`:''}</td>
-        <td><div>${i.dueDate?fmtDate(i.dueDate):'<span style="color:var(--text-soft);font-size:12px">No due date</span>'}</div><div style="font-size:11px;color:var(--text-soft)">${i.dueDate?daysLabel(i.dueDate):''}${i.creditDays?' · '+i.creditDays+'d credit':''}</div></td>
-        <td class="mono">${fmtF(i.amount)}</td>
-        <td>${statusBadge(i.status)}${i.status==='Paid'&&i.paidDate?`<div style="font-size:11px;color:var(--green);margin-top:2px">paid ${fmtDate(i.paidDate)}</div>`:''}</td>
-        <td>${(()=>{
-          const lc=i.lastContact?Math.round((new Date()-new Date(i.lastContact))/86400000):null;
-          const stale=i.status!=='Paid'&&(!i.lastContact||lc>7);
-          if(!i.lastContact) return i.status!=='Paid'?'<span style="font-size:11px;color:var(--red);font-weight:500">⚠ No contact</span>':'<span style="font-size:11px;color:var(--text-soft)">—</span>';
-          const color=stale?'var(--red)':'var(--green)';
-          const weight=stale?'500':'400';
-          const label=stale?'⚠ Overdue':'✓ Recent';
-          return `<div style="font-size:13px">${fmtDate(i.lastContact)}</div><div style="font-size:11px;color:${color};font-weight:${weight}">${label}</div>`;
-        })()}</td>
-        <td><div style="display:flex;gap:5px;align-items:center">
-          ${i.status!=='Paid'?`<button class="invoice-paid-btn" onclick="markPaid(${i.id},event)" title="Mark as Paid">✓ Paid</button>`:'<span style="font-size:12px;color:var(--green);font-weight:500">✓ Paid</span>'}
-          <div class="row-actions">
-            <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice(${i.id},event)" title="Duplicate invoice">⧉</button>
-            <button class="btn btn-ghost btn-sm" onclick="editInvoice(${i.id},event)">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteItem('invoices',${i.id},event)">✕</button>
-          </div>
-        </div></td>
-      </tr>`).join('')
-    : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">$</div><div class="empty-text">No invoices found</div></div></td></tr>`;
+  const tbody = document.getElementById('invoices-tbody');
+  if (tbody) {
+      tbody.innerHTML = rows.length
+        ? rows.map(i=>{
+            const pDate = i.paidDate || i.paymentDate || i.date;
+            const paidCell = (i.status === 'Paid' && pDate) ? `<div style="font-size:13px;color:var(--green);font-weight:500">${fmtDate(pDate)}</div>` : `<span style="font-size:12px;color:var(--text-soft)">—</span>`;
+            
+            return `<tr style="cursor:pointer" onclick="openInvoiceDetail(${i.id})">
+            <td class="mono" style="font-weight:500">${i.number}</td>
+            <td><div class="client-name">${clientName(i.clientId)}</div>${i.billingName&&i.billingName!==clientName(i.clientId)?`<div style="font-size:11px;color:var(--text-muted)">Bill to: ${i.billingName}</div>`:''} ${i.concept?`<div style="font-size:11px;color:var(--text-soft);font-style:italic">${i.concept}</div>`:''}</td>
+            <td><div>${i.dueDate?fmtDate(i.dueDate):'<span style="color:var(--text-soft);font-size:12px">No due date</span>'}</div><div style="font-size:11px;color:var(--text-soft)">${i.dueDate?daysLabel(i.dueDate):''}${i.creditDays?' · '+i.creditDays+'d credit':''}</div></td>
+            <td class="mono">${fmtF(i.amount)}</td>
+            <td>${statusBadge(i.status)}</td>
+            <td>${paidCell}</td>
+            <td>${(()=>{
+              const lc=i.lastContact?Math.round((new Date()-new Date(i.lastContact))/86400000):null;
+              const stale=i.status!=='Paid'&&(!i.lastContact||lc>7);
+              if(!i.lastContact) return i.status!=='Paid'?'<span style="font-size:11px;color:var(--red);font-weight:500">⚠ No contact</span>':'<span style="font-size:11px;color:var(--text-soft)">—</span>';
+              const color=stale?'var(--red)':'var(--green)';
+              const weight=stale?'500':'400';
+              const label=stale?'⚠ Overdue':'✓ Recent';
+              return `<div style="font-size:13px">${fmtDate(i.lastContact)}</div><div style="font-size:11px;color:${color};font-weight:${weight}">${label}</div>`;
+            })()}</td>
+            <td><div style="display:flex;gap:5px;align-items:center">
+              ${i.status!=='Paid'?`<button class="invoice-paid-btn" onclick="markPaid(${i.id},event)" title="Mark as Paid">✓ Paid</button>`:'<span style="font-size:12px;color:var(--green);font-weight:500">✓ Paid</span>'}
+              <div class="row-actions">
+                <button class="btn btn-ghost btn-sm" onclick="duplicateInvoice(${i.id},event)" title="Duplicate invoice">⧉</button>
+                <button class="btn btn-ghost btn-sm" onclick="editInvoice(${i.id},event)">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteItem('invoices',${i.id},event)">✕</button>
+              </div>
+            </div></td>
+          </tr>`;
+        }).join('')
+        : `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">$</div><div class="empty-text">No invoices found</div></div></td></tr>`;
+  }
+
+  // 7. ARREGLO DE SCROLL AUTOMÁTICO (Evita que la pantalla se quede trabada)
+  const pageContainer = document.getElementById('page-invoices');
+  if (pageContainer) {
+    pageContainer.style.overflowY = 'auto';
+    pageContainer.style.maxHeight = 'calc(100vh - 60px)';
+    pageContainer.style.paddingBottom = '40px';
+  }
+  const mainContent = document.querySelector('.main-content') || document.querySelector('.content');
+  if (mainContent) {
+    mainContent.style.overflowY = 'auto';
+  }
 }
 
 function setInvoiceSort(col) {
