@@ -5260,8 +5260,14 @@ function buildCfData() {
     }
   });
 
-  data.invoices.filter(i => i.status !== 'Paid').forEach(i => {
-    const k = getMKey(i.dueDate);
+ data.invoices.filter(i => i.status !== 'Paid').forEach(i => {
+    // Overdue invoices → project into current month instead of their past due date
+    let bucketDate = i.dueDate;
+    if (i.status === 'Overdue') {
+        const today = new Date();
+        bucketDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-01`;
+    }
+    const k = getMKey(bucketDate);
     if (buckets[k]) {
       const c = data.clients.find(x=>x.id===i.clientId);
       buckets[k].invoicesPending.push({ label: i.number + ' — ' + (c?.name||'?'), amount: i.amount, status: i.status, clientId: i.clientId, clientName: c?.name||'?' });
