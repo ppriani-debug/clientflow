@@ -1151,6 +1151,8 @@
 <div class="toast" id="toast"></div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const MEX_STATES = ['Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas','Chihuahua','CDMX','Coahuila','Colima','Durango','Guanajuato','Guerrero','Hidalgo','Jalisco','México','Michoacán','Morelos','Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo','San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas'];
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DEFAULT_DATA = {
   clients: [
@@ -1741,23 +1743,45 @@ function renderDashboard() {
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
 function filterClients(q) { clientSearch=q.toLowerCase(); renderClients(); }
 function renderClients() {
-  const rows = data.clients.filter(c=>!clientSearch||c.name.toLowerCase().includes(clientSearch)||(c.email||'').toLowerCase().includes(clientSearch));
-  // Update subtitle with live count
+  const rows = data.clients.filter(c=>!clientSearch||
+    c.name.toLowerCase().includes(clientSearch)||
+    (c.email||'').toLowerCase().includes(clientSearch)||
+    (c.clientType||'').toLowerCase().includes(clientSearch)||
+    (c.champion||'').toLowerCase().includes(clientSearch)||
+    (c.intensiveUser||'').toLowerCase().includes(clientSearch)
+  );
+  
   const sub = document.querySelector('#page-clients .page-subtitle');
   if (sub) sub.textContent = `${data.clients.length} client${data.clients.length!==1?'s':''} total · Click a row to view details`;
+  
+  const thead = document.querySelector('#page-clients table thead tr');
+  if (thead) thead.innerHTML = '<th>Client & Type</th><th>Contacts</th><th>Plan & Services</th><th>Status</th><th>Since</th><th></th>';
+
   document.getElementById('clients-tbody').innerHTML = rows.length
-    ? rows.map(c=>`<tr onclick="openDetail(${c.id})" style="cursor:pointer">
-        <td><div class="client-name">${c.name}</div><div class="client-email">${c.clientContact||c.contact||'—'}</div></td>
-        <td><div class="client-email">${c.email}</div><div class="client-email">${c.phone}</div></td>
-        <td><div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div></td>
+    ? rows.map(c=> {
+        const svcs = c.services || {};
+        const stateCount = svcs.states ? svcs.states.length : 0;
+        return `<tr onclick="openDetail(${c.id})" style="cursor:pointer">
+        <td>
+          <div class="client-name">${c.name}</div>
+          <div class="client-email" style="color:var(--accent)">${c.clientType||'B2B'}</div>
+        </td>
+        <td>
+          <div class="client-email"><span style="color:var(--text-soft)">CS:</span> ${c.contact||'—'}</div>
+          <div class="client-email"><span style="color:var(--text-soft)">Champ:</span> ${c.champion||'—'}</div>
+        </td>
+        <td>
+          <div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div>
+          ${svcs.package ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Pkg: ${svcs.package} (${stateCount} states)</div>` : ''}
+        </td>
         <td>${statusBadge(c.status)}</td>
         <td class="mono" style="color:var(--text-muted)">${fmtDate(c.since)}</td>
         <td><div class="row-actions">
           <button class="btn btn-ghost btn-sm" onclick="editClient(${c.id},event)">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteItem('clients',${c.id},event)">✕</button>
         </div></td>
-      </tr>`).join('')
-    : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No clients yet</div></div></td></tr>`;
+      </tr>`}).join('')
+    : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No clients found</div></div></td></tr>`;
 }
 function editClient(id,e) { e.stopPropagation(); openModal('client', data.clients.find(x=>x.id===id)); }
 
@@ -1767,20 +1791,53 @@ function openDetail(id) {
   if (!c) return;
   detailClientId = id;
   document.getElementById('dp-name').textContent = c.name;
-  document.getElementById('dp-sub').textContent = (Array.isArray(c.plan)?c.plan:[c.plan]).join(', ') + ' · ' + c.status;
+  document.getElementById('dp-sub').textContent = (c.clientType || 'Client') + ' · ' + c.status;
+  
+  // Calculate Contract Dates (Fallback to renewals)
+  let cStart = c.contractStart;
+  let cEnd = c.contractEnd;
+  const cR = data.renewals.filter(r=>r.clientId===id);
+  
+  if ((!cStart || !cEnd) && cR.length > 0) {
+     const dates = cR.map(r=>new Date(r.date+'T00:00:00'));
+     const minDate = new Date(Math.min(...dates));
+     const maxDate = new Date(Math.max(...dates));
+     if (!cStart) cStart = minDate.toISOString().split('T')[0];
+     if (!cEnd) cEnd = maxDate.toISOString().split('T')[0];
+  }
+
   const legalNames = Array.isArray(c.legalNames) ? c.legalNames.filter(Boolean) : [];
+  const svcs = c.services || {};
+  const activeSvcTags = [];
+  if(svcs.parvada) activeSvcTags.push('Parvada');
+  if(svcs.c3ntro) activeSvcTags.push('C3NTRO');
+  if(svcs.haikus) activeSvcTags.push('HAIKUS');
+  if(svcs.reports) activeSvcTags.push('Reports');
+  if(svcs.implante) activeSvcTags.push('Implante');
+
   document.getElementById('dp-contact').innerHTML = `
     <div class="detail-row"><span class="detail-label">Commercial</span><span class="detail-val" style="font-weight:600">${c.name}</span></div>
     ${legalNames.length ? legalNames.map((n,i)=>`<div class="detail-row"><span class="detail-label">${i===0?'Legal Name':'Legal '+(i+1)}</span><span class="detail-val" style="color:var(--accent)">${n}</span></div>`).join('') : ''}
-    <div class="detail-row"><span class="detail-label">Since</span><span class="detail-val">${fmtDate(c.since)}</span></div>
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin:10px 0 4px">Client Contact</div>
-    <div class="detail-row"><span class="detail-label">Name</span><span class="detail-val">${c.clientContact||'—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Email</span><span class="detail-val">${c.email ? `<a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a>` : '—'}</span></div>
-    <div class="detail-row"><span class="detail-label">Phone</span><span class="detail-val">${c.phone||'—'}</span></div>
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin:10px 0 4px">CS Agent</div>
-    <div class="detail-row"><span class="detail-label">Agent</span><span class="detail-val">${c.contact||'—'}</span></div>
-    ${c.csEmail ? `<div class="detail-row"><span class="detail-label">Agent Email</span><span class="detail-val"><a href='mailto:${c.csEmail}' style='color:var(--accent)'>${c.csEmail}</a></span></div>` : ''}`;
-  const cR = data.renewals.filter(r=>r.clientId===id);
+    <div class="detail-row"><span class="detail-label">Client Since</span><span class="detail-val">${fmtDate(c.since)}</span></div>
+    
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin:14px 0 4px">Contract & Budget</div>
+    <div class="detail-row"><span class="detail-label">Contract Start</span><span class="detail-val">${cStart ? fmtDate(cStart) : '—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Contract End</span><span class="detail-val">${cEnd ? fmtDate(cEnd) : '—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Budget Date</span><span class="detail-val">${c.budgetDate ? fmtDate(c.budgetDate) : '—'}</span></div>
+
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);margin:14px 0 4px">Key Roles</div>
+    <div class="detail-row"><span class="detail-label">CS Agent</span><span class="detail-val">${c.contact||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Champion</span><span class="detail-val">${c.champion||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Intensive User</span><span class="detail-val">${c.intensiveUser||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Contact (Email)</span><span class="detail-val">${c.email ? `<a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a>` : '—'}</span></div>
+    
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--purple);margin:14px 0 4px">Services Profile</div>
+    <div class="detail-row"><span class="detail-label">Package</span><span class="detail-val">${svcs.package||'—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Tracking Users</span><span class="detail-val">${svcs.trackingUsers||'0'}</span></div>
+    <div class="detail-row"><span class="detail-label">States (${svcs.states ? svcs.states.length : 0})</span><span class="detail-val" style="text-align:right;max-width:60%">${svcs.states?.length ? svcs.states.join(', ') : 'None'}</span></div>
+    <div class="detail-row"><span class="detail-label">Features</span><span class="detail-val">${activeSvcTags.length ? activeSvcTags.map(t=>`<span class="badge badge-purple" style="margin-left:4px">${t}</span>`).join('') : 'None'}</span></div>
+  `;
+
   document.getElementById('dp-renewals').innerHTML = cR.length
     ? cR.map(r=>`<div class="detail-row"><span class="detail-label">${r.type}<br><small style="color:var(--text-soft)">${fmtDate(r.date)}</small></span>${statusBadge(r.status)}</div>`).join('')
     : `<div style="font-size:12px;color:var(--text-soft)">No renewals on file.</div>`;
@@ -3180,55 +3237,66 @@ async function runAutoAlertNow() {
 function openModal(type, existing) {
   const isEdit=!!existing, T=type.charAt(0).toUpperCase()+type.slice(1);
   let body='';
-  if(type==='client') {
+if(type==='client') {
     const existingLegal = Array.isArray(existing?.legalNames) ? existing.legalNames : (existing?.legalNames ? [existing.legalNames] : []);
+    const existingStates = Array.isArray(existing?.services?.states) ? existing.services.states : [];
     const legalRows = existingLegal.length
       ? existingLegal.map((n,i)=>`<div class="legal-name-row" style="display:flex;gap:6px;margin-bottom:6px"><input class="form-input legal-name-input" value="${n}" placeholder="Legal name ${i+1}" style="flex:1"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.legal-name-row').remove()">✕</button></div>`).join('')
       : '';
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Client</div>
       <div class="form-grid">
-        <div class="form-group span2">
-          <label class="form-label">Commercial Name <span style="font-size:11px;color:var(--text-muted)">(displayed everywhere)</span></label>
-          <input class="form-input" id="f-name" placeholder="e.g. Acme Corp" value="${existing?.name||''}">
-        </div>
+        <div class="form-group"><label class="form-label">Commercial Name *</label><input class="form-input" id="f-name" value="${existing?.name||''}"></div>
+        <div class="form-group"><label class="form-label">Client Type</label><input class="form-input" id="f-client-type" placeholder="e.g. Enterprise, Government" value="${existing?.clientType||''}"></div>
+        
         <div class="form-group span2">
           <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-            Legal Name(s) <span style="font-size:11px;color:var(--text-muted)">used on invoices</span>
+            Legal Name(s)
             <button type="button" class="btn btn-ghost btn-sm" onclick="addLegalNameRow()" style="font-size:11px;padding:2px 8px">＋ Add</button>
           </label>
           <div id="legal-names-container">${legalRows}</div>
-          ${!existingLegal.length?'<div style="font-size:12px;color:var(--text-soft);padding:4px 0">No legal names added yet</div>':''}
         </div>
-        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Internal — Customer Success</div></div>
-        <div class="form-group"><label class="form-label">CS Agent</label><input class="form-input" id="f-contact" placeholder="e.g. Juan Pérez" value="${existing?.contact||''}"></div>
-        <div class="form-group"><label class="form-label">CS Agent Email</label><input class="form-input" id="f-cs-email" type="email" placeholder="juan@alephri.com" value="${existing?.csEmail||''}"></div>
-        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Client — Contact Person</div></div>
-        <div class="form-group"><label class="form-label">Client Contact Name</label><input class="form-input" id="f-client-contact" placeholder="e.g. María López" value="${existing?.clientContact||''}"></div>
-        <div class="form-group"><label class="form-label">Client Contact Email <span style='color:var(--red)'>*</span></label><input class="form-input" id="f-email" type="email" placeholder="maria@clientco.com" value="${existing?.email||''}"></div>
-        <div class="form-group"><label class="form-label">Client Phone</label><input class="form-input" id="f-phone" value="${existing?.phone||''}"></div>
-        <div class="form-group span2"><label class="form-label">Plans</label><div class="plan-picker" id="f-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip ${(Array.isArray(existing?.plan)?existing.plan:[existing?.plan]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
-        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Active'?'selected':''}>Active</option><option ${existing?.status==='At Risk'?'selected':''}>At Risk</option><option ${existing?.status==='Inactive'?'selected':''}>Inactive</option></select></div>
+
+        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Contract & Timeline</div></div>
+        <div class="form-group"><label class="form-label">Contract Start</label><input class="form-input" id="f-contract-start" type="date" value="${existing?.contractStart||''}"></div>
+        <div class="form-group"><label class="form-label">Contract End</label><input class="form-input" id="f-contract-end" type="date" value="${existing?.contractEnd||''}"></div>
+        <div class="form-group"><label class="form-label">Budget Date</label><input class="form-input" id="f-budget-date-client" type="date" value="${existing?.budgetDate||''}"></div>
         <div class="form-group"><label class="form-label">Client Since</label><input class="form-input" id="f-since" type="date" value="${existing?.since||new Date().toISOString().split('T')[0]}"></div>
+
+        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Roles & Contacts</div></div>
+        <div class="form-group"><label class="form-label">CS Agent</label><input class="form-input" id="f-contact" value="${existing?.contact||''}"></div>
+        <div class="form-group"><label class="form-label">CS Agent Email</label><input class="form-input" id="f-cs-email" type="email" value="${existing?.csEmail||''}"></div>
+        <div class="form-group"><label class="form-label">Champion</label><input class="form-input" id="f-champion" placeholder="Main advocate" value="${existing?.champion||''}"></div>
+        <div class="form-group"><label class="form-label">Intensive User</label><input class="form-input" id="f-intensive" placeholder="Power user" value="${existing?.intensiveUser||''}"></div>
+        <div class="form-group"><label class="form-label">Main Contact Name</label><input class="form-input" id="f-client-contact" value="${existing?.clientContact||''}"></div>
+        <div class="form-group"><label class="form-label">Main Contact Email *</label><input class="form-input" id="f-email" type="email" value="${existing?.email||''}"></div>
+
+        <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--purple);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Services & Setup</div></div>
+        <div class="form-group span2"><label class="form-label">Plans</label><div class="plan-picker" id="f-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip ${(Array.isArray(existing?.plan)?existing.plan:[existing?.plan]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
+        <div class="form-group"><label class="form-label">Package Name</label><input class="form-input" id="f-svc-package" placeholder="e.g. Gold Tier" value="${existing?.services?.package||''}"></div>
+        <div class="form-group"><label class="form-label">Tracking Users</label><input class="form-input" type="number" id="f-svc-users" value="${existing?.services?.trackingUsers||''}"></div>
+        
+        <div class="form-group span2">
+          <label class="form-label">Mexico States (Multi-select)</label>
+          <div class="plan-picker" id="f-state-picker" style="max-height:120px;overflow-y:auto;border:1px solid var(--border);padding:8px;border-radius:8px">
+            ${MEX_STATES.map(s=>`<div class="plan-chip ${existingStates.includes(s)?'selected':''}" onclick="togglePlanChip(this,'${s}')" style="margin-bottom:4px">${s}</div>`).join('')}
+          </div>
+        </div>
+
+        <div class="form-group span2">
+          <label class="form-label">Included Features</label>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px;background:var(--bg);border-radius:8px">
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-parvada" ${existing?.services?.parvada?'checked':''}> Parvada</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-c3ntro" ${existing?.services?.c3ntro?'checked':''}> C3NTRO</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-haikus" ${existing?.services?.haikus?'checked':''}> HAIKUS</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-reports" ${existing?.services?.reports?'checked':''}> Reports</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-implante" ${existing?.services?.implante?'checked':''}> Implante</label>
+          </div>
+        </div>
+        
+        <div class="form-group span2"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Active'?'selected':''}>Active</option><option ${existing?.status==='At Risk'?'selected':''}>At Risk</option><option ${existing?.status==='Inactive'?'selected':''}>Inactive</option></select></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveClient(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Client'}</button></div>`;
-    } else if(type==='renewal') {
-    const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
-    body=`<div class="modal-title">${isEdit?'Edit':'New'} Renewal</div>
-      <div class="form-grid">
-        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
-        <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
-        <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
-        <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
-        <div class="form-group"><label class="form-label">Status (Tiempo)</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
-        
-        <div class="form-group span2" style="margin-bottom:0; margin-top:4px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Seguimiento y Cierre</div></div>
-        
-        <div class="form-group"><label class="form-label">Probabilidad</label><select class="form-input" id="f-substatus"><option value="">— Sin definir —</option><option ${existing?.subStatus==='Confirmado'?'selected':''}>Confirmado</option><option ${existing?.subStatus==='Negociando'?'selected':''}>Negociando</option><option ${existing?.subStatus==='En peligro'?'selected':''}>En peligro</option></select></div>
-        <div class="form-group"><label class="form-label">Contrato / OC</label><select class="form-input" id="f-contract"><option value="">— Pendiente —</option><option ${existing?.contractStatus==='En revisión'?'selected':''}>En revisión</option><option ${existing?.contractStatus==='Firmado/Aprobado'?'selected':''}>Firmado/Aprobado</option></select></div>
-        <div class="form-group"><label class="form-label">Ingreso de Ppto.</label><input class="form-input" id="f-budget-date" type="date" value="${existing?.budgetDate||''}"></div>
-        <div class="form-group" style="justify-content:center"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:14px;font-weight:500"><input type="checkbox" id="f-cs-meeting" ${existing?.csMeeting?'checked':''} style="width:18px;height:18px;accent-color:var(--accent)"> Junta CS Realizada</label></div>
-      </div>
-      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveRenewal(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Renewal'}</button></div>`;
+  }
   } else if(type==='invoice') {
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
     const nextNum='INV-00'+(40+data.invoices.length+1);
@@ -3272,29 +3340,55 @@ function addLegalNameRow() {
 
 function saveClient(id) {
   const legalNames = [...document.querySelectorAll('.legal-name-input')].map(i=>i.value.trim()).filter(Boolean);
-  const obj={name:document.getElementById('f-name').value.trim(),contact:document.getElementById('f-contact').value,csEmail:document.getElementById('f-cs-email')?.value||'',clientContact:document.getElementById('f-client-contact')?.value||'',email:document.getElementById('f-email').value,phone:document.getElementById('f-phone').value,plan:[...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),status:document.getElementById('f-status').value,since:document.getElementById('f-since').value,legalNames};
-  if(!obj.name){alert('Commercial name is required.');return;}
-  if(id){const c=data.clients.find(c=>c.id===id);obj.notes=c.notes||'';Object.assign(c,obj);toast('Client updated ✓');}
-  else{obj.id=++data.nextId;obj.notes='';data.clients.push(obj);toast('Client added ✓');}
-  saveData();closeModal();renderPage(currentPage);updateBadges();
-}
-function saveRenewal(id) {
-  const obj={
-    clientId:parseInt(document.getElementById('f-client').value),
-    type:document.getElementById('f-type').value,
-    date:document.getElementById('f-date').value,
-    amount:parseFloat(document.getElementById('f-amount').value)||0,
-    status:document.getElementById('f-status').value,
-    statusLocked:true,
-    subStatus: document.getElementById('f-substatus').value,
-    contractStatus: document.getElementById('f-contract').value,
-    budgetDate: document.getElementById('f-budget-date').value,
-    csMeeting: document.getElementById('f-cs-meeting').checked
+  
+  const servicesObj = {
+    package: document.getElementById('f-svc-package').value.trim(),
+    trackingUsers: parseInt(document.getElementById('f-svc-users').value) || 0,
+    states: [...document.querySelectorAll('#f-state-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),
+    parvada: document.getElementById('f-svc-parvada').checked,
+    c3ntro: document.getElementById('f-svc-c3ntro').checked,
+    haikus: document.getElementById('f-svc-haikus').checked,
+    reports: document.getElementById('f-svc-reports').checked,
+    implante: document.getElementById('f-svc-implante').checked
   };
-  if(!obj.type||!obj.date){alert('Type and date are required.');return;}
-  if(id){Object.assign(data.renewals.find(r=>r.id===id),obj);toast('Renewal updated ✓');}
-  else{obj.id=++data.nextId;data.renewals.push(obj);toast('Renewal added ✓');}
-  saveData();closeModal();renderPage(currentPage);updateBadges();
+
+  const obj = {
+    name: document.getElementById('f-name').value.trim(),
+    clientType: document.getElementById('f-client-type').value.trim(),
+    contractStart: document.getElementById('f-contract-start').value,
+    contractEnd: document.getElementById('f-contract-end').value,
+    budgetDate: document.getElementById('f-budget-date-client').value,
+    champion: document.getElementById('f-champion').value.trim(),
+    intensiveUser: document.getElementById('f-intensive').value.trim(),
+    contact: document.getElementById('f-contact').value,
+    csEmail: document.getElementById('f-cs-email')?.value||'',
+    clientContact: document.getElementById('f-client-contact')?.value||'',
+    email: document.getElementById('f-email').value,
+    phone: document.getElementById('f-phone') ? document.getElementById('f-phone').value : '',
+    plan: [...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),
+    status: document.getElementById('f-status').value,
+    since: document.getElementById('f-since').value,
+    legalNames,
+    services: servicesObj
+  };
+
+  if(!obj.name){alert('Commercial name is required.');return;}
+  
+  if(id){
+    const c = data.clients.find(c=>c.id===id);
+    obj.notes = c.notes||'';
+    Object.assign(c,obj);
+    toast('Client updated ✓');
+  } else {
+    obj.id = ++data.nextId;
+    obj.notes = '';
+    data.clients.push(obj);
+    toast('Client added ✓');
+  }
+  saveData();
+  closeModal();
+  renderPage(currentPage);
+  updateBadges();
 }
 function getBillingNameOptions(client, selected) {
   if (!client) return '<option value="">—</option>';
