@@ -2150,24 +2150,7 @@ function renderInvoices() {
         }).join('')
         : `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">$</div><div class="empty-text">No invoices found</div></div></td></tr>`;
   }
-
- // 7. ARREGLO DE SCROLL AUTOMÁTICO (Gentle version)
-  const pageContainer = document.getElementById('page-invoices');
-  if (pageContainer) {
-    pageContainer.style.overflowY = 'auto'; 
-    pageContainer.style.maxHeight = '85vh'; // Uses max-height instead of fixed height so it doesn't break tabs
-    pageContainer.style.display = ''; // Removes the forced block display to respect your tab system
-  }
-  
-  // Bonus: Congelar los encabezados 
-  const tableHeader = document.querySelector('#page-invoices table thead');
-  if (tableHeader) {
-    tableHeader.style.position = 'sticky';
-    tableHeader.style.top = '0';
-    tableHeader.style.backgroundColor = '#ffffff'; 
-    tableHeader.style.zIndex = '10';
-  }
-} // <--- ¡ESTA ES LA LLAVE MÁGICA QUE FALTABA!
+}
 
 function setInvoiceSort(col) {
   if (invoiceSort.col === col) invoiceSort.dir = invoiceSort.dir === 'asc' ? 'desc' : 'asc';
