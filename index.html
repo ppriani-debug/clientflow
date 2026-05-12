@@ -392,10 +392,13 @@
       </div>
     </div>
 
-    <div class="page" id="page-clients">
+   <div class="page" id="page-clients">
       <div class="page-header">
         <div><div class="page-title">Clients</div><div class="page-subtitle">Click a row to view details and notes</div></div>
-        <button class="btn btn-primary" onclick="openModal('client')">＋ Add Client</button>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="openColumnPicker()">⚙ Columns</button>
+          <button class="btn btn-primary" onclick="openModal('client')">＋ Add Client</button>
+        </div>
       </div>
       <div class="card">
         <div class="card-header">
@@ -1153,6 +1156,64 @@
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const MEX_STATES = ['Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas','Chihuahua','CDMX','Coahuila','Colima','Durango','Guanajuato','Guerrero','Hidalgo','Jalisco','México','Michoacán','Morelos','Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo','San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas'];
+// ─── DYNAMIC COLUMNS LOGIC ──────────────────────────────────────────────────
+const ALL_CLIENT_COLUMNS = [
+  { id: 'nameType', label: 'Client & Type', default: true },
+  { id: 'contacts', label: 'CS & Champ', default: true },
+  { id: 'emailPhone', label: 'Email & Phone', default: true },
+  { id: 'planSvc', label: 'Plan & Pkg', default: true },
+  { id: 'features', label: 'Features', default: false },
+  { id: 'contract', label: 'Contract Dates', default: false },
+  { id: 'budget', label: 'Budget Date', default: false },
+  { id: 'status', label: 'Status', default: true },
+  { id: 'since', label: 'Since', default: true },
+  { id: 'intensive', label: 'Intensive User', default: false },
+  { id: 'states', label: 'States', default: false }
+];
+
+function getActiveClientColumns() {
+  try {
+    const saved = localStorage.getItem('client-visible-columns');
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return ALL_CLIENT_COLUMNS.filter(c => c.default).map(c => c.id);
+}
+
+function saveActiveClientColumns(cols) {
+  localStorage.setItem('client-visible-columns', JSON.stringify(cols));
+}
+
+function openColumnPicker() {
+  const activeCols = getActiveClientColumns();
+  const checkboxes = ALL_CLIENT_COLUMNS.map(col => `
+    <label style="display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.15s" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+      <input type="checkbox" value="${col.id}" class="col-picker-cb" ${activeCols.includes(col.id)?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="font-size:13px;font-weight:500">${col.label}</span>
+    </label>
+  `).join('');
+
+  const body = `<div class="modal-title">Customize Columns</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Select which columns to display in the Clients table.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:60vh;overflow-y:auto;padding-right:8px">
+      ${checkboxes}
+    </div>
+    <div class="modal-actions" style="margin-top:24px">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveColumnPicker()">Apply</button>
+    </div>`;
+    
+  document.getElementById('modal-content').innerHTML = body;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function saveColumnPicker() {
+  const selected = [...document.querySelectorAll('.col-picker-cb:checked')].map(cb => cb.value);
+  if(selected.length === 0) { toast('Select at least one column ✗'); return; }
+  saveActiveClientColumns(selected);
+  closeModal();
+  renderClients();
+  toast('Columns updated ✓');
+}
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DEFAULT_DATA = {
   clients: [
@@ -1754,34 +1815,67 @@ function renderClients() {
   const sub = document.querySelector('#page-clients .page-subtitle');
   if (sub) sub.textContent = `${data.clients.length} client${data.clients.length!==1?'s':''} total · Click a row to view details`;
   
+  const activeCols = getActiveClientColumns();
+  
+  // Dynamically build the Table Header
   const thead = document.querySelector('#page-clients table thead tr');
-  if (thead) thead.innerHTML = '<th>Client & Type</th><th>Contacts</th><th>Plan & Services</th><th>Status</th><th>Since</th><th></th>';
+  if (thead) {
+    let thHtml = '';
+    ALL_CLIENT_COLUMNS.forEach(col => {
+      if (activeCols.includes(col.id)) thHtml += `<th>${col.label}</th>`;
+    });
+    thHtml += '<th></th>'; // Empty header for the actions column
+    thead.innerHTML = thHtml;
+  }
 
+  // Dynamically build the Table Body
   document.getElementById('clients-tbody').innerHTML = rows.length
     ? rows.map(c=> {
         const svcs = c.services || {};
-        const stateCount = svcs.states ? svcs.states.length : 0;
+        let activeSvcTags = [];
+        if(svcs.parvada) activeSvcTags.push('Parvada');
+        if(svcs.c3ntro) activeSvcTags.push('C3NTRO');
+        if(svcs.haikus) activeSvcTags.push('HAIKUS');
+        if(svcs.reports) activeSvcTags.push('Reports');
+        if(svcs.implante) activeSvcTags.push('Implante');
+
+        let tdHtml = '';
+        ALL_CLIENT_COLUMNS.forEach(col => {
+          if (!activeCols.includes(col.id)) return;
+          
+          if (col.id === 'nameType') {
+            tdHtml += `<td><div class="client-name">${c.name}</div><div class="client-email" style="color:var(--accent)">${c.clientType||'B2B'}</div></td>`;
+          } else if (col.id === 'contacts') {
+            tdHtml += `<td><div class="client-email"><span style="color:var(--text-soft)">CS:</span> ${c.contact||'—'}</div><div class="client-email"><span style="color:var(--text-soft)">Champ:</span> ${c.champion||'—'}</div></td>`;
+          } else if (col.id === 'emailPhone') {
+            tdHtml += `<td><div class="client-email">${c.email||'—'}</div><div class="client-email">${c.phone||'—'}</div></td>`;
+          } else if (col.id === 'planSvc') {
+            tdHtml += `<td><div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div>${svcs.package ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Pkg: ${svcs.package}</div>` : ''}</td>`;
+          } else if (col.id === 'features') {
+            tdHtml += `<td><div class="plan-badges">${activeSvcTags.length ? activeSvcTags.map(t=>`<span class="badge badge-purple">${t}</span>`).join('') : '<span style="color:var(--text-soft);font-size:11px">—</span>'}</div></td>`;
+          } else if (col.id === 'contract') {
+            tdHtml += `<td><div class="client-email"><span style="color:var(--text-soft)">Start:</span> ${c.contractStart?fmtDate(c.contractStart):'—'}</div><div class="client-email"><span style="color:var(--text-soft)">End:</span> ${c.contractEnd?fmtDate(c.contractEnd):'—'}</div></td>`;
+          } else if (col.id === 'budget') {
+            tdHtml += `<td><div class="mono" style="color:var(--text-muted)">${c.budgetDate?fmtDate(c.budgetDate):'—'}</div></td>`;
+          } else if (col.id === 'status') {
+            tdHtml += `<td>${statusBadge(c.status)}</td>`;
+          } else if (col.id === 'since') {
+            tdHtml += `<td class="mono" style="color:var(--text-muted)">${fmtDate(c.since)}</td>`;
+          } else if (col.id === 'intensive') {
+            tdHtml += `<td><div class="client-email">${c.intensiveUser||'—'}</div></td>`;
+          } else if (col.id === 'states') {
+            tdHtml += `<td><div class="client-email" style="white-space:normal;max-width:140px">${svcs.states?.length?svcs.states.join(', '):'<span style="color:var(--text-soft)">None</span>'}</div></td>`;
+          }
+        });
+
         return `<tr onclick="openDetail(${c.id})" style="cursor:pointer">
-        <td>
-          <div class="client-name">${c.name}</div>
-          <div class="client-email" style="color:var(--accent)">${c.clientType||'B2B'}</div>
-        </td>
-        <td>
-          <div class="client-email"><span style="color:var(--text-soft)">CS:</span> ${c.contact||'—'}</div>
-          <div class="client-email"><span style="color:var(--text-soft)">Champ:</span> ${c.champion||'—'}</div>
-        </td>
-        <td>
-          <div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div>
-          ${svcs.package ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Pkg: ${svcs.package} (${stateCount} states)</div>` : ''}
-        </td>
-        <td>${statusBadge(c.status)}</td>
-        <td class="mono" style="color:var(--text-muted)">${fmtDate(c.since)}</td>
+        ${tdHtml}
         <td><div class="row-actions">
           <button class="btn btn-ghost btn-sm" onclick="editClient(${c.id},event)">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteItem('clients',${c.id},event)">✕</button>
         </div></td>
       </tr>`}).join('')
-    : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No clients found</div></div></td></tr>`;
+    : `<tr><td colspan="${activeCols.length+1}"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No clients found</div></div></td></tr>`;
 }
 function editClient(id,e) { e.stopPropagation(); openModal('client', data.clients.find(x=>x.id===id)); }
 
