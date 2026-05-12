@@ -1867,69 +1867,7 @@ function renderClients() {
           } else if (col.id === 'intensive') {
             tdHtml += `<td><div class="client-email">${c.intensiveUser||'—'}</div></td>`;
           } else if (col.id === 'states') {
-            // FIX: Now displays the count instead of the list!
             tdHtml += `<td><div class="client-email" style="font-weight: 500;">${svcs.states?.length ? svcs.states.length + ' states' : '<span style="color:var(--text-soft); font-weight: 400;">0 states</span>'}</div></td>`;
-          }
-        });
-
-        return `<tr onclick="openDetail(${c.id})" style="cursor:pointer">
-        ${tdHtml}
-        <td><div class="row-actions">
-          <button class="btn btn-ghost btn-sm" onclick="editClient(${c.id},event)">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteItem('clients',${c.id},event)">✕</button>
-        </div></td>
-      </tr>`}).join('')
-    : `<tr><td colspan="${activeCols.length+1}"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No clients found</div></div></td></tr>`;
-}
-  
-  // Dynamically build the Table Header
-  const thead = document.querySelector('#page-clients table thead tr');
-  if (thead) {
-    let thHtml = '';
-    ALL_CLIENT_COLUMNS.forEach(col => {
-      if (activeCols.includes(col.id)) thHtml += `<th>${col.label}</th>`;
-    });
-    thHtml += '<th></th>'; // Empty header for the actions column
-    thead.innerHTML = thHtml;
-  }
-
-  // Dynamically build the Table Body
-  document.getElementById('clients-tbody').innerHTML = rows.length
-    ? rows.map(c=> {
-        const svcs = c.services || {};
-        let activeSvcTags = [];
-        if(svcs.parvada) activeSvcTags.push('Parvada');
-        if(svcs.c3ntro) activeSvcTags.push('C3NTRO');
-        if(svcs.haikus) activeSvcTags.push('HAIKUS');
-        if(svcs.reports) activeSvcTags.push('Reports');
-        if(svcs.implante) activeSvcTags.push('Implante');
-
-        let tdHtml = '';
-        ALL_CLIENT_COLUMNS.forEach(col => {
-          if (!activeCols.includes(col.id)) return;
-          
-          if (col.id === 'nameType') {
-            tdHtml += `<td><div class="client-name">${c.name}</div><div class="client-email" style="color:var(--accent)">${c.clientType||'B2B'}</div></td>`;
-          } else if (col.id === 'contacts') {
-            tdHtml += `<td><div class="client-email"><span style="color:var(--text-soft)">CS:</span> ${c.contact||'—'}</div><div class="client-email"><span style="color:var(--text-soft)">Champ:</span> ${c.champion||'—'}</div></td>`;
-          } else if (col.id === 'emailPhone') {
-            tdHtml += `<td><div class="client-email">${c.email||'—'}</div><div class="client-email">${c.phone||'—'}</div></td>`;
-          } else if (col.id === 'planSvc') {
-            tdHtml += `<td><div class="plan-badges">${(Array.isArray(c.plan)?c.plan:[c.plan]).map(p=>`<span class="badge badge-blue">${p}</span>`).join('')}</div>${svcs.package ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Pkg: ${svcs.package}</div>` : ''}</td>`;
-          } else if (col.id === 'features') {
-            tdHtml += `<td><div class="plan-badges">${activeSvcTags.length ? activeSvcTags.map(t=>`<span class="badge badge-purple">${t}</span>`).join('') : '<span style="color:var(--text-soft);font-size:11px">—</span>'}</div></td>`;
-          } else if (col.id === 'contract') {
-            tdHtml += `<td><div class="client-email"><span style="color:var(--text-soft)">Start:</span> ${c.contractStart?fmtDate(c.contractStart):'—'}</div><div class="client-email"><span style="color:var(--text-soft)">End:</span> ${c.contractEnd?fmtDate(c.contractEnd):'—'}</div></td>`;
-          } else if (col.id === 'budget') {
-            tdHtml += `<td><div class="mono" style="color:var(--text-muted)">${c.budgetDate?fmtDate(c.budgetDate):'—'}</div></td>`;
-          } else if (col.id === 'status') {
-            tdHtml += `<td>${statusBadge(c.status)}</td>`;
-          } else if (col.id === 'since') {
-            tdHtml += `<td class="mono" style="color:var(--text-muted)">${fmtDate(c.since)}</td>`;
-          } else if (col.id === 'intensive') {
-            tdHtml += `<td><div class="client-email">${c.intensiveUser||'—'}</div></td>`;
-          } else if (col.id === 'states') {
-            tdHtml += `<td><div class="client-email" style="white-space:normal;max-width:140px">${svcs.states?.length?svcs.states.join(', '):'<span style="color:var(--text-soft)">None</span>'}</div></td>`;
           }
         });
 
