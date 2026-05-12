@@ -3413,19 +3413,12 @@ function openModal(type, existing) {
         <div class="form-group"><label class="form-label">Commercial Name *</label><input class="form-input" id="f-name" value="${existing?.name||''}"></div>
         <div class="form-group"><label class="form-label">Client Type</label><input class="form-input" id="f-client-type" placeholder="e.g. Enterprise, Government" value="${existing?.clientType||''}"></div>
         
-       <div class="form-group span2">
-          <label class="form-label">Included Features & Regions</label>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px;background:var(--bg);border-radius:8px">
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-aliado" ${existing?.services?.aliado?'checked':''}> Aliado</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-parvada" ${existing?.services?.parvada?'checked':''}> Parvada</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-c3ntro" ${existing?.services?.c3ntro?'checked':''}> C3NTRO</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-haikus" ${existing?.services?.haikus?'checked':''}> HAIKUS</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-reports" ${existing?.services?.reports?'checked':''}> Reports</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-implante" ${existing?.services?.implante?'checked':''}> Implante</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-colombia" ${existing?.services?.colombia?'checked':''}> Colombia</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-guatemala" ${existing?.services?.guatemala?'checked':''}> Guatemala</label>
-            <label style="cursor:pointer"><input type="checkbox" id="f-svc-ecuador" ${existing?.services?.ecuador?'checked':''}> Ecuador</label>
-          </div>
+        <div class="form-group span2">
+          <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+            Legal Name(s)
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addLegalNameRow()" style="font-size:11px;padding:2px 8px">＋ Add</button>
+          </label>
+          <div id="legal-names-container">${legalRows}</div>
         </div>
 
         <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Contract & Timeline</div></div>
@@ -3456,13 +3449,17 @@ function openModal(type, existing) {
         </div>
 
         <div class="form-group span2">
-          <label class="form-label">Included Features</label>
+          <label class="form-label">Included Features & Regions</label>
           <div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px;background:var(--bg);border-radius:8px">
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-aliado" ${existing?.services?.aliado?'checked':''}> Aliado</label>
             <label style="cursor:pointer"><input type="checkbox" id="f-svc-parvada" ${existing?.services?.parvada?'checked':''}> Parvada</label>
             <label style="cursor:pointer"><input type="checkbox" id="f-svc-c3ntro" ${existing?.services?.c3ntro?'checked':''}> C3NTRO</label>
             <label style="cursor:pointer"><input type="checkbox" id="f-svc-haikus" ${existing?.services?.haikus?'checked':''}> HAIKUS</label>
             <label style="cursor:pointer"><input type="checkbox" id="f-svc-reports" ${existing?.services?.reports?'checked':''}> Reports</label>
             <label style="cursor:pointer"><input type="checkbox" id="f-svc-implante" ${existing?.services?.implante?'checked':''}> Implante</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-colombia" ${existing?.services?.colombia?'checked':''}> Colombia</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-guatemala" ${existing?.services?.guatemala?'checked':''}> Guatemala</label>
+            <label style="cursor:pointer"><input type="checkbox" id="f-svc-ecuador" ${existing?.services?.ecuador?'checked':''}> Ecuador</label>
           </div>
         </div>
         
@@ -3516,6 +3513,7 @@ function openModal(type, existing) {
   document.getElementById('modal-content').innerHTML = body;
   document.getElementById('modal-overlay').classList.add('open');
 }
+  
 function closeModal(e) { if(!e||e.target===document.getElementById('modal-overlay')) document.getElementById('modal-overlay').classList.remove('open'); }
 
 // ─── SAVE HANDLERS ───────────────────────────────────────────────────────────
