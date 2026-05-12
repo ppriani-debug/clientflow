@@ -3235,15 +3235,17 @@ async function runAutoAlertNow() {
 }
 
 function openModal(type, existing) {
-  const isEdit=!!existing, T=type.charAt(0).toUpperCase()+type.slice(1);
-  let body='';
-if(type==='client') {
+  const isEdit = !!existing, T = type.charAt(0).toUpperCase() + type.slice(1);
+  let body = '';
+  
+  if(type === 'client') {
     const existingLegal = Array.isArray(existing?.legalNames) ? existing.legalNames : (existing?.legalNames ? [existing.legalNames] : []);
     const existingStates = Array.isArray(existing?.services?.states) ? existing.services.states : [];
     const legalRows = existingLegal.length
       ? existingLegal.map((n,i)=>`<div class="legal-name-row" style="display:flex;gap:6px;margin-bottom:6px"><input class="form-input legal-name-input" value="${n}" placeholder="Legal name ${i+1}" style="flex:1"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.legal-name-row').remove()">✕</button></div>`).join('')
       : '';
-    body=`<div class="modal-title">${isEdit?'Edit':'New'} Client</div>
+      
+    body = `<div class="modal-title">${isEdit?'Edit':'New'} Client</div>
       <div class="form-grid">
         <div class="form-group"><label class="form-label">Commercial Name *</label><input class="form-input" id="f-name" value="${existing?.name||''}"></div>
         <div class="form-group"><label class="form-label">Client Type</label><input class="form-input" id="f-client-type" placeholder="e.g. Enterprise, Government" value="${existing?.clientType||''}"></div>
@@ -3269,6 +3271,7 @@ if(type==='client') {
         <div class="form-group"><label class="form-label">Intensive User</label><input class="form-input" id="f-intensive" placeholder="Power user" value="${existing?.intensiveUser||''}"></div>
         <div class="form-group"><label class="form-label">Main Contact Name</label><input class="form-input" id="f-client-contact" value="${existing?.clientContact||''}"></div>
         <div class="form-group"><label class="form-label">Main Contact Email *</label><input class="form-input" id="f-email" type="email" value="${existing?.email||''}"></div>
+        <div class="form-group span2"><label class="form-label">Client Phone</label><input class="form-input" id="f-phone" value="${existing?.phone||''}"></div>
 
         <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--purple);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Services & Setup</div></div>
         <div class="form-group span2"><label class="form-label">Plans</label><div class="plan-picker" id="f-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip ${(Array.isArray(existing?.plan)?existing.plan:[existing?.plan]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
@@ -3296,11 +3299,29 @@ if(type==='client') {
         <div class="form-group span2"><label class="form-label">Status</label><select class="form-input" id="f-status"><option ${existing?.status==='Active'?'selected':''}>Active</option><option ${existing?.status==='At Risk'?'selected':''}>At Risk</option><option ${existing?.status==='Inactive'?'selected':''}>Inactive</option></select></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveClient(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Client'}</button></div>`;
-  }
-  } else if(type==='invoice') {
+      
+  } else if(type === 'renewal') {
+    const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
+    body=`<div class="modal-title">${isEdit?'Edit':'New'} Renewal</div>
+      <div class="form-grid">
+        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
+        <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
+        <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
+        <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
+        <div class="form-group"><label class="form-label">Status (Tiempo)</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
+        
+        <div class="form-group span2" style="margin-bottom:0; margin-top:4px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Seguimiento y Cierre</div></div>
+        
+        <div class="form-group"><label class="form-label">Probabilidad</label><select class="form-input" id="f-substatus"><option value="">— Sin definir —</option><option ${existing?.subStatus==='Confirmado'?'selected':''}>Confirmado</option><option ${existing?.subStatus==='Negociando'?'selected':''}>Negociando</option><option ${existing?.subStatus==='En peligro'?'selected':''}>En peligro</option></select></div>
+        <div class="form-group"><label class="form-label">Contrato / OC</label><select class="form-input" id="f-contract"><option value="">— Pendiente —</option><option ${existing?.contractStatus==='En revisión'?'selected':''}>En revisión</option><option ${existing?.contractStatus==='Firmado/Aprobado'?'selected':''}>Firmado/Aprobado</option></select></div>
+        <div class="form-group"><label class="form-label">Ingreso de Ppto.</label><input class="form-input" id="f-budget-date" type="date" value="${existing?.budgetDate||''}"></div>
+        <div class="form-group" style="justify-content:center"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:14px;font-weight:500"><input type="checkbox" id="f-cs-meeting" ${existing?.csMeeting?'checked':''} style="width:18px;height:18px;accent-color:var(--accent)"> Junta CS Realizada</label></div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveRenewal(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Renewal'}</button></div>`;
+      
+  } else if(type === 'invoice') {
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
     const nextNum='INV-00'+(40+data.invoices.length+1);
-    // Build billing name options for the pre-selected client
     const firstClient = existing ? data.clients.find(c=>c.id===existing.clientId) : data.clients[0];
     const billingOpts = getBillingNameOptions(firstClient, existing?.billingName);
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Invoice</div>
@@ -3321,7 +3342,8 @@ if(type==='client') {
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveInvoice(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Invoice'}</button></div>`;
   }
-  document.getElementById('modal-content').innerHTML=body;
+  
+  document.getElementById('modal-content').innerHTML = body;
   document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal(e) { if(!e||e.target===document.getElementById('modal-overlay')) document.getElementById('modal-overlay').classList.remove('open'); }
