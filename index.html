@@ -3530,7 +3530,56 @@ function updateBillingNameOptions(sel) {
   const bilSel = document.getElementById('f-billing-name');
   if (bilSel) bilSel.innerHTML = getBillingNameOptions(client, null);
 }
+function saveRenewal(id) {
+  const clientId = parseInt(document.getElementById('f-client').value);
+  const type = document.getElementById('f-type').value.trim();
+  const date = document.getElementById('f-date').value;
+  const amount = parseFloat(document.getElementById('f-amount').value) || 0;
+  const statusVal = document.getElementById('f-status').value;
+  
+  // Nuevos campos de Seguimiento y Cierre
+  const subStatus = document.getElementById('f-substatus').value;
+  const contractStatus = document.getElementById('f-contract').value;
+  const budgetDate = document.getElementById('f-budget-date').value;
+  const csMeeting = document.getElementById('f-cs-meeting').checked;
 
+  if (!type || !date) { 
+    toast('El tipo de renovación y la fecha son obligatorios ✗'); 
+    return; 
+  }
+
+  const obj = { 
+    clientId, 
+    type, 
+    date, 
+    amount, 
+    status: statusVal,
+    subStatus,
+    contractStatus,
+    budgetDate,
+    csMeeting,
+    statusLocked: true 
+  };
+
+  if (id) {
+    const r = data.renewals.find(x => x.id === id);
+    if (r) {
+      Object.assign(r, obj);
+      toast('Renovación actualizada ✓');
+    }
+  } else {
+    obj.id = ++data.nextId;
+    obj.lastContact = null;
+    obj.comments = [];
+    data.renewals.push(obj);
+    toast('Renovación agregada ✓');
+  }
+  
+  saveData();
+  closeModal();
+  renderPage(currentPage);
+  updateBadges();
+}
 function saveInvoice(id) {
   const billingNameEl = document.getElementById('f-billing-name');
   const conceptEl = document.getElementById('f-concept');
