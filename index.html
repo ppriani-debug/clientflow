@@ -3362,6 +3362,7 @@ function openModal(type, existing) {
         <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Roles & Contacts</div></div>
         <div class="form-group"><label class="form-label">CS Agent</label><input class="form-input" id="f-contact" value="${existing?.contact||''}"></div>
         <div class="form-group"><label class="form-label">CS Agent Email</label><input class="form-input" id="f-cs-email" type="email" value="${existing?.csEmail||''}"></div>
+        <div class="form-group"><label class="form-label">CS Agent Slack ID</label><input class="form-input" id="f-slack-id" placeholder="Ej. U0123ABCD" value="${existing?.slackId||''}"></div>
         <div class="form-group"><label class="form-label">Champion</label><input class="form-input" id="f-champion" placeholder="Main advocate" value="${existing?.champion||''}"></div>
         <div class="form-group"><label class="form-label">Intensive User</label><input class="form-input" id="f-intensive" placeholder="Power user" value="${existing?.intensiveUser||''}"></div>
         <div class="form-group"><label class="form-label">Main Contact Name</label><input class="form-input" id="f-client-contact" value="${existing?.clientContact||''}"></div>
@@ -3491,6 +3492,7 @@ function saveClient(id) {
     clientContact: document.getElementById('f-client-contact')?.value||'',
     email: document.getElementById('f-email').value,
     phone: document.getElementById('f-phone') ? document.getElementById('f-phone').value : '',
+    slackId: document.getElementById('f-slack-id') ? document.getElementById('f-slack-id').value.trim() : '', // <-- NUEVO CAMPO SLACK ID
     plan: [...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),
     status: document.getElementById('f-status').value,
     since: document.getElementById('f-since').value,
@@ -4426,8 +4428,9 @@ async function sendInvoiceSlack() {
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
 
   try {
+    // Alerta enviada sin mención directa
     await slackSend(webhook, `*Payment Follow-up — ${c?.name}*\n${msg}\n\n_Invoice ${inv?.number} · ${fmtF(inv?.amount)} · due ${fmtDate(inv?.dueDate)}_`);
-    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack (no-cors mode — check your channel)</span>';
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack</span>';
     toast('Sent to Slack ✓');
   } catch(e) {
     statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
@@ -4435,8 +4438,6 @@ async function sendInvoiceSlack() {
   }
   btn.disabled = false;
 }
-
-
 
 async function sendRenewalSlack() {
   const webhook = document.getElementById('rdp-slack-webhook').value.trim() || localStorage.getItem('slack-webhook') || '';
@@ -4450,9 +4451,12 @@ async function sendRenewalSlack() {
   btn.disabled = true;
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
 
+  // MAGIA: Mención al encargado
+  const mention = c?.slackId ? `<@${c.slackId}>\n` : '';
+
   try {
-    await slackSend(webhook, `*Renewal Follow-up — ${c?.name}*\n${msg}\n\n_${r?.type} · ${fmtDate(r?.date)} · ${fmtF(r?.amount)}_`);
-    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack (no-cors mode — check your channel)</span>';
+    await slackSend(webhook, `${mention}*Renewal Follow-up — ${c?.name}*\n${msg}\n\n_${r?.type} · ${fmtDate(r?.date)} · ${fmtF(r?.amount)}_`);
+    statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack</span>';
     toast('Sent to Slack ✓');
   } catch(e) {
     statusEl.innerHTML = `<span style="color:var(--red);font-size:12.5px">✗ ${e.message}</span>`;
