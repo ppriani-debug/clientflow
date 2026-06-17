@@ -1776,29 +1776,132 @@ function renderPage(p) {
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 function renderDashboard() {
   document.getElementById('dash-greeting').textContent = greet();
+  
+  // 1. DIBUJAR LOS STATS PRINCIPALES (Mantenemos los 4 KPIs de arriba)
   const active = data.clients.filter(c=>c.status==='Active').length;
   const pending = data.renewals.filter(r=>['Due Soon','Overdue','Upcoming'].includes(r.status)).length;
   const outstanding = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Pre-Invoice').reduce((s,i)=>s+i.amount,0);
   const collected = data.invoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.amount,0);
+  
   document.getElementById('dashboard-stats').innerHTML = `
     <div class="stat-card"><div class="stat-label">Active Clients</div><div class="stat-value">${active}</div><div class="stat-delta">${data.clients.length} total accounts</div></div>
     <div class="stat-card"><div class="stat-label">Pending Renewals</div><div class="stat-value amber">${pending}</div><div class="stat-delta">${data.renewals.filter(r=>r.status==='Overdue').length} overdue</div></div>
     <div class="stat-card"><div class="stat-label">Outstanding A/P</div><div class="stat-value red">${fmtF(outstanding)}</div><div class="stat-delta">${data.invoices.filter(i=>i.status==='Overdue').length} invoices overdue</div></div>
     <div class="stat-card"><div class="stat-label">Collected (Paid)</div><div class="stat-value green">${fmtF(collected)}</div><div class="stat-delta">${data.invoices.filter(i=>i.status==='Paid').length} invoices paid</div></div>`;
-  const upR = data.renewals
-    .filter(r => r.status === 'Overdue' || r.status === 'Due Soon')
-    .sort((a,b) => (a.status==='Overdue'?0:1) - (b.status==='Overdue'?0:1) || new Date(a.date)-new Date(b.date))
-    .slice(0, 5);
-  document.getElementById('dash-renewal-count').textContent = upR.length + ' urgent';
-  document.querySelector('.card-title').textContent = 'Overdue & Due Soon';
-  document.getElementById('dash-renewals-table').innerHTML = upR.length
-    ? `<table><tbody>${upR.map(r=>`<tr style="cursor:pointer" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100)"><td><div class="client-name">${clientName(r.clientId)}</div><div class="client-email">${r.type}</div></td><td>${fmtDate(r.date)}</td><td>${statusBadge(r.status)}</td></tr>`).join('')}</tbody></table>`
-    : `<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No overdue or due-soon renewals</div></div>`;
-  const ovI = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Pre-Invoice').slice(0,5);
-  document.getElementById('dash-invoice-count').textContent = fmtF(ovI.reduce((s,i)=>s+i.amount,0));
-  document.getElementById('dash-invoices-table').innerHTML = ovI.length
-    ? `<table><tbody>${ovI.map(i=>`<tr style="cursor:pointer" onclick="navigate('invoices')"><td><div class="client-name">${clientName(i.clientId)}</div><div class="client-email">${i.number}</div></td><td>${fmtDate(i.dueDate)}</td><td>${statusBadge(i.status)}</td></tr>`).join('')}</tbody></table>`
-    : `<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">All invoices paid!</div></div>`;
+
+  // 2. DIBUJAR EL NUEVO LAYOUT DE 4 CUADRANTES
+  const colContainer = document.querySelector('#page-dashboard .two-col');
+  if (!colContainer) return;
+
+  // --- Funciones de Ayuda Visual ---
+  const renderRows = (items, type) => {
+    if (!items.length) return `<div class="empty-state" style="padding:24px"><div class="empty-text" style="font-size:13px">Todo al corriente ✨</div></div>`;
+    return `<table style="font-size:13px; margin:0">
+      <tbody>
+        ${items.map(item => {
+          const client = clientName(item.clientId);
+          const isInv = type === 'invoice';
+          const title = isInv ? item.number : item.type;
+          const date = isInv ? item.dueDate : item.date;
+          // Hacer clic en la fila abre el panel lateral directamente
+          const onClick = isInv ? `navigate('invoices'); setTimeout(()=>openInvoiceDetail(${item.id}),100)` : `navigate('renewals'); setTimeout(()=>openRenewalDetail(${item.id}),100)`;
+          return `<tr style="cursor:pointer; border-bottom:1px solid var(--border-soft)" onclick="${onClick}">
+            <td style="padding:10px 20px"><div class="client-name" style="font-size:13px">${client}</div><div style="font-size:11px;color:var(--text-muted)">${title}</div></td>
+            <td style="padding:10px 20px; text-align:right">
+              <div style="font-weight:600;font-family:var(--mono,monospace)">${fmtF(item.amount)}</div>
+              <div style="font-size:11px;color:var(--text-soft)">Vence: ${fmtDate(date)}</div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  };
+
+  const buildCard = (title, icon, headerRight, tableHtml, viewAllLink) => `
+    <div class="card" style="margin-bottom:20px; border: 1px solid var(--border);">
+      <div class="card-header" style="border-bottom:1px solid var(--border-soft); padding:16px 20px; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px">${icon}</span>
+          <div class="card-title" style="font-size:14px; font-weight:600;">${title}</div>
+        </div>
+        <div style="text-align:right">
+          ${headerRight}
+        </div>
+      </div>
+      <div style="padding:0">
+        ${tableHtml}
+      </div>
+      ${viewAllLink ? `
+      <div style="padding:12px 20px; text-align:center; background:var(--bg); border-top:1px solid var(--border-soft)">
+        <a href="#" onclick="${viewAllLink}; return false;" style="font-size:12.5px; font-weight:600; color:var(--accent); text-decoration:none;">Ver detalle completo →</a>
+      </div>` : ''}
+    </div>
+  `;
+
+  // --- CUADRANTE 1: INVOICES VENCIDAS ---
+  // Ordenadas por monto (las más grandes primero)
+  const ovInvs = data.invoices.filter(i => i.status === 'Overdue').sort((a,b) => b.amount - a.amount);
+  const totalOvInv = ovInvs.reduce((s,i)=>s+i.amount, 0);
+  const cardInvOverdue = buildCard(
+    'Facturas Vencidas', '🔴',
+    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Vencido</div>
+     <div style="font-size:17px;font-weight:700;color:var(--red);font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalOvInv)}</div>`,
+    renderRows(ovInvs.slice(0, 10), 'invoice'),
+    "navigate('invoices')"
+  );
+
+  // --- CUADRANTE 2: INVOICES PENDIENTES (TOP 10) ---
+  const pendInvs = data.invoices.filter(i => i.status === 'Pending' || i.status === 'Due Soon').sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
+  const top10Pend = pendInvs.slice(0, 10);
+  const totalPendAll = pendInvs.reduce((s,i)=>s+i.amount, 0);
+  // Calcular cuánto de ese total corresponde a este mes en curso
+  const now = new Date();
+  const pendThisMonth = pendInvs.filter(i => new Date(i.dueDate).getMonth() === now.getMonth() && new Date(i.dueDate).getFullYear() === now.getFullYear()).reduce((s,i)=>s+i.amount,0);
+
+  const cardInvPending = buildCard(
+    'Pendientes de Cobro', '🟡',
+    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Por Cobrar</div>
+     <div style="font-size:17px;font-weight:700;color:var(--amber);font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalPendAll)}</div>
+     <div style="font-size:10.5px;color:var(--text-soft);margin-top:2px;font-weight:500">A cobrar este mes: ${fmtF(pendThisMonth)}</div>`,
+    renderRows(top10Pend, 'invoice'),
+    "navigate('invoices')"
+  );
+
+  // --- CUADRANTE 3: RENOVACIONES VENCIDAS ---
+  // Ordenadas por monto (las más grandes primero)
+  const ovRen = data.renewals.filter(r => r.status === 'Overdue').sort((a,b) => b.amount - a.amount);
+  const totalOvRen = ovRen.reduce((s,r)=>s+r.amount, 0);
+  const cardRenOverdue = buildCard(
+    'Renovaciones Vencidas', '🔴',
+    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Riesgo Total</div>
+     <div style="font-size:17px;font-weight:700;color:var(--red);font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalOvRen)}</div>`,
+    renderRows(ovRen.slice(0, 10), 'renewal'),
+    "navigate('renewals')"
+  );
+
+  // --- CUADRANTE 4: RENOVACIONES DUE SOON ---
+  const soonRen = data.renewals.filter(r => r.status === 'Due Soon' || r.status === 'Upcoming').sort((a,b) => new Date(a.date) - new Date(b.date));
+  const top10SoonRen = soonRen.slice(0, 10);
+  const totalSoonRen = top10SoonRen.reduce((s,r)=>s+r.amount, 0);
+  const cardRenSoon = buildCard(
+    'Próximas Renovaciones', '🟠',
+    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Valor Próximo</div>
+     <div style="font-size:17px;font-weight:700;color:#ea580c;font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalSoonRen)}</div>`,
+    renderRows(top10SoonRen, 'renewal'),
+    "navigate('renewals')"
+  );
+
+  // --- INYECTAR LAS TARJETAS EN LAS DOS COLUMNAS ---
+  colContainer.innerHTML = `
+    <div style="display:flex; flex-direction:column;">
+      ${cardInvOverdue}
+      ${cardInvPending}
+    </div>
+    <div style="display:flex; flex-direction:column;">
+      ${cardRenOverdue}
+      ${cardRenSoon}
+    </div>
+  `;
 }
 
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
