@@ -1742,7 +1742,13 @@ function statusBadge(s) {
 }
 
 function updateBadges() {
-  const rN = data.renewals.filter(r=>r.status==='Overdue'||r.status==='Due Soon').length;
+  const renewalsNeedingContact = data.renewals.filter(r => {
+  // Ignorar automáticamente las renovadas o perdidas
+  if (r.status === 'Renewed' || r.status === 'Lost' || r.status === 'Cancelled') return false;
+  
+  const d = r.lastContact ? Math.floor((new Date() - new Date(r.lastContact))/86400000) : 999;
+  return d > 7; // Ajusta el '7' a la cantidad de días de holgura que manejes
+}).length;
   const bR = document.getElementById('renewals-badge'); bR.textContent=rN; bR.style.display=rN?'inline':'none';
   const iN = data.invoices.filter(i=>i.status==='Overdue').length;
   const bI = document.getElementById('invoices-badge'); bI.textContent=iN; bI.style.display=iN?'inline':'none';
@@ -4207,9 +4213,13 @@ function saveLastContact() {
   if (!r) return;
   r.lastContact = document.getElementById('rdp-last-contact').value;
   saveData(); renderRenewals(); updateLastContactLabel(r);
-  const d = Math.round((new Date() - new Date(r.lastContact)) / 86400000);
-  document.getElementById('rdp-stale-alert').style.display = d > 7 ? 'block' : 'none';
-  toast('Last contact saved ✓');
+  // NUEVO CÓDIGO
+const ms = r.lastContact ? (new Date() - new Date(r.lastContact)) : null;
+const days = ms ? Math.floor(ms / 86400000) : null;
+
+// MAGIA: Solo requiere contacto si NO está "Renewed" (o Cancelada) Y ya pasaron los días
+const isActiveRenewal = r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled';
+const needsContact = isActiveRenewal && (!r.lastContact || days > 7);
 }
 
 function setContactToday() {
