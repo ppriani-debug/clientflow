@@ -1788,7 +1788,7 @@ function renderPage(p) {
 function renderDashboard() {
   document.getElementById('dash-greeting').textContent = greet();
   
-  // 1. DIBUJAR LOS STATS PRINCIPALES (Mantenemos los 4 KPIs de arriba)
+  // 1. DIBUJAR LOS STATS PRINCIPALES
   const active = data.clients.filter(c=>c.status==='Active').length;
   const pending = data.renewals.filter(r=>['Due Soon','Overdue','Upcoming'].includes(r.status)).length;
   const outstanding = data.invoices.filter(i=>i.status!=='Paid'&&i.status!=='Pre-Invoice').reduce((s,i)=>s+i.amount,0);
@@ -1800,11 +1800,9 @@ function renderDashboard() {
     <div class="stat-card"><div class="stat-label">Outstanding A/P</div><div class="stat-value red">${fmtF(outstanding)}</div><div class="stat-delta">${data.invoices.filter(i=>i.status==='Overdue').length} invoices overdue</div></div>
     <div class="stat-card"><div class="stat-label">Collected (Paid)</div><div class="stat-value green">${fmtF(collected)}</div><div class="stat-delta">${data.invoices.filter(i=>i.status==='Paid').length} invoices paid</div></div>`;
 
-  // 2. DIBUJAR EL NUEVO LAYOUT DE 4 CUADRANTES
   const colContainer = document.querySelector('#page-dashboard .two-col');
   if (!colContainer) return;
 
-  // --- Funciones de Ayuda Visual ---
   const renderRows = (items, type) => {
     if (!items.length) return `<div class="empty-state" style="padding:24px"><div class="empty-text" style="font-size:13px">Todo al corriente ✨</div></div>`;
     return `<table style="font-size:13px; margin:0">
@@ -1814,8 +1812,7 @@ function renderDashboard() {
           const isInv = type === 'invoice';
           const title = isInv ? item.number : item.type;
           const date = isInv ? item.dueDate : item.date;
-          // Hacer clic en la fila abre el panel lateral directamente
-          const onClick = isInv ? `navigate('invoices'); setTimeout(()=>openInvoiceDetail(${item.id}),100)` : `navigate('renewals'); setTimeout(()=>openRenewalDetail(${item.id}),100)`;
+          const onClick = isInv ? `Maps('invoices'); setTimeout(()=>openInvoiceDetail(${item.id}),100)` : `Maps('renewals'); setTimeout(()=>openRenewalDetail(${item.id}),100)`;
           return `<tr style="cursor:pointer; border-bottom:1px solid var(--border-soft)" onclick="${onClick}">
             <td style="padding:10px 20px"><div class="client-name" style="font-size:13px">${client}</div><div style="font-size:11px;color:var(--text-muted)">${title}</div></td>
             <td style="padding:10px 20px; text-align:right">
@@ -1835,13 +1832,9 @@ function renderDashboard() {
           <span style="font-size:18px">${icon}</span>
           <div class="card-title" style="font-size:14px; font-weight:600;">${title}</div>
         </div>
-        <div style="text-align:right">
-          ${headerRight}
-        </div>
+        <div style="text-align:right">${headerRight}</div>
       </div>
-      <div style="padding:0">
-        ${tableHtml}
-      </div>
+      <div style="padding:0">${tableHtml}</div>
       ${viewAllLink ? `
       <div style="padding:12px 20px; text-align:center; background:var(--bg); border-top:1px solid var(--border-soft)">
         <a href="#" onclick="${viewAllLink}; return false;" style="font-size:12.5px; font-weight:600; color:var(--accent); text-decoration:none;">Ver detalle completo →</a>
@@ -1849,72 +1842,61 @@ function renderDashboard() {
     </div>
   `;
 
-  // --- CUADRANTE 1: INVOICES VENCIDAS ---
-  // Ordenadas por monto (las más grandes primero)
+  // TARJETAS SUPERIORES
   const ovInvs = data.invoices.filter(i => i.status === 'Overdue').sort((a,b) => b.amount - a.amount);
-  const totalOvInv = ovInvs.reduce((s,i)=>s+i.amount, 0);
-  const cardInvOverdue = buildCard(
-    'Facturas Vencidas', '🔴',
-    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Vencido</div>
-     <div style="font-size:17px;font-weight:700;color:var(--red);font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalOvInv)}</div>`,
-    renderRows(ovInvs.slice(0, 10), 'invoice'),
-    "navigate('invoices')"
-  );
+  const cardInvOverdue = buildCard('Facturas Vencidas', '🔴', `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Total Vencido</div><div style="font-size:17px;font-weight:700;color:var(--red);font-family:var(--mono,monospace)">${fmtF(ovInvs.reduce((s,i)=>s+i.amount, 0))}</div>`, renderRows(ovInvs.slice(0, 10), 'invoice'), "navigate('invoices')");
 
-  // --- CUADRANTE 2: INVOICES PENDIENTES (TOP 10) ---
   const pendInvs = data.invoices.filter(i => i.status === 'Pending' || i.status === 'Due Soon').sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
-  const top10Pend = pendInvs.slice(0, 10);
-  const totalPendAll = pendInvs.reduce((s,i)=>s+i.amount, 0);
-  // Calcular cuánto de ese total corresponde a este mes en curso
   const now = new Date();
   const pendThisMonth = pendInvs.filter(i => new Date(i.dueDate).getMonth() === now.getMonth() && new Date(i.dueDate).getFullYear() === now.getFullYear()).reduce((s,i)=>s+i.amount,0);
+  const cardInvPending = buildCard('Pendientes de Cobro', '🟡', `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Total Por Cobrar</div><div style="font-size:17px;font-weight:700;color:var(--amber);font-family:var(--mono,monospace)">${fmtF(pendInvs.reduce((s,i)=>s+i.amount, 0))}</div><div style="font-size:10.5px;color:var(--text-soft)">Este mes: ${fmtF(pendThisMonth)}</div>`, renderRows(pendInvs.slice(0, 10), 'invoice'), "navigate('invoices')");
 
-  const cardInvPending = buildCard(
-    'Pendientes de Cobro', '🟡',
-    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Por Cobrar</div>
-     <div style="font-size:17px;font-weight:700;color:var(--amber);font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalPendAll)}</div>
-     <div style="font-size:10.5px;color:var(--text-soft);margin-top:2px;font-weight:500">A cobrar este mes: ${fmtF(pendThisMonth)}</div>`,
-    renderRows(top10Pend, 'invoice'),
-    "navigate('invoices')"
-  );
-
-  // --- CUADRANTE 3: RENOVACIONES VENCIDAS ---
-  // Ordenadas por monto (las más grandes primero)
   const ovRen = data.renewals.filter(r => r.status === 'Overdue').sort((a,b) => b.amount - a.amount);
-  const totalOvRen = ovRen.reduce((s,r)=>s+r.amount, 0);
-  const cardRenOverdue = buildCard(
-    'Renovaciones Vencidas', '🔴',
-    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Riesgo Total</div>
-     <div style="font-size:17px;font-weight:700;color:var(--red);font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalOvRen)}</div>`,
-    renderRows(ovRen.slice(0, 10), 'renewal'),
-    "navigate('renewals')"
-  );
+  const cardRenOverdue = buildCard('Renovaciones Vencidas', '🔴', `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Riesgo Total</div><div style="font-size:17px;font-weight:700;color:var(--red);font-family:var(--mono,monospace)">${fmtF(ovRen.reduce((s,r)=>s+r.amount, 0))}</div>`, renderRows(ovRen.slice(0, 10), 'renewal'), "navigate('renewals')");
 
-  // --- CUADRANTE 4: RENOVACIONES DUE SOON ---
   const soonRen = data.renewals.filter(r => r.status === 'Due Soon' || r.status === 'Upcoming').sort((a,b) => new Date(a.date) - new Date(b.date));
-  const top10SoonRen = soonRen.slice(0, 10);
-  const totalSoonRen = top10SoonRen.reduce((s,r)=>s+r.amount, 0);
-  const cardRenSoon = buildCard(
-    'Próximas Renovaciones', '🟠',
-    `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Valor Próximo</div>
-     <div style="font-size:17px;font-weight:700;color:#ea580c;font-family:var(--mono,monospace);margin-top:2px">${fmtF(totalSoonRen)}</div>`,
-    renderRows(top10SoonRen, 'renewal'),
-    "navigate('renewals')"
-  );
+  const cardRenSoon = buildCard('Próximas Renovaciones', '🟠', `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Valor Próximo</div><div style="font-size:17px;font-weight:700;color:#ea580c;font-family:var(--mono,monospace)">${fmtF(soonRen.slice(0, 10).reduce((s,r)=>s+r.amount, 0))}</div>`, renderRows(soonRen.slice(0, 10), 'renewal'), "navigate('renewals')");
 
-  // --- INYECTAR LAS TARJETAS EN LAS DOS COLUMNAS ---
+  // ⭐ NUEVA SECCIÓN: TOP 10 CLIENTES (MRR)
+  const topClients = data.clients.filter(c => c.monthlyAmount > 0 && c.status === 'Active').sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0)).slice(0, 10);
+  const topClientsHtml = topClients.length ? `<table style="font-size:13px; margin:0; width:100%">
+      <thead><tr style="color:var(--text-muted); font-size:11px; text-transform:uppercase; border-bottom:1px solid var(--border-soft); background:var(--bg)">
+          <th style="padding:10px 20px;text-align:left">Cliente</th>
+          <th style="padding:10px 20px;text-align:right">MRR (Mensual)</th>
+          <th style="padding:10px 20px;text-align:right">ARR (Anual)</th>
+          <th style="padding:10px 20px;text-align:right">Próxima Renovación</th>
+      </tr></thead>
+      <tbody>
+          ${topClients.map(c => {
+              const activeRens = data.renewals.filter(r => r.clientId === c.id && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled').sort((a,b) => new Date(a.date) - new Date(b.date));
+              const nextRen = activeRens[0];
+              const dateStr = nextRen ? fmtDate(nextRen.date) : (c.contractEnd ? fmtDate(c.contractEnd) : '<span style="color:var(--amber)">Sin fecha</span>');
+              return `<tr style="cursor:pointer; border-bottom:1px solid var(--border-soft)" onclick="navigate('clients'); setTimeout(()=>openDetail(${c.id}),100)">
+                  <td style="padding:12px 20px; font-weight:600">${c.name}</td>
+                  <td style="padding:12px 20px; text-align:right; font-family:var(--mono,monospace); color:var(--green); font-weight:600">${fmtF(c.monthlyAmount)}</td>
+                  <td style="padding:12px 20px; text-align:right; font-family:var(--mono,monospace); color:var(--text-muted)">${fmtF(c.annualAmount)}</td>
+                  <td style="padding:12px 20px; text-align:right; color:var(--text-muted)">${dateStr}</td>
+              </tr>`;
+          }).join('')}
+      </tbody>
+  </table>` : `<div class="empty-state" style="padding:24px"><div class="empty-text">No hay MRR mensual registrado en los clientes aún.</div></div>`;
+
   colContainer.innerHTML = `
-    <div style="display:flex; flex-direction:column;">
-      ${cardInvOverdue}
-      ${cardInvPending}
-    </div>
-    <div style="display:flex; flex-direction:column;">
-      ${cardRenOverdue}
-      ${cardRenSoon}
+    <div style="display:flex; flex-direction:column;">${cardInvOverdue}${cardInvPending}</div>
+    <div style="display:flex; flex-direction:column;">${cardRenOverdue}${cardRenSoon}</div>
+    <div style="grid-column: 1 / -1; margin-top:10px">
+      <div class="card" style="border: 1px solid var(--border); box-shadow: var(--shadow-md);">
+        <div class="card-header" style="border-bottom:1px solid var(--border-soft); padding:16px 20px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:18px">⭐</span>
+            <div class="card-title" style="font-size:15px; font-weight:600;">Top 10 Clientes VIP (Por MRR)</div>
+          </div>
+        </div>
+        <div style="padding:0; overflow-x:auto;">${topClientsHtml}</div>
+      </div>
     </div>
   `;
 }
-
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
 function filterClients(q) { clientSearch=q.toLowerCase(); renderClients(); }
 function renderClients() {
@@ -4925,13 +4907,14 @@ function updateSchedBadge() {
 }
 
 const SCHED_TRIGGERS = [
-  { key:'invoice-overdue',      label:'Invoice Overdue (Internal)',      desc:'Notify your team about each overdue invoice, repeats until paid', client:false },
+  { key:'invoice-overdue',       label:'Invoice Overdue (Internal)',      desc:'Notify your team about each overdue invoice, repeats until paid', client:false },
   { key:'invoice-overdue-client', label:'Invoice Overdue → Client',   desc:'Send payment reminder directly to the client, repeats until paid', client:true },
-  { key:'renewal-overdue',      label:'Renewal Overdue (Internal)',      desc:'Notify your team about each overdue renewal', client:false },
+  { key:'renewal-overdue',       label:'Renewal Overdue (Internal)',      desc:'Notify your team about each overdue renewal', client:false },
   { key:'renewal-overdue-client', label:'Renewal Overdue → Client',   desc:'Send renewal notice directly to the client', client:true },
   { key:'renewal-due-soon',   label:'Renewal Due Soon (Internal)',     desc:'Alert your team when renewal is within N days', client:false },
   { key:'renewal-due-soon-client', label:'Renewal Due Soon → Client', desc:'Remind the client their renewal is coming up', client:true },
   { key:'stale-contact',      label:'Stale Contact',                  desc:'Alert your team when a renewal has no contact in N days', client:false },
+  { key:'renewal-6-months',   label:'⭐ Strategic Renewal (6 Months)', desc:'Alert your team 180 days before a renewal to plan early', client:false }, // <-- NUEVA REGLA
 ];
 
 function renderScheduledAlerts() {
@@ -5010,7 +4993,12 @@ function renderScheduledAlerts() {
 }
 
 function countPendingForRule(rule) {
-  if (!rule.enabled) return 0;
+  if (rule.trigger === 'renewal-6-months') {
+    return data.renewals.filter(r => {
+      const d = daysUntil(r.date);
+      return d >= 0 && d <= 180 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' && isDue('ren-'+r.id) && isSelected('ren-'+r.id);
+    }).length;
+  }  return 0;
   const now = new Date(); now.setHours(0,0,0,0);
   const lastRunDates = rule.lastRunDates || {};
   const isDue = (itemKey) => {
@@ -5129,6 +5117,14 @@ function buildSchedItemPicker(trigger, rule) {
         const c = data.clients.find(x=>x.id===r.clientId);
         const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
         return { key: 'ren-'+r.id, label: (c?.name||'?') + ' — ' + r.type, sub: lc ? lc+'d since contact' : 'never contacted', badgeColor: (!lc||lc>7)?'var(--red)':'var(--green)', status: r.status };
+      });
+  } else if (trigger === 'renewal-6-months') {
+    items = data.renewals
+      .filter(r => r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled')
+      .map(r => {
+        const c = data.clients.find(x=>x.id===r.clientId);
+        const d = daysUntil(r.date);
+        return { key: 'ren-'+r.id, label: (c?.name||'?') + ' — ' + r.type + ' · ' + fmt(r.amount), sub: d < 0 ? Math.abs(d)+'d overdue' : 'en '+d+'d', badgeColor: (d >= 0 && d <= 180) ? 'var(--green)' : 'var(--text-muted)', status: r.status };
       });
   }
 
@@ -5361,6 +5357,33 @@ async function executeSchedRule(rule, force = false) {
       };
       items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null, meta));
     });
+    
+    // 5. ALERTA ESTRATÉGICA 6 MESES
+  } else if (rule.trigger === 'renewal-6-months') {
+    data.renewals.filter(r => {
+      const d = daysUntil(r.date);
+      return d >= 0 && d <= 180 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' && isDue('ren-'+r.id) && isSelected('ren-'+r.id);
+    }).forEach(r => {
+      const c = data.clients.find(x=>x.id===r.clientId);
+      const d = daysUntil(r.date);
+      const vars = { client: c?.name||'', contact: c?.clientContact||c?.contact||'', amount: fmt(r.amount), date: fmtDate(r.date), days: d, type: r.type };
+      
+      const subj = '⭐ Alerta Temprana (6 Meses): Renovación de ' + (c?.name||'');
+      const body = `El contrato de ${c?.name||''} por ${r.type} vence en ${d} días (aprox. ${Math.round(d/30)} meses).\n\nEste es un recordatorio estratégico semanal para comenzar a planear la estrategia de cierre y explorar oportunidades de Upsell antes del vencimiento.\n\n— ClientFlow`;
+      const slack = `⭐ *Alerta Temprana (6 Meses) — ${c?.name||''}*\n${r.type} · *${fmt(r.amount)}* · vence en ${d} días. Es momento de planear la estrategia de cierre.`;
+      
+      const meta = {
+        icon: '⭐', accentColor: '#2563eb',
+        fields: [
+          { label: 'Cliente VIP', value: c?.name||'—' },
+          { label: 'Servicio', value: r.type },
+          { label: 'Monto de Renovación', value: fmt(r.amount), highlight: true },
+          { label: 'Tiempo Restante', value: `${d} días (${Math.round(d/30)} meses)` },
+        ].filter(f => f.value && f.value !== '—')
+      };
+      items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null, meta));
+    });
+  }
   }
 
   if (!items.length) {
