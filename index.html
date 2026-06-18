@@ -1742,16 +1742,21 @@ function statusBadge(s) {
 }
 
 function updateBadges() {
-  const renewalsNeedingContact = data.renewals.filter(r => {
-  // Ignorar automáticamente las renovadas o perdidas
-  if (r.status === 'Renewed' || r.status === 'Lost' || r.status === 'Cancelled') return false;
-  
-  const d = r.lastContact ? Math.floor((new Date() - new Date(r.lastContact))/86400000) : 999;
-  return d > 7; // Ajusta el '7' a la cantidad de días de holgura que manejes
-}).length;
-  const bR = document.getElementById('renewals-badge'); bR.textContent=rN; bR.style.display=rN?'inline':'none';
-  const iN = data.invoices.filter(i=>i.status==='Overdue').length;
-  const bI = document.getElementById('invoices-badge'); bI.textContent=iN; bI.style.display=iN?'inline':'none';
+  // Cuenta renovaciones que urgen (Due Soon o Overdue)
+  const rN = data.renewals.filter(r => r.status === 'Overdue' || r.status === 'Due Soon').length;
+  const bR = document.getElementById('renewals-badge'); 
+  if (bR) {
+    bR.textContent = rN; 
+    bR.style.display = rN ? 'inline' : 'none';
+  }
+
+  // Cuenta facturas vencidas
+  const iN = data.invoices.filter(i => i.status === 'Overdue').length;
+  const bI = document.getElementById('invoices-badge'); 
+  if (bI) {
+    bI.textContent = iN; 
+    bI.style.display = iN ? 'inline' : 'none';
+  }
 }
 
 // ─── NAVIGATION ──────────────────────────────────────────────────────────────
@@ -2102,7 +2107,9 @@ function renderRenewals() {
   const thead = document.querySelector('#page-renewals table thead tr');
   if (thead) thead.innerHTML = th('client','Client') + th('type','Type') + th('date','Renewal Date') + th('amount','Amount') + th('lastContact','Last Contact') + th('status','Status') + '<th></th>';
 
+  // MAGIA AQUÍ: Ignora las alertas si está renovado o cancelado
   const isStale = r => {
+    if (r.status === 'Renewed' || r.status === 'Lost' || r.status === 'Cancelled') return false;
     if (!r.lastContact) return true;
     return Math.round((new Date() - new Date(r.lastContact)) / 86400000) > 7;
   };
@@ -4169,13 +4176,6 @@ function openRenewalDetail(id) {
   document.getElementById('rdp-last-contact').value = r.lastContact || '';
   updateLastContactLabel(r);
 
-  const days = r.lastContact ? Math.round((new Date() - new Date(r.lastContact)) / 86400000) : null;
-  const staleDiv = document.getElementById('rdp-stale-alert');
-  if (!r.lastContact || days > 7) {
-    document.getElementById('rdp-stale-sub').textContent = days ? `Last contact was ${days} days ago` : 'No contact has been recorded yet';
-    staleDiv.style.display = 'block';
-  } else { staleDiv.style.display = 'none'; }
-
   renderRenewalComments(r);
 
   const webhook = localStorage.getItem('slack-webhook') || '';
@@ -4202,10 +4202,29 @@ function editRenewalFromPanel() {
 
 function updateLastContactLabel(r) {
   const el = document.getElementById('rdp-last-contact-label');
-  if (!r || !r.lastContact) { el.textContent = 'No contact recorded yet.'; el.style.color = 'var(--text-soft)'; return; }
-  const d = Math.round((new Date() - new Date(r.lastContact)) / 86400000);
-  el.textContent = d === 0 ? 'Contacted today ✓' : d === 1 ? 'Last contacted yesterday' : `Last contacted ${d} days ago`;
-  el.style.color = d > 7 ? 'var(--red)' : 'var(--green)';
+  const staleDiv = document.getElementById('rdp-stale-alert');
+  const staleSub = document.getElementById('rdp-stale-sub');
+
+  if (!r || !r.lastContact) { 
+    if(el) { el.textContent = 'No contact recorded yet.'; el.style.color = 'var(--text-soft)'; }
+  } else {
+    const d = Math.round((new Date() - new Date(r.lastContact)) / 86400000);
+    if(el) {
+      el.textContent = d === 0 ? 'Contacted today ✓' : d === 1 ? 'Last contacted yesterday' : `Last contacted ${d} days ago`;
+      el.style.color = d > 7 ? 'var(--red)' : 'var(--green)';
+    }
+  }
+
+  // Lógica de alerta Stale centralizada
+  const days = r.lastContact ? Math.round((new Date() - new Date(r.lastContact)) / 86400000) : null;
+  const isActive = r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled';
+  
+  if (isActive && (!r.lastContact || days > 7)) {
+    if (staleSub) staleSub.textContent = days ? `Last contact was ${days} days ago` : 'No contact has been recorded yet';
+    if (staleDiv) staleDiv.style.display = 'block';
+  } else { 
+    if (staleDiv) staleDiv.style.display = 'none'; 
+  }
 }
 
 function saveLastContact() {
@@ -4213,13 +4232,7 @@ function saveLastContact() {
   if (!r) return;
   r.lastContact = document.getElementById('rdp-last-contact').value;
   saveData(); renderRenewals(); updateLastContactLabel(r);
-  // NUEVO CÓDIGO
-const ms = r.lastContact ? (new Date() - new Date(r.lastContact)) : null;
-const days = ms ? Math.floor(ms / 86400000) : null;
-
-// MAGIA: Solo requiere contacto si NO está "Renewed" (o Cancelada) Y ya pasaron los días
-const isActiveRenewal = r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled';
-const needsContact = isActiveRenewal && (!r.lastContact || days > 7);
+  toast('Last contact saved ✓');
 }
 
 function setContactToday() {
