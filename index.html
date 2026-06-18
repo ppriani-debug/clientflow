@@ -2037,6 +2037,7 @@ function openDetail(id) {
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin:14px 0 4px">Contract & Budget</div>
     <div class="detail-row"><span class="detail-label">Contract Start</span><span class="detail-val">${cStart ? fmtDate(cStart) : '—'}</span></div>
     <div class="detail-row"><span class="detail-label">Contract End</span><span class="detail-val">${cEnd ? fmtDate(cEnd) : '—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Mensual / Anual</span><span class="detail-val" style="color:var(--green);font-weight:600">${c.monthlyAmount ? fmtF(c.monthlyAmount) : '—'} / ${c.annualAmount ? fmtF(c.annualAmount) : '—'}</span></div>
     <div class="detail-row"><span class="detail-label">Budget Date</span><span class="detail-val">${c.budgetDate ? fmtDate(c.budgetDate) : '—'}</span></div>
 
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);margin:14px 0 4px">Key Roles</div>
@@ -2051,7 +2052,7 @@ function openDetail(id) {
     <div class="detail-row"><span class="detail-label">States (${svcs.states ? svcs.states.length : 0})</span><span class="detail-val" style="text-align:right;max-width:60%">${svcs.states?.length ? svcs.states.join(', ') : 'None'}</span></div>
     <div class="detail-row"><span class="detail-label">Features</span><span class="detail-val">${activeSvcTags.length ? activeSvcTags.map(t=>`<span class="badge badge-purple" style="margin-left:4px">${t}</span>`).join('') : 'None'}</span></div>
   `;
-
+  
   document.getElementById('dp-renewals').innerHTML = cR.length
     ? cR.map(r=>`<div class="detail-row"><span class="detail-label">${r.type}<br><small style="color:var(--text-soft)">${fmtDate(r.date)}</small></span>${statusBadge(r.status)}</div>`).join('')
     : `<div style="font-size:12px;color:var(--text-soft)">No renewals on file.</div>`;
@@ -3472,6 +3473,8 @@ function openModal(type, existing) {
         <div class="form-group span2" style="margin-bottom:0"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Contract & Timeline</div></div>
         <div class="form-group"><label class="form-label">Contract Start</label><input class="form-input" id="f-contract-start" type="date" value="${existing?.contractStart||''}"></div>
         <div class="form-group"><label class="form-label">Contract End</label><input class="form-input" id="f-contract-end" type="date" value="${existing?.contractEnd||''}"></div>
+        <div class="form-group"><label class="form-label">Monthly MRR ($)</label><input class="form-input" id="f-client-mrr" type="number" placeholder="Ej. 1000" value="${existing?.monthlyAmount||''}" oninput="document.getElementById('f-client-arr').value=(this.value*12)"></div>
+        <div class="form-group"><label class="form-label">Annual ARR ($)</label><input class="form-input" id="f-client-arr" type="number" value="${existing?.annualAmount||''}"></div>
         <div class="form-group"><label class="form-label">Budget Date</label><input class="form-input" id="f-budget-date-client" type="date" value="${existing?.budgetDate||''}"></div>
         <div class="form-group"><label class="form-label">Client Since</label><input class="form-input" id="f-since" type="date" value="${existing?.since||new Date().toISOString().split('T')[0]}"></div>
 
@@ -3523,8 +3526,9 @@ function openModal(type, existing) {
         <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
         <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
         <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
-        <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
-        <div class="form-group"><label class="form-label">Status (Tiempo)</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
+        <div class="form-group"><label class="form-label">Monto Mensual ($)</label><input class="form-input" id="f-ren-monthly" type="number" placeholder="Ej. 1000" value="${existing?.monthlyAmount||''}" oninput="document.getElementById('f-amount').value=(this.value*12)"></div>
+        <div class="form-group"><label class="form-label">Total Anual ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
+        <div class="form-group span2"><label class="form-label">Status (Tiempo)</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
         
         <div class="form-group span2" style="margin-bottom:0; margin-top:4px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Seguimiento y Cierre</div></div>
         
@@ -3536,6 +3540,7 @@ function openModal(type, existing) {
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveRenewal(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Renewal'}</button></div>`;
       
   } else if(type === 'invoice') {
+    // ... [Se mantiene exactamente igual para facturas, sin tocar nada]
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
     const nextNum='INV-00'+(40+data.invoices.length+1);
     const firstClient = existing ? data.clients.find(c=>c.id===existing.clientId) : data.clients[0];
@@ -3601,6 +3606,8 @@ function saveClient(id) {
     contractStart: document.getElementById('f-contract-start').value,
     contractEnd: document.getElementById('f-contract-end').value,
     budgetDate: document.getElementById('f-budget-date-client').value,
+    monthlyAmount: parseFloat(document.getElementById('f-client-mrr')?.value) || 0, // <-- NUEVO
+    annualAmount: parseFloat(document.getElementById('f-client-arr')?.value) || 0,  // <-- NUEVO
     champion: document.getElementById('f-champion').value.trim(),
     intensiveUser: document.getElementById('f-intensive').value.trim(),
     contact: document.getElementById('f-contact').value,
@@ -3608,7 +3615,7 @@ function saveClient(id) {
     clientContact: document.getElementById('f-client-contact')?.value||'',
     email: document.getElementById('f-email').value,
     phone: document.getElementById('f-phone') ? document.getElementById('f-phone').value : '',
-    slackId: document.getElementById('f-slack-id') ? document.getElementById('f-slack-id').value.trim() : '', // <-- NUEVO CAMPO SLACK ID
+    slackId: document.getElementById('f-slack-id') ? document.getElementById('f-slack-id').value.trim() : '',
     plan: [...document.querySelectorAll('#f-plan-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),
     status: document.getElementById('f-status').value,
     since: document.getElementById('f-since').value,
@@ -3652,10 +3659,10 @@ function saveRenewal(id) {
   const clientId = parseInt(document.getElementById('f-client').value);
   const type = document.getElementById('f-type').value.trim();
   const date = document.getElementById('f-date').value;
+  const monthlyAmount = parseFloat(document.getElementById('f-ren-monthly').value) || 0; // <-- NUEVO
   const amount = parseFloat(document.getElementById('f-amount').value) || 0;
   const statusVal = document.getElementById('f-status').value;
   
-  // Nuevos campos de Seguimiento y Cierre
   const subStatus = document.getElementById('f-substatus').value;
   const contractStatus = document.getElementById('f-contract').value;
   const budgetDate = document.getElementById('f-budget-date').value;
@@ -3670,6 +3677,7 @@ function saveRenewal(id) {
     clientId, 
     type, 
     date, 
+    monthlyAmount, // <-- NUEVO
     amount, 
     status: statusVal,
     subStatus,
@@ -4162,7 +4170,11 @@ function openRenewalDetail(id) {
     ${c?.email ? `<div class='detail-row'><span class='detail-label'>Client Email</span><span class='detail-val'><a href='mailto:${c.email}' style='color:var(--accent)'>${c.email}</a></span></div>` : ''}
     <div class="detail-row"><span class="detail-label">CS Agent</span><span class="detail-val">${c?.contact||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Renewal Date</span><span class="detail-val">${fmtDate(r.date)}</span></div>
-    <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-val" style="color:var(--green);font-weight:600">${fmtF(r.amount)}</span></div>
+    <div style="border-top:1px dashed var(--border-soft);margin:8px 0"></div>
+    <div class="detail-row"><span class="detail-label">Client Current ARR</span><span class="detail-val" style="font-size:12px;color:var(--text-muted)">${c?.annualAmount ? fmtF(c.annualAmount)+'/yr' : '—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Renewal MRR</span><span class="detail-val" style="color:var(--green);font-weight:500">${r.monthlyAmount ? fmtF(r.monthlyAmount) : '—'}</span></div>
+    <div class="detail-row"><span class="detail-label">Renewal Total (ARR)</span><span class="detail-val" style="color:var(--green);font-weight:600">${fmtF(r.amount)}</span></div>
+    <div style="border-top:1px dashed var(--border-soft);margin:8px 0"></div>
     <div class="detail-row"><span class="detail-label">Status (Time)</span><span class="detail-val">${statusBadge(r.status)}</span></div>
     
     <div style="border-top:1px solid var(--border-soft);margin:12px 0 8px"></div>
