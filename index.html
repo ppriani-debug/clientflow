@@ -380,14 +380,17 @@
         </div>
       </div>
       <div class="stats-grid" id="dashboard-stats"></div>
-      <div class="two-col">
-        <div class="card">
-          <div class="card-header"><div class="card-title">Overdue &amp; Due Soon</div><span class="badge badge-red" id="dash-renewal-count">—</span></div>
-          <div id="dash-renewals-table"></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><div class="card-title">Outstanding Invoices</div><span class="badge badge-red" id="dash-invoice-count">—</span></div>
-          <div id="dash-invoices-table"></div>
+      <div id="dash-two-col-main" class="two-col">
+  <div class="card">
+    <div class="card-header"><div class="card-title">Overdue &amp; Due Soon</div><span class="badge badge-red" id="dash-renewal-count">—</span></div>
+    <div id="dash-renewals-table"></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Outstanding Invoices</div><span class="badge badge-red" id="dash-invoice-count">—</span></div>
+    <div id="dash-invoices-table"></div>
+  </div>
+</div>
+<div id="dash-top10-mrr"></div>
         </div>
       </div>
     </div>
@@ -1913,9 +1916,98 @@ function renderDashboard() {
       ${cardRenSoon}
     </div>
   `;
+  // Top 10 MRR Widget
+  const top10Container = document.getElementById('dash-top10-mrr');
+  if (top10Container) top10Container.innerHTML = renderTop10MRRWidget();
 }
 
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
+
+// ─── TOP 10 CLIENTS BY MRR ────────────────────────────────────────────────
+function renderTop10MRRWidget() {
+  // Build enriched client list with MRR + nearest renewal
+  const enriched = data.clients.map(c => {
+    const mrr = c.monthlyAmount || 0;
+    const renewals = data.renewals.filter(r => r.clientId === c.id && r.status !== 'Renewed')
+      .sort((a,b) => new Date(a.date) - new Date(b.date));
+    const nextRenewal = renewals[0] || null;
+    const daysToRenewal = nextRenewal ? daysUntil(nextRenewal.date) : null;
+    return { ...c, mrr, nextRenewal, daysToRenewal };
+  }).filter(c => c.mrr > 0)
+    .sort((a,b) => b.mrr - a.mrr)
+    .slice(0,10);
+
+  if (!enriched.length) return '';
+
+  const statusColor = d => {
+    if (d === null) return 'var(--text-soft)';
+    if (d < 0) return 'var(--red)';
+    if (d <= 30) return 'var(--amber)';
+    if (d <= 180) return '#ea580c';
+    return 'var(--green)';
+  };
+  const statusLabel = d => {
+    if (d === null) return '—';
+    if (d < 0) return `${Math.abs(d)}d vencida`;
+    if (d === 0) return 'Hoy';
+    if (d <= 180) return `en ${d}d`;
+    return `en ${d}d`;
+  };
+  const alertIcon = d => (d !== null && d >= 0 && d <= 180) ? '⚠️ ' : '';
+
+  const rows = enriched.map((c, i) => {
+    const r = c.nextRenewal;
+    const d = c.daysToRenewal;
+    const color = statusColor(d);
+    const renewalCell = r
+      ? `<div style="font-size:12px;font-weight:500">${fmtDate(r.date)}</div>
+         <div style="font-size:11px;color:${color};font-weight:600">${alertIcon(d)}${statusLabel(d)}</div>`
+      : `<span style="font-size:12px;color:var(--text-soft)">Sin renovación</span>`;
+    return `<tr style="cursor:pointer" onclick="openDetail(${c.id})">
+      <td style="padding:10px 12px;font-size:12px;color:var(--text-soft);width:28px;font-weight:600">${i+1}</td>
+      <td style="padding:10px 8px">
+        <div style="font-weight:500;font-size:13px">${c.name}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${c.contact||'—'}</div>
+      </td>
+      <td style="padding:10px 8px;text-align:right">
+        <div style="font-weight:700;font-size:14px;color:var(--green);font-family:var(--mono,monospace)">${fmtF(c.mrr)}</div>
+        <div style="font-size:10px;color:var(--text-soft)">/mes</div>
+      </td>
+      <td style="padding:10px 8px">${renewalCell}</td>
+      <td style="padding:10px 8px">
+        ${r ? `<button class="btn btn-ghost btn-sm" onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${r.id}),100);event.stopPropagation()" style="font-size:11px">Ver →</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalMRR = enriched.reduce((s,c) => s+c.mrr, 0);
+  const alertCount = enriched.filter(c => c.daysToRenewal !== null && c.daysToRenewal >= 0 && c.daysToRenewal <= 180).length;
+
+  return `<div class="card" style="margin-top:24px">
+    <div class="card-header">
+      <div>
+        <div class="card-title">🏆 Top 10 Clientes por MRR</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">MRR total: ${fmtF(totalMRR)}/mes · ARR: ${fmtF(totalMRR*12)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${alertCount ? `<span class="badge badge-amber">⚠️ ${alertCount} renuevan en ≤6 meses</span>` : '<span class="badge badge-green">✓ Sin alertas próximas</span>'}
+        <button class="btn btn-ghost btn-sm" onclick="ensure6MonthRenewalRule();toast('Regla de 6 meses verificada ✓')">⚡ Activar Alerta 6m</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="min-width:500px;width:100%">
+        <thead><tr>
+          <th style="width:28px">#</th>
+          <th>Cliente</th>
+          <th style="text-align:right">MRR</th>
+          <th>Próxima Renovación</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
 function filterClients(q) { clientSearch=q.toLowerCase(); renderClients(); }
 function renderClients() {
   const rows = data.clients.filter(c=>!clientSearch||
@@ -3145,37 +3237,6 @@ async function generateRenewalAlert() {
     document.getElementById('rdp-send-slack-btn').style.display = 'inline-flex';
   } catch(e) { toast('Error de IA ✗'); }
   if (genBtn) { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Message'; }
-}
-
-async function generateInvoiceFollowup() {
-  const inv = data.invoices.find(x=>x.id===activeInvoiceId);
-  const c = data.clients.find(x=>x.id===inv?.clientId);
-  if (!inv || !c) return;
-  const btn = document.getElementById('idp-gen-btn');
-  btn.disabled = true; btn.textContent = 'Generando…';
-  
-  const prompt = `Eres un ejecutivo de cobranza. Escribe un correo persuasivo, profesional y claro (de 2 a 3 párrafos) dirigido al cliente para solicitar el pago de una factura.
-  
-  Datos del contexto:
-  - Cliente: ${c.name}
-  - Estatus de la factura: ${inv.status}
-  
-  Reglas estrictas:
-  1. Escribe SOLO el cuerpo del correo en español, empezando directamente con el saludo (ej. "Estimado equipo de ${c.name}").
-  2. Sé amable pero firme sobre la importancia de regularizar el saldo en su cuenta a la brevedad.
-  3. IMPORTANTE: NO escribas el número de factura, el monto, ni la fecha en el texto. El sistema ya adjuntará una tabla con esos datos exactos debajo de tu mensaje.
-  4. No incluyas la palabra "Asunto:".`;
-
-  try {
-    const text = await geminiFetch(prompt, 800);
-    const toVal = document.getElementById('idp-email-to').value.trim();
-    if (toVal) { const inv2 = data.invoices.find(x=>x.id===activeInvoiceId); if(inv2) { inv2.followupTo=toVal; saveData(); } }
-    document.getElementById('idp-msg-text').value = text.trim();
-    document.getElementById('idp-generated-msg').style.display = 'block';
-    document.getElementById('idp-send-email-btn').style.display = 'inline-flex';
-    document.getElementById('idp-send-slack-btn').style.display = 'inline-flex';
-  } catch(e) { toast('Error de IA ✗'); }
-  btn.disabled = false; btn.textContent = '⚡ Generate Message';
 }
 
 async function generateSchedMessage() {
@@ -5581,6 +5642,44 @@ function saveSchedRule() {
   saveSchedRules(rules);
   closeModal();
 }
+  // ─── AUTO-CREATE 6-MONTH RENEWAL RULE ────────────────────────────────────────
+function ensure6MonthRenewalRule() {
+  const rules = getSchedRules();
+  const RULE_NAME = 'Renovaciones a 6 meses (Top 10 MRR)';
+  const existing = rules.find(r => r.name === RULE_NAME);
+  if (existing) return; // ya existe
+
+  // Calcular Top 10 por MRR
+  const top10 = data.clients
+    .filter(c => c.monthlyAmount > 0)
+    .sort((a,b) => (b.monthlyAmount||0) - (a.monthlyAmount||0))
+    .slice(0,10);
+
+  const top10ClientIds = new Set(top10.map(c => c.id));
+
+  // Filtrar renovaciones de esos clientes, no renovadas
+  const selectedRenewalKeys = data.renewals
+    .filter(r => top10ClientIds.has(r.clientId) && r.status !== 'Renewed')
+    .map(r => 'ren-' + r.id);
+
+  rules.push({
+    id: Date.now(),
+    name: RULE_NAME,
+    trigger: 'renewal-due-soon',
+    sendTime: '09:00',
+    repeatEveryDays: 7,
+    thresholdDays: 180,
+    emailTo: '',
+    messageBody: 'Hola equipo,\n\nEste es un recordatorio semanal: el cliente {{client}} tiene su renovación de {{type}} el {{date}} (en {{days}} días).\n\nFavor de revisar el avance y actualizar el estatus en ClientFlow.\n\nSaludos.',
+    channels: { email: true, slack: true },
+    selectedIds: selectedRenewalKeys.length ? selectedRenewalKeys : null,
+    enabled: true,
+    lastRunDates: {}
+  });
+
+  saveSchedRules(rules);
+  toast('Regla "Renovaciones a 6 meses" creada ✓ — revisa Scheduled Alerts');
+}
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -6569,6 +6668,8 @@ function buildUpsellReportHtml() {
   const inProgress = data.upsells.filter(u=>['Contacted','Proposal','Negotiating'].includes(u.stage)).length;
   const ub = document.getElementById('upsell-badge');
   if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
+  // Auto-create 6-month renewal rule for Top 10 MRR clients
+  ensure6MonthRenewalRule();
 })();
 </script>
 
