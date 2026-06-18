@@ -18,11 +18,11 @@
     --radius: 10px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
-  .layout { display: flex; min-height: 100vh; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; overflow-x: hidden; overflow-y: auto; }
+.layout { display: flex; min-height: 100vh; width: 100%; }
 
   /* SIDEBAR */
-  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 28px 0; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 10; }
+  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 28px 0; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 10; overflow-y: auto; overflow-x: hidden; }
   .logo { padding: 0 20px 28px; border-bottom: 1px solid var(--border-soft); margin-bottom: 12px; }
   .logo-mark { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
   .logo-sub { font-size: 11px; color: var(--text-soft); letter-spacing: 0.3px; }
@@ -35,7 +35,7 @@
   .nav-badge { margin-left: auto; background: var(--red); color: white; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 20px; font-family: 'DM Mono', monospace; }
 
   /* MAIN */
-  .main { margin-left: 220px; flex: 1; padding: 32px 36px; max-width: calc(100vw - 220px); }
+  .main { margin-left: 220px; flex: 1; padding: 32px 36px; width: calc(100vw - 220px); max-width: calc(100vw - 220px); min-height: 100vh; box-sizing: border-box; overflow-x: hidden; }
   .page { display: none; }
   .page.active { display: block; animation: fadeIn 0.2s ease; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
@@ -60,7 +60,7 @@
   .btn-sm { padding: 5px 10px; font-size: 12px; }
 
   /* STATS */
-  .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; min-width: 0; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
   .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 8px; }
   .stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.8px; font-family: 'DM Mono', monospace; }
@@ -70,11 +70,11 @@
   .stat-delta { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
 
   /* CARD */
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: visible; }
   .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .card-title { font-size: 14px; font-weight: 600; }
   .mb20 { margin-bottom: 20px; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; min-width: 0; }
 
   /* SEARCH */
   .search-bar { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; }
@@ -220,7 +220,7 @@
 
   /* UPSELL KANBAN */
   .upsell-stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 24px; }
-  .kanban-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+  .kanban-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; max-width: 100%; }
   .kanban-col { flex: 0 0 220px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; max-height: calc(100vh - 280px); }
   .kanban-col-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .kanban-col-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -426,6 +426,7 @@
           <div class="card-title">Renewal Schedule</div>
           <div class="search-bar"><span>⌕</span><input type="text" placeholder="Search…" oninput="filterRenewals(this.value)"></div>
         </div>
+        <div style="overflow-x:auto">
         <table>
           <thead><tr><th>Client</th><th>Type</th><th>Renewal Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
           <tbody id="renewals-tbody"></tbody>
@@ -448,6 +449,7 @@
           <div class="card-title">All Invoices</div>
           <div class="search-bar"><span>⌕</span><input type="text" placeholder="Search…" oninput="filterInvoices(this.value)"></div>
         </div>
+          <div style="overflow-x:auto">
         <table>
           <thead><tr><th>Invoice #</th><th>Client</th><th>Due Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
           <tbody id="invoices-tbody"></tbody>
