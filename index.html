@@ -1113,6 +1113,7 @@
   </div>
 </div>
 <div class="upsell-detail-overlay" id="onboarding-detail-overlay" onclick="closeOnboardingDetail()"></div>
+<div class="upsell-detail-overlay" id="onboarding-detail-overlay" onclick="closeOnboardingDetail()"></div>
 <div class="upsell-detail-panel" id="onboarding-detail-panel">
   <div class="detail-header">
     <div>
@@ -1131,11 +1132,9 @@
     
     <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px">
       <div class="form-group" style="margin:0">
-        <label class="form-label">Acceso Plataforma</label>
-        <select class="form-input" id="odp-access" onchange="saveOnboardingField('hasAccess', this.value === 'true')">
-          <option value="false">❌ Pendiente</option>
-          <option value="true">✅ Entregado</option>
-        </select>
+        <label class="form-label">Fecha de Acceso</label>
+        <input type="date" class="form-input" id="odp-access-date" onchange="saveOnboardingField('accessDate', this.value)">
+        <div style="font-size:10.5px;color:var(--text-muted);margin-top:2px">Dejar en blanco si está pendiente</div>
       </div>
       <div class="form-group" style="margin:0">
         <label class="form-label">Encargado (Owner)</label>
@@ -1145,10 +1144,13 @@
   </div>
   
   <div class="detail-section">
-    <div class="detail-section-title">Aviso a Slack (Con Tags)</div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Manda una actualización manual al canal. Puedes etiquetar personas usando <code>&lt;@MemberID&gt;</code>.</div>
+    <div class="detail-section-title">Aviso a Slack</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Manda una actualización manual al canal. Para etiquetar usuarios usa <code>&lt;@MemberID&gt;</code> y para todos <code>&lt;!here&gt;</code>.</div>
     <div class="form-group">
-      <input class="form-input" id="odp-slack-tags" placeholder="Etiquetas Slack (Ej. <@U12345> <@U67890>)" onchange="saveOnboardingField('slackTags', this.value)" style="margin-bottom:6px">
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <input class="form-input" id="odp-slack-channel" placeholder="Canal (Ej. #general)" style="flex:1" onchange="saveOnboardingField('slackChannel', this.value)">
+        <input class="form-input" id="odp-slack-tags" placeholder="Menciones (Ej. <!here>)" style="flex:2" onchange="saveOnboardingField('slackTags', this.value)">
+      </div>
       <textarea class="notes-area" id="odp-slack-msg" placeholder="Escribe el avance o si hay un bloqueo (Ej. Falta la OC para facturar)..." style="min-height:60px"></textarea>
       <div style="display:flex;justify-content:flex-end;margin-top:8px">
         <button class="btn btn-success btn-sm" onclick="sendOnboardingSlack()">💬 Enviar Update</button>
@@ -3142,9 +3144,11 @@ function buildHtmlEmail(subject, text, fromName, meta) {
     + '<p style="margin:0;font-size:11px;color:#8a8580">Sent by ' + org + '</p></div></div></body></html>';
 }
 
-async function slackSend(webhook, text) {
+async function slackSend(webhook, text, channelOverride = null) {
   if (!webhook || !webhook.startsWith('https://hooks.slack.com')) throw new Error('Invalid Slack webhook URL');
-  await fetch(webhook, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  const payload = { text };
+  if (channelOverride) payload.channel = channelOverride;
+  await fetch(webhook, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 }
 
 async function loadEmailRecipients() { try { const r = await storage.get('clientflow-recipients'); if(r?.value) emailRecipients = JSON.parse(r.value); } catch(e){} }
@@ -6762,7 +6766,7 @@ function renderOnboarding() {
                 Plataforma: <strong style="color:var(--text)">${o.platform}</strong>
               </div>
               <div style="display:flex;gap:4px;margin-bottom:6px">
-                ${o.hasAccess ? '<span class="badge badge-green">Acceso ✅</span>' : '<span class="badge badge-red">Sin Acceso ❌</span>'}
+                ${o.accessDate ? `<span class="badge badge-green">Acceso: ${fmtDate(o.accessDate)}</span>` : '<span class="badge badge-red">Sin Acceso ❌</span>'}
                 <span class="badge badge-gray">${o.owner||'Sin Asignar'}</span>
               </div>
               <div class="upsell-card-meta" style="margin-top:8px;border-top:1px solid var(--border-soft);padding-top:6px">
@@ -6843,8 +6847,9 @@ function openOnboardingDetail(id) {
     <div class="detail-row"><span class="detail-label">Plan del Cliente</span><span class="detail-val">${(Array.isArray(c?.plan)?c.plan:[c?.plan]).join(', ')}</span></div>
   `;
 
-  document.getElementById('odp-access').value = o.hasAccess ? "true" : "false";
+  document.getElementById('odp-access-date').value = o.accessDate || '';
   document.getElementById('odp-owner').value = o.owner || '';
+  document.getElementById('odp-slack-channel').value = o.slackChannel || '';
   document.getElementById('odp-slack-tags').value = o.slackTags || '';
   document.getElementById('odp-notes').value = o.notes || '';
   document.getElementById('odp-slack-msg').value = '';
@@ -6853,7 +6858,7 @@ function openOnboardingDetail(id) {
   document.getElementById('onboarding-detail-panel').classList.add('open');
   document.getElementById('onboarding-detail-overlay').classList.add('open');
 }
-
+  
 function closeOnboardingDetail() {
   document.getElementById('onboarding-detail-panel').classList.remove('open');
   document.getElementById('onboarding-detail-overlay').classList.remove('open');
@@ -6890,7 +6895,18 @@ async function sendOnboardingSlack() {
   const msgText = document.getElementById('odp-slack-msg').value.trim();
   if (!msgText) { toast('Escribe un mensaje primero'); return; }
 
-  const tags = o.slackTags ? `${o.slackTags} ` : '';
+  // Leemos directo de la interfaz para evitar problemas de sincronización
+  const tagsInput = document.getElementById('odp-slack-tags').value.trim();
+  const channelInput = document.getElementById('odp-slack-channel').value.trim();
+  
+  // Guardamos silenciosamente
+  if (o.slackTags !== tagsInput || o.slackChannel !== channelInput) {
+    o.slackTags = tagsInput;
+    o.slackChannel = channelInput;
+    saveData();
+  }
+
+  const tags = tagsInput ? `${tagsInput}\n` : '';
   const daysElapsed = Math.round((new Date() - new Date(o.startDate)) / 86400000);
   const statusEl = document.getElementById('odp-slack-status');
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:11px">Enviando...</span>';
@@ -6898,9 +6914,9 @@ async function sendOnboardingSlack() {
   const finalMessage = `${tags}🚀 *Update de Onboarding: ${c.name}*\n\n${msgText}\n\n_📌 Etapa: ${o.stage} | Plataforma: ${o.platform} | Owner: ${o.owner||'N/A'} | Días en proceso: ${daysElapsed}_`;
 
   try {
-    await slackSend(webhook, finalMessage);
+    await slackSend(webhook, finalMessage, channelInput || null);
     statusEl.innerHTML = '<span style="color:var(--green);font-size:11px">✓ Enviado a Slack</span>';
-    document.getElementById('odp-slack-msg').value = ''; // Limpiar textarea
+    document.getElementById('odp-slack-msg').value = ''; 
     toast('Alerta enviada a Slack ✓');
   } catch(e) {
     statusEl.innerHTML = '<span style="color:var(--red);font-size:11px">✗ Error al enviar</span>';
