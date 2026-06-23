@@ -1021,6 +1021,10 @@
         <input class="form-input" id="rdp-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="flex:1">
         <button class="btn btn-ghost btn-sm" onclick="saveSlackWebhook()">Save</button>
       </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input class="form-input" id="rdp-slack-channel" placeholder="Canal (Ej. #renovaciones)" style="flex:1" onchange="saveRenewalSlackConfig()">
+        <input class="form-input" id="rdp-slack-tags" placeholder="Menciones (Ej. <!here>)" style="flex:2" onchange="saveRenewalSlackConfig()">
+      </div>
     </div>
 
     <div style="margin-bottom:10px">
@@ -1040,7 +1044,6 @@
     </div>
     <div id="rdp-sending-status" style="margin-top:8px"></div>
   </div>
-</div>
 
 <div class="detail-overlay" id="idp-overlay" onclick="closeInvoiceDetail()"></div>
 <div class="renewal-detail-panel" id="idp-panel">
@@ -4333,10 +4336,20 @@ function openRenewalDetail(id) {
   document.getElementById('rdp-send-email-btn').style.display = 'none';
   document.getElementById('rdp-send-slack-btn').style.display = 'none';
   document.getElementById('rdp-sending-status').textContent = '';
+  document.getElementById('rdp-slack-channel').value = r.slackChannel || '';
+  document.getElementById('rdp-slack-tags').value = r.slackTags || '';
 
   document.getElementById('rdp-panel').classList.add('open');
   document.getElementById('rdp-overlay').classList.add('open');
 }
+
+  function saveRenewalSlackConfig() {
+  const r = data.renewals.find(x=>x.id===activeRenewalId);
+  if(r) {
+    r.slackChannel = document.getElementById('rdp-slack-channel').value.trim();
+    r.slackTags = document.getElementById('rdp-slack-tags').value.trim();
+    saveData();
+  }
 
 function closeRenewalDetail() {
   document.getElementById('rdp-panel').classList.remove('open');
@@ -4721,16 +4734,27 @@ async function sendRenewalSlack() {
   const msg = document.getElementById('rdp-msg-text').value.trim();
   if (!msg) { toast('Generate a message first ✗'); return; }
 
+  // Leemos directo de la interfaz
+  const tagsInput = document.getElementById('rdp-slack-tags').value.trim();
+  const channelInput = document.getElementById('rdp-slack-channel').value.trim();
+  
+  if (r.slackTags !== tagsInput || r.slackChannel !== channelInput) {
+    r.slackTags = tagsInput;
+    r.slackChannel = channelInput;
+    saveData();
+  }
+
   const statusEl = document.getElementById('rdp-sending-status');
   const btn = document.getElementById('rdp-send-slack-btn');
   btn.disabled = true;
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:12.5px">Sending…</span>';
 
-  // MAGIA: Mención al encargado
+  // Si el cliente tiene Slack ID guardado en su ficha principal, lo sumamos
   const mention = c?.slackId ? `<@${c.slackId}>\n` : '';
+  const tags = tagsInput ? `${tagsInput} ` : '';
 
   try {
-    await slackSend(webhook, `${mention}*Renewal Follow-up — ${c?.name}*\n${msg}\n\n_${r?.type} · ${fmtDate(r?.date)} · ${fmtF(r?.amount)}_`);
+    await slackSend(webhook, `${tags}${mention}*Renewal Follow-up — ${c?.name}*\n${msg}\n\n_${r?.type} · ${fmtDate(r?.date)} · ${fmtF(r?.amount)}_`, channelInput || null);
     statusEl.innerHTML = '<span style="color:var(--green);font-size:12.5px">✓ Sent to Slack</span>';
     toast('Sent to Slack ✓');
   } catch(e) {
@@ -4739,7 +4763,6 @@ async function sendRenewalSlack() {
   }
   btn.disabled = false;
 }
-
 // ─── DATA INSPECTOR ──────────────────────────────────────────────────────────
 function refreshInspector() {
   const el = document.getElementById('data-inspector-stats');
