@@ -3676,13 +3676,25 @@ function openModal(type, existing) {
       
   } else if(type === 'renewal') {
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
+    
+    // MAGIA: Rescatar el monto del cliente si la renovación antigua está vacía
+    let defaultMonthly = existing?.monthlyAmount || '';
+    let defaultAnnual = existing?.amount || '';
+    if (existing) {
+      const relatedClient = data.clients.find(c => c.id === existing.clientId);
+      if (relatedClient) {
+        if (!defaultMonthly && relatedClient.monthlyAmount) defaultMonthly = relatedClient.monthlyAmount;
+        if (!defaultAnnual && relatedClient.annualAmount) defaultAnnual = relatedClient.annualAmount;
+      }
+    }
+
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Renewal</div>
       <div class="form-grid">
-       <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client" onchange="updateRenewalAmounts()">${opts}</select></div>
+        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client" onchange="updateRenewalAmounts()">${opts}</select></div>
         <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
         <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
-        <div class="form-group"><label class="form-label">Monto Mensual ($)</label><input class="form-input" id="f-ren-monthly" type="number" placeholder="Ej. 1000" value="${existing?.monthlyAmount||''}" oninput="document.getElementById('f-amount').value=(this.value*12)"></div>
-        <div class="form-group"><label class="form-label">Total Anual ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
+        <div class="form-group"><label class="form-label">Monto Mensual ($)</label><input class="form-input" id="f-ren-monthly" type="number" placeholder="Ej. 1000" value="${defaultMonthly}" oninput="document.getElementById('f-amount').value=(this.value*12)"></div>
+        <div class="form-group"><label class="form-label">Total Anual ($)</label><input class="form-input" id="f-amount" type="number" value="${defaultAnnual}"></div>
         <div class="form-group span2"><label class="form-label">Status (Tiempo)</label><select class="form-input" id="f-status"><option ${existing?.status==='Upcoming'?'selected':''}>Upcoming</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Renewed'?'selected':''}>Renewed</option></select></div>
         
         <div class="form-group span2" style="margin-bottom:0; margin-top:4px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);padding-bottom:4px;border-bottom:1px solid var(--border-soft)">Seguimiento y Cierre</div></div>
