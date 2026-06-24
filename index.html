@@ -2998,6 +2998,22 @@ function renderAlerts() {
     if(i.status==='Overdue') alerts.push({type:'urgent',icon:'💸',title:`Invoice ${i.number} Overdue — ${clientName(i.clientId)}`,desc:`${fmtF(i.amount)} was due ${fmtDate(i.dueDate)}`});
     else if(i.status==='Pending'&&daysUntil(i.dueDate)<=7) alerts.push({type:'warning',icon:'📬',title:`Invoice ${i.number} Due Soon — ${clientName(i.clientId)}`,desc:`${fmtF(i.amount)} due ${fmtDate(i.dueDate)}`});
   });
+  // CHECK: Clientes activos sin renovación programada
+  data.clients.forEach(c => {
+    if (c.status === 'Active') {
+      const hasPendingRenewal = data.renewals.some(r => r.clientId === c.id && r.status !== 'Renewed');
+      if (!hasPendingRenewal) {
+        alerts.push({
+          type: 'warning', 
+          icon: '👀', 
+          title: `${c.name} — Falta Renovación`, 
+          desc: `Este cliente está activo pero no se le ha programado ninguna renovación futura.`,
+          renewalId: null
+        });
+      }
+    }
+  });
+  
   if(!alerts.length) alerts.push({type:'info',icon:'✅',title:'All clear!',desc:'No urgent items require your attention right now.'});
   document.getElementById('alerts-list').innerHTML = alerts.map(a=>`
     <div class="alert-item ${a.type}" style="cursor:${a.renewalId?'pointer':'default'}" ${a.renewalId?`onclick="navigate('renewals');setTimeout(()=>openRenewalDetail(${a.renewalId}),100)"`:''}>
@@ -3662,7 +3678,7 @@ function openModal(type, existing) {
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
     body=`<div class="modal-title">${isEdit?'Edit':'New'} Renewal</div>
       <div class="form-grid">
-        <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client">${opts}</select></div>
+       <div class="form-group span2"><label class="form-label">Client</label><select class="form-input" id="f-client" onchange="updateRenewalAmounts()">${opts}</select></div>
         <div class="form-group"><label class="form-label">Renewal Type</label><input class="form-input" id="f-type" placeholder="Annual Contract" value="${existing?.type||''}"></div>
         <div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="f-date" type="date" value="${existing?.date||''}"></div>
         <div class="form-group"><label class="form-label">Monto Mensual ($)</label><input class="form-input" id="f-ren-monthly" type="number" placeholder="Ej. 1000" value="${existing?.monthlyAmount||''}" oninput="document.getElementById('f-amount').value=(this.value*12)"></div>
@@ -3705,6 +3721,7 @@ function openModal(type, existing) {
   
   document.getElementById('modal-content').innerHTML = body;
   document.getElementById('modal-overlay').classList.add('open');
+  if (type === 'renewal' && !existing) setTimeout(updateRenewalAmounts, 50);
 }
   
 function closeModal(e) { if(!e||e.target===document.getElementById('modal-overlay')) document.getElementById('modal-overlay').classList.remove('open'); }
@@ -6943,6 +6960,17 @@ async function sendOnboardingSlack() {
     toast('Alerta enviada a Slack ✓');
   } catch(e) {
     statusEl.innerHTML = '<span style="color:var(--red);font-size:11px">✗ Error al enviar</span>';
+  }
+}
+  
+function updateRenewalAmounts() {
+  const clientId = parseInt(document.getElementById('f-client').value);
+  const c = data.clients.find(x => x.id === clientId);
+  if (c) {
+    const mEl = document.getElementById('f-ren-monthly');
+    const aEl = document.getElementById('f-amount');
+    if (mEl) mEl.value = c.monthlyAmount || '';
+    if (aEl) aEl.value = c.annualAmount || '';
   }
 }
   
