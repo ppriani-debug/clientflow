@@ -4371,14 +4371,14 @@ function openRenewalDetail(id) {
   document.getElementById('rdp-overlay').classList.add('open');
 }
 
-  function saveRenewalSlackConfig() {
+function saveRenewalSlackConfig() {
   const r = data.renewals.find(x=>x.id===activeRenewalId);
   if(r) {
     r.slackChannel = document.getElementById('rdp-slack-channel').value.trim();
     r.slackTags = document.getElementById('rdp-slack-tags').value.trim();
     saveData();
   }
-} // <-- ESTA ES LA LLAVE MÁGICA QUE SALVARÁ EL CÓDIGO
+} // <-- AQUÍ ESTÁ LA BENDITA LLAVE QUE CIERRA LA FUNCIÓN
 
 function closeRenewalDetail() {
   document.getElementById('rdp-panel').classList.remove('open');
@@ -6985,6 +6985,10 @@ function updateRenewalAmounts() {
     if (aEl) aEl.value = c.annualAmount || '';
   }
 }
+
+// ─── INICIALIZACIÓN ───
+(async()=>{
+  await initFirebase();
   
 (async()=>{
   await initFirebase();
