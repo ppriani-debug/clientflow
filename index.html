@@ -6987,9 +6987,7 @@ function updateRenewalAmounts() {
 }
 
 // ─── INICIALIZACIÓN ───
-(async()=>{
-  await initFirebase();
-  
+// ─── INICIALIZACIÓN ───
 (async()=>{
   await initFirebase();
   await loadSettings();
@@ -7012,7 +7010,7 @@ function updateRenewalAmounts() {
   const ub = document.getElementById('upsell-badge');
   if (ub) { ub.textContent=inProgress; ub.style.display=inProgress?'inline':'none'; }
   // Auto-create 6-month renewal rule for Top 10 MRR clients
-  ensure6MonthRenewalRule();
+  if (typeof ensure6MonthRenewalRule === 'function') ensure6MonthRenewalRule();
 })();
 </script>
 
