@@ -2788,10 +2788,10 @@ function buildRenewalReportText() {
   
   let t = `*🔄 REPORTE DE RENOVACIONES Y CUENTAS CLAVE*\n${divider}\n\n`;
   
-  // 1. 🎉 GANANCIAS DEL MES (Usa la fecha real de cierre "renewedDate")
+  // 1. GANANCIAS POR FECHA REAL DE CIERRE
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
-    const targetDate = r.renewedDate || r.date; // Fallback a r.date para renovaciones viejas
+    const targetDate = r.renewedDate || r.date;
     if (!targetDate) return false;
     const d = new Date(targetDate+'T00:00:00');
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -2808,7 +2808,7 @@ function buildRenewalReportText() {
   }
   t += `\n${divider}\n\n`;
   
-  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES (Sin MRR)
+  // 2. TOP 15 CUENTAS CLAVE SIN VISUALIZAR MRR EN EL TEXTO
   t += `*⭐ TOP 15 CUENTAS CLAVE y Próxima Renovación*\n`;
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
@@ -2835,7 +2835,7 @@ function buildRenewalReportText() {
   }
   t += `\n${divider}\n\n`;
 
-  // 3. DESGLOSE TRADICIONAL
+  // 3. DESGLOSE COMPLETO
   const groups = [
     { label: 'VENCIDAS (Overdue)', filter: r => r.date && daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
     { label: '0 a 30 Días', filter: r => r.date && daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
@@ -2848,8 +2848,7 @@ function buildRenewalReportText() {
     t += `[ ${g.label} — ${items.length} ]\n`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
-      const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
-      t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
+      t += `• ${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
     });
     t += `\n`;
   });
@@ -2949,10 +2948,10 @@ function buildRenewalReportHtml() {
   
   let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; color:#1a1916;">`;
   
-  // 1. 🎉 SECCIÓN SUPERIOR: RENOVADOS EN EL MES EN CURSO
+  // 1. SECCIÓN SUPERIOR CON COMPROBACIÓN REAL DE CAMBIO DE ESTADO
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
-    const targetDate = r.renewedDate || r.date; // Usa la fecha real de cierre
+    const targetDate = r.renewedDate || r.date;
     if (!targetDate) return false;
     const d = new Date(targetDate+'T00:00:00');
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -2979,7 +2978,7 @@ function buildRenewalReportHtml() {
     html += `</tbody></table>`;
   }
   
-  // 2. ⭐ SECCIÓN INTERMEDIA: TOP 15 CUENTAS MÁS GRANDES Y CUENTA REGRESIVA
+  // 2. TOP 15 STRATEGIC MONITORING (Sin columna MRR)
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
     .sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0))
@@ -3045,9 +3044,8 @@ function buildRenewalReportHtml() {
     </tr></thead><tbody>`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
-      const isDanger = r.subStatus === 'En peligro';
-      html += `<tr style="${isDanger ? 'background-color:#fef2f2;' : ''}">
-        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
+      html += `<tr>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${c?.name||'Unknown'}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8;">${fmtDate(r.date)}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${r.status}</td>
@@ -3965,18 +3963,18 @@ function saveRenewal(id) {
     return; 
   }
 
-  // MAGIA NUEVA: Guardamos la fecha real del día en que se marca como Renewed
+  // Estampado cronológico real
   const existingRen = id ? data.renewals.find(x => x.id === id) : null;
   let renewedDate = existingRen?.renewedDate || null;
   if (statusVal === 'Renewed' && !renewedDate) {
     renewedDate = new Date().toISOString().split('T')[0]; // Hoy
   } else if (statusVal !== 'Renewed') {
-    renewedDate = null; // Se limpia si lo regresan a otro estatus
+    renewedDate = null;
   }
 
   const obj = { 
     clientId, type, date, monthlyAmount, amount, status: statusVal, subStatus, contractStatus, budgetDate, csMeeting,
-    renewedDate, // <-- Agregamos el nuevo campo a la base de datos
+    renewedDate,
     statusLocked: true 
   };
 
