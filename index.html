@@ -2788,7 +2788,7 @@ function buildRenewalReportText() {
   
   let t = `*🔄 REPORTE DE RENOVACIONES Y CUENTAS CLAVE*\n${divider}\n\n`;
   
-  // 1. GANANCIAS POR FECHA REAL DE CIERRE
+  // 1. 🎉 GANANCIAS DEL MES (Sin montos)
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
     const targetDate = r.renewedDate || r.date;
@@ -2803,12 +2803,12 @@ function buildRenewalReportText() {
   } else {
     renewedThisMonth.forEach(r => {
       const c = data.clients.find(x => x.id === r.clientId);
-      t += `• *${c?.name || 'Unknown'}* | ${r.type} | Cerrado por: ${fmt(r.amount)}\n`;
+      t += `• *${c?.name || 'Unknown'}* | ${r.type}\n`;
     });
   }
   t += `\n${divider}\n\n`;
   
-  // 2. TOP 15 CUENTAS CLAVE SIN VISUALIZAR MRR EN EL TEXTO
+  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES (Sin MRR)
   t += `*⭐ TOP 15 CUENTAS CLAVE y Próxima Renovación*\n`;
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
@@ -2835,7 +2835,7 @@ function buildRenewalReportText() {
   }
   t += `\n${divider}\n\n`;
 
-  // 3. DESGLOSE COMPLETO
+  // 3. DESGLOSE TRADICIONAL POR TIEMPOS
   const groups = [
     { label: 'VENCIDAS (Overdue)', filter: r => r.date && daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
     { label: '0 a 30 Días', filter: r => r.date && daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
@@ -2848,7 +2848,8 @@ function buildRenewalReportText() {
     t += `[ ${g.label} — ${items.length} ]\n`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
-      t += `• ${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
+      const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
+      t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
     });
     t += `\n`;
   });
@@ -2948,10 +2949,10 @@ function buildRenewalReportHtml() {
   
   let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; color:#1a1916;">`;
   
-  // 1. SECCIÓN SUPERIOR CON COMPROBACIÓN REAL DE CAMBIO DE ESTADO
+  // 1. 🎉 SECCIÓN SUPERIOR: RENOVADOS (Sin montos)
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
-    const targetDate = r.renewedDate || r.date;
+    const targetDate = r.renewedDate || r.date; 
     if (!targetDate) return false;
     const d = new Date(targetDate+'T00:00:00');
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -2965,26 +2966,24 @@ function buildRenewalReportHtml() {
       <thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
         <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
         <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Contrato / Tipo</th>
-        <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto Anual</th>
       </tr></thead><tbody>`;
     renewedThisMonth.forEach(r => {
       const c = data.clients.find(x => x.id === r.clientId);
       html += `<tr>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${c?.name || 'Unknown'}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
-        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right; font-weight:700; color:#16a34a;">${fmt(r.amount)}</td>
       </tr>`;
     });
     html += `</tbody></table>`;
   }
   
-  // 2. TOP 15 STRATEGIC MONITORING (Sin columna MRR)
+  // 2. ⭐ SECCIÓN INTERMEDIA: TOP 15 SIN MRR
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
     .sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0))
     .slice(0, 15);
     
-  html += `<h3 style="color:#2563eb; font-size:14px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:0.5px; background:#eff4ff; padding:8px 12px; border-left:4px solid #2563eb; border-radius:0 6px 6px 0">⭐ Monitoreo Estratégico: Top 15 Clientes Mayor Volumen</h3>`;
+  html += `<h3 style="color:#2563eb; font-size:14px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:0.5px; background:#eff4ff; padding:8px 12px; border-left:4px solid #2563eb; border-radius:0 6px 6px 0">⭐ Monitoreo Estratégico: Top 15 Cuentas Clave</h3>`;
   html += `<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:24px;">
     <thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left; width:30px">#</th>
@@ -3044,8 +3043,9 @@ function buildRenewalReportHtml() {
     </tr></thead><tbody>`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
-      html += `<tr>
-        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${c?.name||'Unknown'}</td>
+      const isDanger = r.subStatus === 'En peligro';
+      html += `<tr style="${isDanger ? 'background-color:#fef2f2;' : ''}">
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8;">${fmtDate(r.date)}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${r.status}</td>
