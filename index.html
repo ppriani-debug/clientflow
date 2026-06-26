@@ -2780,14 +2780,68 @@ function buildInvoiceReportText() {
 }
 function buildRenewalReportText() {
   const now = new Date(); now.setHours(0,0,0,0);
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const divider = '─'.repeat(36);
+  
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
-  let t = `🔄 REPORTE DE RENOVACIONES\n─────────────────────────────────────\n\n`;
+  
+  let t = `*🔄 REPORTE DE RENOVACIONES Y CUENTAS CLAVE*\n${divider}\n\n`;
+  
+  // 1. 🎉 GANANCIAS DEL MES (Quién ya renovó este mes)
+  const renewedThisMonth = data.renewals.filter(r => {
+    if (r.status !== 'Renewed' || !r.date) return false;
+    const d = new Date(r.date+'T00:00:00');
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  
+  t += `*🎉 RENOVADOS EN EL MES EN CURSO*\n`;
+  if (!renewedThisMonth.length) {
+    t += `  (Ninguna renovación cerrada este mes aún)\n`;
+  } else {
+    renewedThisMonth.forEach(r => {
+      const c = data.clients.find(x => x.id === r.clientId);
+      t += `• *${c?.name || 'Unknown'}* | ${r.type} | Cerrado por: ${fmt(r.amount)}\n`;
+    });
+  }
+  t += `\n${divider}\n\n`;
+  
+  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES CON DÍAS RESTANTES
+  t += `*⭐ TOP 15 CUENTAS CLAVE (Por MRR / ARR) y Próxima Renovación*\n`;
+  // Ordenamos clientes por el monto mensual más grande y tomamos los 15 top
+  const top15Clients = data.clients
+    .filter(c => c.status === 'Active')
+    .sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0))
+    .slice(0, 15);
+    
+  if (!top15Clients.length) {
+    t += `  (No hay clientes activos registrados)\n`;
+  } else {
+    top15Clients.forEach((c, idx) => {
+      // Buscamos su renovación pendiente más cercana
+      const clRens = data.renewals
+        .filter(r => r.clientId === c.id && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled')
+        .sort((a,b) => new Date(a.date) - new Date(b.date));
+        
+      const r = clRens[0];
+      if (r) {
+        const df = daysFrom(r.date);
+        const countdown = df < 0 ? `*⚠️ ¡VENCIDA HACE ${Math.abs(df)} DÍAS!*` : df === 0 ? `*🚨 ¡VENCE HOY!*` : `quedan ${df} días`;
+        t += `${idx + 1}. *${c.name}* (MRR: ${fmt(c.monthlyAmount)}) | Vence: ${fmtDate(r.date)} (${countdown})\n`;
+      } else {
+        t += `${idx + 1}. *${c.name}* (MRR: ${fmt(c.monthlyAmount)}) | _⚠️ Sin renovación futura programada_\n`;
+      }
+    });
+  }
+  t += `\n${divider}\n\n`;
+
+  // 3. DESGLOSE TRADICIONAL POR ETAPAS (Resto del pipeline)
   const groups = [
-    { label: 'VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed' },
-    { label: '0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' },
-    { label: '31 a 60 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed' },
-    { label: '61 a 90 Días', filter: r => daysFrom(r) > 60 && daysFrom(r) <= 90 && r.status !== 'Renewed' }
+    { label: 'VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
+    { label: '0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
+    { label: '31 a 60 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' }
   ];
+  
   groups.forEach(g => {
     const items = data.renewals.filter(g.filter).sort((a,b)=>new Date(a.date)-new Date(b.date));
     if(!items.length) return;
@@ -2796,14 +2850,13 @@ function buildRenewalReportText() {
       const c = data.clients.find(x=>x.id===r.clientId);
       const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
       const lc = r.lastContact ? fmtDate(r.lastContact) : 'Nunca';
-      const lastComment = (r.comments||[]).slice(-1)[0]?.text || 'Sin comentarios';
-      t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Contacto: ${lc} | ${r.status}\n  💬 Último comentario: ${lastComment}\n`;
+      t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
     });
     t += `\n`;
   });
+  
   return t;
 }
-
 async function sendReportSlack(type) {
   const webhook = localStorage.getItem('slack-webhook') || '';
   if (!webhook) { toast('No Slack webhook configured — add it in Email Alerts → Settings'); return; }
@@ -2891,45 +2944,119 @@ function buildInvoiceReportHtml() {
 }
 function buildRenewalReportHtml() {
   const now = new Date(); now.setHours(0,0,0,0);
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
   const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
+  
+  let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; color:#1a1916;">`;
+  
+  // 1. 🎉 SECCIÓN SUPERIOR: RENOVADOS EN EL MES EN CURSO
+  const renewedThisMonth = data.renewals.filter(r => {
+    if (r.status !== 'Renewed' || !r.date) return false;
+    const d = new Date(r.date+'T00:00:00');
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  
+  html += `<h3 style="color:#16a34a; font-size:14px; margin:16px 0 8px; text-transform:uppercase; letter-spacing:0.5px; background:#f0fdf4; padding:8px 12px; border-left:4px solid #16a34a; border-radius:0 6px 6px 0">🎉 Renovados en el mes en curso (${renewedThisMonth.length})</h3>`;
+  if (!renewedThisMonth.length) {
+    html += `<p style="color:var(--text-muted); font-size:13px; font-style:italic; margin-bottom:20px; padding-left:12px">No se han registrado cierres de renovación este mes aún.</p>`;
+  } else {
+    html += `<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:24px;">
+      <thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
+        <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente</th>
+        <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Contrato / Tipo</th>
+        <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">Monto Anual</th>
+      </tr></thead><tbody>`;
+    renewedThisMonth.forEach(r => {
+      const c = data.clients.find(x => x.id === r.clientId);
+      html += `<tr>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${c?.name || 'Unknown'}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right; font-weight:700; color:#16a34a;">${fmt(r.amount)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  
+  // 2. ⭐ SECCIÓN INTERMEDIA: TOP 15 CUENTAS MÁS GRANDES Y CUENTA REGRESIVA
+  const top15Clients = data.clients
+    .filter(c => c.status === 'Active')
+    .sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0))
+    .slice(0, 15);
+    
+  html += `<h3 style="color:#2563eb; font-size:14px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:0.5px; background:#eff4ff; padding:8px 12px; border-left:4px solid #2563eb; border-radius:0 6px 6px 0">⭐ Monitoreo Estratégico: Top 15 Clientes Mayor Volumen</h3>`;
+  html += `<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:24px;">
+    <thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left; width:30px">#</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente VIP</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">MRR Mensual</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:center;">Próxima Renovación</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">Estatus / Tiempo Restante</th>
+    </tr></thead><tbody>`;
+    
+  top15Clients.forEach((c, idx) => {
+    const clRens = data.renewals
+      .filter(r => r.clientId === c.id && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled')
+      .sort((a,b) => new Date(a.date) - new Date(b.date));
+      
+    const r = clRens[0];
+    let dateCell = '—';
+    let countdownCell = `<span style="color:#8a8580; font-style:italic">Sin renovación programada</span>`;
+    
+    if (r) {
+      dateCell = fmtDate(r.date);
+      const df = daysFrom(r.date);
+      if (df < 0) {
+        countdownCell = `<span style="color:var(--red); font-weight:700">🚨 ¡VENCIDA! hace ${Math.abs(df)}d</span>`;
+      } else if (df === 0) {
+        countdownCell = `<span style="color:var(--amber); font-weight:700">🔥 ¡VENCE HOY!</span>`;
+      } else {
+        const color = df <= 30 ? 'var(--amber)' : df <= 180 ? '#ea580c' : 'var(--green)';
+        countdownCell = `<span style="color:${color}; font-weight:600">quedan ${df} días</span>`;
+      }
+    }
+    
+    html += `<tr>
+      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#8a8580; font-weight:bold">${idx + 1}</td>
+      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600; color:#1a1916;">${c.name}</td>
+      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:bold">${fmt(c.monthlyAmount)}</td>
+      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:center;">${dateCell}</td>
+      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right;">${countdownCell}</td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+
+  // 3. RESTO DE RENOVACIONES FILTRADAS POR PROXIMIDAD (Desglose normal de abajo)
   const groups = [
-    { label: '🔴 VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed', color: '#dc2626' },
-    { label: '🟠 0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed', color: '#ea580c' },
-    { label: '🟡 31 a 60 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed', color: '#d97706' },
-    { label: '🔵 61 a 90 Días', filter: r => daysFrom(r) > 60 && daysFrom(r) <= 90 && r.status !== 'Renewed', color: '#2563eb' }
+    { label: '🔴 VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#dc2626' },
+    { label: '🟠 Próximos 0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#ea580c' },
+    { label: '🔵 Próximos 31 a 90 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 90 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#2563eb' }
   ];
-  let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;">`;
+
   groups.forEach(g => {
     const items = data.renewals.filter(g.filter).sort((a,b)=>new Date(a.date)-new Date(b.date));
     if(!items.length) return;
-    html += `<h3 style="color:${g.color}; font-size:14px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:0.5px;">${g.label} (${items.length})</h3>
+    html += `<h3 style="color:${g.color}; font-size:13px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:0.5px;">${g.label} (${items.length})</h3>
     <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:16px;">
     <thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
-      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Client</th>
-      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Type</th>
-      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Renewal Date</th>
-      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Last Contact</th>
-      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Status</th>
-      <th style="padding:10px; border-bottom:1px solid #e8e5df; text-align:left;">Last Comment</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Client</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Type</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Renewal Date</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Status</th>
     </tr></thead><tbody>`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const isDanger = r.subStatus === 'En peligro';
-      const rowStyle = isDanger ? 'background-color:#fef2f2;' : '';
-      const nameStyle = isDanger ? 'color:#dc2626; font-weight:700;' : 'color:#1a1916; font-weight:600;';
-      const lc = r.lastContact ? fmtDate(r.lastContact) : '<span style="color:#8a8580">Nunca</span>';
-      const lastComment = (r.comments||[]).slice(-1)[0]?.text || '<span style="color:#8a8580; font-style:italic;">Sin comentarios</span>';
-      html += `<tr style="${rowStyle}">
-        <td style="padding:10px; border-bottom:1px solid #f0ede8; ${nameStyle}">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
-        <td style="padding:10px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
-        <td style="padding:10px; border-bottom:1px solid #f0ede8;">${fmtDate(r.date)}</td>
-        <td style="padding:10px; border-bottom:1px solid #f0ede8;">${lc}</td>
-        <td style="padding:10px; border-bottom:1px solid #f0ede8; font-weight:600;">${r.status}</td>
-        <td style="padding:10px; border-bottom:1px solid #f0ede8; color:#4a4540;">${lastComment}</td>
+      html += `<tr style="${isDanger ? 'background-color:#fef2f2;' : ''}">
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8;">${fmtDate(r.date)}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${r.status}</td>
       </tr>`;
     });
     html += `</tbody></table>`;
   });
+  
   return html + `</div>`;
 }
 
