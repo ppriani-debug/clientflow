@@ -2788,10 +2788,12 @@ function buildRenewalReportText() {
   
   let t = `*🔄 REPORTE DE RENOVACIONES Y CUENTAS CLAVE*\n${divider}\n\n`;
   
-  // 1. 🎉 GANANCIAS DEL MES (Quién ya renovó este mes)
+  // 1. 🎉 GANANCIAS DEL MES (Usa la fecha real de cierre "renewedDate")
   const renewedThisMonth = data.renewals.filter(r => {
-    if (r.status !== 'Renewed' || !r.date) return false;
-    const d = new Date(r.date+'T00:00:00');
+    if (r.status !== 'Renewed') return false;
+    const targetDate = r.renewedDate || r.date; // Fallback a r.date para renovaciones viejas
+    if (!targetDate) return false;
+    const d = new Date(targetDate+'T00:00:00');
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   });
   
@@ -2806,9 +2808,8 @@ function buildRenewalReportText() {
   }
   t += `\n${divider}\n\n`;
   
-  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES CON DÍAS RESTANTES
-  t += `*⭐ TOP 15 CUENTAS CLAVE (Por MRR / ARR) y Próxima Renovación*\n`;
-  // Ordenamos clientes por el monto mensual más grande y tomamos los 15 top
+  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES (Sin MRR)
+  t += `*⭐ TOP 15 CUENTAS CLAVE y Próxima Renovación*\n`;
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
     .sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0))
@@ -2818,28 +2819,27 @@ function buildRenewalReportText() {
     t += `  (No hay clientes activos registrados)\n`;
   } else {
     top15Clients.forEach((c, idx) => {
-      // Buscamos su renovación pendiente más cercana
       const clRens = data.renewals
         .filter(r => r.clientId === c.id && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled')
-        .sort((a,b) => new Date(a.date) - new Date(b.date));
+        .sort((a,b) => new Date(a.date||'9999-12-31') - new Date(b.date||'9999-12-31'));
         
       const r = clRens[0];
-      if (r) {
-        const df = daysFrom(r.date);
+      if (r && r.date) {
+        const df = daysFrom(r);
         const countdown = df < 0 ? `*⚠️ ¡VENCIDA HACE ${Math.abs(df)} DÍAS!*` : df === 0 ? `*🚨 ¡VENCE HOY!*` : `quedan ${df} días`;
-        t += `${idx + 1}. *${c.name}* (MRR: ${fmt(c.monthlyAmount)}) | Vence: ${fmtDate(r.date)} (${countdown})\n`;
+        t += `${idx + 1}. *${c.name}* | Vence: ${fmtDate(r.date)} (${countdown})\n`;
       } else {
-        t += `${idx + 1}. *${c.name}* (MRR: ${fmt(c.monthlyAmount)}) | _⚠️ Sin renovación futura programada_\n`;
+        t += `${idx + 1}. *${c.name}* | _⚠️ Sin renovación futura programada_\n`;
       }
     });
   }
   t += `\n${divider}\n\n`;
 
-  // 3. DESGLOSE TRADICIONAL POR ETAPAS (Resto del pipeline)
+  // 3. DESGLOSE TRADICIONAL
   const groups = [
-    { label: 'VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
-    { label: '0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
-    { label: '31 a 60 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' }
+    { label: 'VENCIDAS (Overdue)', filter: r => r.date && daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
+    { label: '0 a 30 Días', filter: r => r.date && daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' },
+    { label: '31 a 60 Días', filter: r => r.date && daysFrom(r) > 30 && daysFrom(r) <= 60 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled' }
   ];
   
   groups.forEach(g => {
@@ -2849,7 +2849,6 @@ function buildRenewalReportText() {
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
-      const lc = r.lastContact ? fmtDate(r.lastContact) : 'Nunca';
       t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
     });
     t += `\n`;
@@ -2952,8 +2951,10 @@ function buildRenewalReportHtml() {
   
   // 1. 🎉 SECCIÓN SUPERIOR: RENOVADOS EN EL MES EN CURSO
   const renewedThisMonth = data.renewals.filter(r => {
-    if (r.status !== 'Renewed' || !r.date) return false;
-    const d = new Date(r.date+'T00:00:00');
+    if (r.status !== 'Renewed') return false;
+    const targetDate = r.renewedDate || r.date; // Usa la fecha real de cierre
+    if (!targetDate) return false;
+    const d = new Date(targetDate+'T00:00:00');
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   });
   
@@ -2989,23 +2990,22 @@ function buildRenewalReportHtml() {
     <thead><tr style="background-color:#f7f6f3; color:#8a8580; text-transform:uppercase; font-size:10px;">
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left; width:30px">#</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente VIP</th>
-      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">MRR Mensual</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:center;">Próxima Renovación</th>
-      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">Estatus / Tiempo Restante</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">Tiempo Restante</th>
     </tr></thead><tbody>`;
     
   top15Clients.forEach((c, idx) => {
     const clRens = data.renewals
       .filter(r => r.clientId === c.id && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled')
-      .sort((a,b) => new Date(a.date) - new Date(b.date));
+      .sort((a,b) => new Date(a.date||'9999-12-31') - new Date(b.date||'9999-12-31'));
       
     const r = clRens[0];
     let dateCell = '—';
     let countdownCell = `<span style="color:#8a8580; font-style:italic">Sin renovación programada</span>`;
     
-    if (r) {
+    if (r && r.date) {
       dateCell = fmtDate(r.date);
-      const df = daysFrom(r.date);
+      const df = daysFrom(r);
       if (df < 0) {
         countdownCell = `<span style="color:var(--red); font-weight:700">🚨 ¡VENCIDA! hace ${Math.abs(df)}d</span>`;
       } else if (df === 0) {
@@ -3019,18 +3019,17 @@ function buildRenewalReportHtml() {
     html += `<tr>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#8a8580; font-weight:bold">${idx + 1}</td>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600; color:#1a1916;">${c.name}</td>
-      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right; font-family:monospace; font-weight:bold">${fmt(c.monthlyAmount)}</td>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:center;">${dateCell}</td>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right;">${countdownCell}</td>
     </tr>`;
   });
   html += `</tbody></table>`;
 
-  // 3. RESTO DE RENOVACIONES FILTRADAS POR PROXIMIDAD (Desglose normal de abajo)
+  // 3. RESTO DE RENOVACIONES FILTRADAS POR PROXIMIDAD
   const groups = [
-    { label: '🔴 VENCIDAS (Overdue)', filter: r => daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#dc2626' },
-    { label: '🟠 Próximos 0 a 30 Días', filter: r => daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#ea580c' },
-    { label: '🔵 Próximos 31 a 90 Días', filter: r => daysFrom(r) > 30 && daysFrom(r) <= 90 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#2563eb' }
+    { label: '🔴 VENCIDAS (Overdue)', filter: r => r.date && daysFrom(r) < 0 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#dc2626' },
+    { label: '🟠 Próximos 0 a 30 Días', filter: r => r.date && daysFrom(r) >= 0 && daysFrom(r) <= 30 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#ea580c' },
+    { label: '🔵 Próximos 31 a 90 Días', filter: r => r.date && daysFrom(r) > 30 && daysFrom(r) <= 90 && r.status !== 'Renewed' && r.status !== 'Lost' && r.status !== 'Cancelled', color: '#2563eb' }
   ];
 
   groups.forEach(g => {
@@ -3059,7 +3058,6 @@ function buildRenewalReportHtml() {
   
   return html + `</div>`;
 }
-
 async function sendReportEmail(type) {
   const url = getWebhookUrl();
   if (!url) { toast('Configure Make.com Webhook URL in Email Alerts → Settings first'); return; }
@@ -3953,7 +3951,7 @@ function saveRenewal(id) {
   const clientId = parseInt(document.getElementById('f-client').value);
   const type = document.getElementById('f-type').value.trim();
   const date = document.getElementById('f-date').value;
-  const monthlyAmount = parseFloat(document.getElementById('f-ren-monthly').value) || 0; // <-- NUEVO
+  const monthlyAmount = parseFloat(document.getElementById('f-ren-monthly').value) || 0;
   const amount = parseFloat(document.getElementById('f-amount').value) || 0;
   const statusVal = document.getElementById('f-status').value;
   
@@ -3967,24 +3965,24 @@ function saveRenewal(id) {
     return; 
   }
 
+  // MAGIA NUEVA: Guardamos la fecha real del día en que se marca como Renewed
+  const existingRen = id ? data.renewals.find(x => x.id === id) : null;
+  let renewedDate = existingRen?.renewedDate || null;
+  if (statusVal === 'Renewed' && !renewedDate) {
+    renewedDate = new Date().toISOString().split('T')[0]; // Hoy
+  } else if (statusVal !== 'Renewed') {
+    renewedDate = null; // Se limpia si lo regresan a otro estatus
+  }
+
   const obj = { 
-    clientId, 
-    type, 
-    date, 
-    monthlyAmount, // <-- NUEVO
-    amount, 
-    status: statusVal,
-    subStatus,
-    contractStatus,
-    budgetDate,
-    csMeeting,
+    clientId, type, date, monthlyAmount, amount, status: statusVal, subStatus, contractStatus, budgetDate, csMeeting,
+    renewedDate, // <-- Agregamos el nuevo campo a la base de datos
     statusLocked: true 
   };
 
   if (id) {
-    const r = data.renewals.find(x => x.id === id);
-    if (r) {
-      Object.assign(r, obj);
+    if (existingRen) {
+      Object.assign(existingRen, obj);
       toast('Renovación actualizada ✓');
     }
   } else {
@@ -3995,10 +3993,7 @@ function saveRenewal(id) {
     toast('Renovación agregada ✓');
   }
   
-  saveData();
-  closeModal();
-  renderPage(currentPage);
-  updateBadges();
+  saveData(); closeModal(); renderPage(currentPage); updateBadges();
 }
 function saveInvoice(id) {
   const billingNameEl = document.getElementById('f-billing-name');
