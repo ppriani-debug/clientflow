@@ -2788,7 +2788,7 @@ function buildRenewalReportText() {
   
   let t = `*🔄 REPORTE DE RENOVACIONES Y CUENTAS CLAVE*\n${divider}\n\n`;
   
-  // 1. 🎉 GANANCIAS DEL MES (Sin montos)
+  // 1. 🎉 GANANCIAS DEL MES
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
     const targetDate = r.renewedDate || r.date;
@@ -2808,7 +2808,7 @@ function buildRenewalReportText() {
   }
   t += `\n${divider}\n\n`;
   
-  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES (Sin MRR)
+  // 2. ⭐ TOP 15 CLIENTES MÁS GRANDES
   t += `*⭐ TOP 15 CUENTAS CLAVE y Próxima Renovación*\n`;
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
@@ -2827,7 +2827,8 @@ function buildRenewalReportText() {
       if (r && r.date) {
         const df = daysFrom(r);
         const countdown = df < 0 ? `*⚠️ ¡VENCIDA HACE ${Math.abs(df)} DÍAS!*` : df === 0 ? `*🚨 ¡VENCE HOY!*` : `quedan ${df} días`;
-        t += `${idx + 1}. *${c.name}* | Vence: ${fmtDate(r.date)} (${countdown})\n`;
+        const clientNotes = c.notes ? c.notes : 'Sin notas';
+        t += `${idx + 1}. *${c.name}* | Vence: ${fmtDate(r.date)} (${countdown})\n   📌 _Notas Cliente:_ ${clientNotes}\n`;
       } else {
         t += `${idx + 1}. *${c.name}* | _⚠️ Sin renovación futura programada_\n`;
       }
@@ -2848,8 +2849,8 @@ function buildRenewalReportText() {
     t += `[ ${g.label} — ${items.length} ]\n`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
-      const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
-      t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n`;
+      const clientNotes = c?.notes ? c.notes : 'Sin notas';
+      t += `• ${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n  📌 _Notas Cliente:_ ${clientNotes}\n`;
     });
     t += `\n`;
   });
@@ -2949,7 +2950,7 @@ function buildRenewalReportHtml() {
   
   let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; color:#1a1916;">`;
   
-  // 1. 🎉 SECCIÓN SUPERIOR: RENOVADOS (Sin montos)
+  // 1. 🎉 SECCIÓN SUPERIOR: RENOVADOS
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
     const targetDate = r.renewedDate || r.date; 
@@ -2977,7 +2978,7 @@ function buildRenewalReportHtml() {
     html += `</tbody></table>`;
   }
   
-  // 2. ⭐ SECCIÓN INTERMEDIA: TOP 15 SIN MRR
+  // 2. ⭐ SECCIÓN INTERMEDIA: TOP 15
   const top15Clients = data.clients
     .filter(c => c.status === 'Active')
     .sort((a, b) => (b.monthlyAmount || 0) - (a.monthlyAmount || 0))
@@ -2989,6 +2990,7 @@ function buildRenewalReportHtml() {
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left; width:30px">#</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Cliente VIP</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:center;">Próxima Renovación</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Notas Internas Cliente</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:right;">Tiempo Restante</th>
     </tr></thead><tbody>`;
     
@@ -3000,6 +3002,7 @@ function buildRenewalReportHtml() {
     const r = clRens[0];
     let dateCell = '—';
     let countdownCell = `<span style="color:#8a8580; font-style:italic">Sin renovación programada</span>`;
+    const clientNotes = c.notes ? c.notes : '<span style="color:#8a8580; font-style:italic;">Sin notas</span>';
     
     if (r && r.date) {
       dateCell = fmtDate(r.date);
@@ -3018,6 +3021,7 @@ function buildRenewalReportHtml() {
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#8a8580; font-weight:bold">${idx + 1}</td>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600; color:#1a1916;">${c.name}</td>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:center;">${dateCell}</td>
+      <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${clientNotes}</td>
       <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; text-align:right;">${countdownCell}</td>
     </tr>`;
   });
@@ -3039,15 +3043,17 @@ function buildRenewalReportHtml() {
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Client</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Type</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Renewal Date</th>
+      <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Notas Cliente</th>
       <th style="padding:8px 12px; border-bottom:1px solid #e8e5df; text-align:left;">Status</th>
     </tr></thead><tbody>`;
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
-      const isDanger = r.subStatus === 'En peligro';
-      html += `<tr style="${isDanger ? 'background-color:#fef2f2;' : ''}">
-        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
+      const clientNotes = c?.notes ? c.notes : '<span style="color:#8a8580; font-style:italic;">Sin notas</span>';
+      html += `<tr>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${c?.name||'Unknown'}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${r.type}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8;">${fmtDate(r.date)}</td>
+        <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; color:#4a4540;">${clientNotes}</td>
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${r.status}</td>
       </tr>`;
     });
