@@ -2784,11 +2784,16 @@ function buildRenewalReportText() {
   const currentYear = now.getFullYear();
   const divider = '─'.repeat(36);
   
-  const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
+  // Función inteligente: acepta tanto el objeto de renovación como la fecha directa
+  const daysFrom = x => {
+    const dStr = typeof x === 'string' ? x : x?.date;
+    if (!dStr) return 0;
+    return Math.round((new Date(dStr + 'T00:00:00') - now) / 86400000);
+  };
   
   let t = `*🔄 REPORTE DE RENOVACIONES Y CUENTAS CLAVE*\n${divider}\n\n`;
   
-  // 1. 🎉 GANANCIAS DEL MES (Sin montos)
+  // 1. 🎉 GANANCIAS DEL MES
   const renewedThisMonth = data.renewals.filter(r => {
     if (r.status !== 'Renewed') return false;
     const targetDate = r.renewedDate || r.date;
@@ -2828,7 +2833,6 @@ function buildRenewalReportText() {
         const df = daysFrom(r);
         const countdown = df < 0 ? `*⚠️ ¡VENCIDA HACE ${Math.abs(df)} DÍAS!*` : df === 0 ? `*🚨 ¡VENCE HOY!*` : `quedan ${df} días`;
         
-        // Extraer último comentario de la renovación
         const lastComment = (r.comments && r.comments.length) ? r.comments[r.comments.length - 1].text : 'Sin comentarios';
         
         t += `${idx + 1}. *${c.name}* | Vence: ${fmtDate(r.date)} (${countdown})\n   💬 _Último comentario:_ ${lastComment}\n`;
@@ -2853,8 +2857,6 @@ function buildRenewalReportText() {
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const danger = r.subStatus === 'En peligro' ? '🚨 [EN PELIGRO] ' : '';
-      
-      // Extraer último comentario
       const lastComment = (r.comments && r.comments.length) ? r.comments[r.comments.length - 1].text : 'Sin comentarios';
       
       t += `• ${danger}${c?.name||'Unknown'} | ${r.type} | Vence: ${fmtDate(r.date)} | Estatus: ${r.status}\n  💬 _Último comentario:_ ${lastComment}\n`;
@@ -2953,7 +2955,13 @@ function buildRenewalReportHtml() {
   const now = new Date(); now.setHours(0,0,0,0);
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  const daysFrom = r => Math.round((new Date(r.date+'T00:00:00') - now) / 86400000);
+  
+  // Función inteligente: acepta tanto el objeto de renovación como la fecha directa
+  const daysFrom = x => {
+    const dStr = typeof x === 'string' ? x : x?.date;
+    if (!dStr) return 0;
+    return Math.round((new Date(dStr + 'T00:00:00') - now) / 86400000);
+  };
   
   let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif; color:#1a1916;">`;
   
@@ -3013,7 +3021,7 @@ function buildRenewalReportHtml() {
     
     if (r && r.date) {
       dateCell = fmtDate(r.date);
-      const df = daysFrom(r.date);
+      const df = daysFrom(r); // ¡Corregido aquí para pasar el objeto 'r'!
       if (df < 0) {
         countdownCell = `<span style="color:var(--red); font-weight:700">🚨 ¡VENCIDA! hace ${Math.abs(df)}d</span>`;
       } else if (df === 0) {
@@ -3023,7 +3031,6 @@ function buildRenewalReportHtml() {
         countdownCell = `<span style="color:${color}; font-weight:600">quedan ${df} días</span>`;
       }
       
-      // Rescatar el último comentario de la renovación específica
       if (r.comments && r.comments.length) {
         lastComment = r.comments[r.comments.length - 1].text;
       }
@@ -3061,9 +3068,7 @@ function buildRenewalReportHtml() {
     items.forEach(r => {
       const c = data.clients.find(x=>x.id===r.clientId);
       const isDanger = r.subStatus === 'En peligro';
-      
-      // Rescatar el último comentario
-      const lastComment = (r.comments && r.comments.length) ? r.comments[r.comments.length - 1].text : '<span style="color:#8a8580; font-style:italic;">Sin comentarios</span>';
+      const lastComment = (r.comments && r.comments.length) ? r.comments[r.comments.length - 1].text : 'Sin comentarios';
       
       html += `<tr style="${isDanger ? 'background-color:#fef2f2;' : ''}">
         <td style="padding:8px 12px; border-bottom:1px solid #f0ede8; font-weight:600;">${isDanger?'🚨 ':''}${c?.name||'Unknown'}</td>
