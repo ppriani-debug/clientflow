@@ -2216,6 +2216,7 @@ function openDetail(id) {
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--purple);margin:14px 0 4px">Services Profile</div>
     <div class="detail-row"><span class="detail-label">Package</span><span class="detail-val">${svcs.package||'—'}</span></div>
     <div class="detail-row"><span class="detail-label">Tracking Users</span><span class="detail-val">${svcs.trackingUsers||'0'}</span></div>
+    <div class="detail-row"><span class="detail-label">Reporte Claugto</span><span class="detail-val" style="color:var(--amber);font-weight:600">${svcs.claugtoReportDate ? fmtDate(svcs.claugtoReportDate) : '—'}</span></div>
     <div class="detail-row"><span class="detail-label">States (${svcs.states ? svcs.states.length : 0})</span><span class="detail-val" style="text-align:right;max-width:60%">${svcs.states?.length ? svcs.states.join(', ') : 'None'}</span></div>
     <div class="detail-row"><span class="detail-label">Features</span><span class="detail-val">${activeSvcTags.length ? activeSvcTags.map(t=>`<span class="badge badge-purple" style="margin-left:4px">${t}</span>`).join('') : 'None'}</span></div>
   `;
@@ -3796,6 +3797,7 @@ function openModal(type, existing) {
         <div class="form-group span2"><label class="form-label">Plans</label><div class="plan-picker" id="f-plan-picker">${['Aliado','Consola','C3ntro','Parvada','Reportes'].map(p=>`<div class="plan-chip ${(Array.isArray(existing?.plan)?existing.plan:[existing?.plan]).includes(p)?'selected':''}" onclick="togglePlanChip(this,'${p}')">${p}</div>`).join('')}</div></div>
         <div class="form-group"><label class="form-label">Package Name</label><input class="form-input" id="f-svc-package" placeholder="e.g. Gold Tier" value="${existing?.services?.package||''}"></div>
         <div class="form-group"><label class="form-label">Tracking Users</label><input class="form-input" type="number" id="f-svc-users" value="${existing?.services?.trackingUsers||''}"></div>
+        <div class="form-group span2"><label class="form-label">Fecha Entrega Reporte Claugto</label><input class="form-input" type="date" id="f-claugto-date" value="${existing?.services?.claugtoReportDate||''}"></div>
         
         <div class="form-group span2">
           <label class="form-label">Mexico States (Multi-select)</label>
@@ -3905,6 +3907,7 @@ function saveClient(id) {
   const servicesObj = {
     package: document.getElementById('f-svc-package').value.trim(),
     trackingUsers: parseInt(document.getElementById('f-svc-users').value) || 0,
+    claugtoReportDate: document.getElementById('f-claugto-date')?.value || '',
     states: [...document.querySelectorAll('#f-state-picker .plan-chip.selected')].map(el=>el.textContent.replace('✓ ','')),
     aliado: document.getElementById('f-svc-aliado').checked,
     parvada: document.getElementById('f-svc-parvada').checked,
