@@ -355,6 +355,7 @@
     <div class="nav-item" onclick="navigate('upsell')"><span class="nav-icon">↑</span> Upsell <span class="nav-badge" id="upsell-badge" style="display:none">0</span></div>
     <!-- Y aquí la nueva de Onboarding -->
     <div class="nav-item" onclick="navigate('onboarding')"><span class="nav-icon">🚀</span> Onboarding <span class="nav-badge" id="onboarding-badge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="navigate('deliverables')"><span class="nav-icon">📄</span> Entregables</div>
     <div class="nav-section">Insights</div>
     <div class="nav-item" onclick="navigate('reports')"><span class="nav-icon">↗</span> Reports</div>
     <div class="nav-item" id="nav-bank-accounts" onclick="navigate('bank-accounts')"><span class="nav-icon">🏦</span> Bank Accounts</div>
@@ -580,6 +581,26 @@
       </div>
       <div class="upsell-stats" id="onboarding-stats"></div>
       <div class="kanban-board" id="onboarding-board"></div>
+    </div>
+   
+    <div class="page" id="page-deliverables">
+      <div class="page-header">
+        <div><div class="page-title">Reportes y Entregables</div><div class="page-subtitle">Control de reportes Claugto y otros entregables por cliente</div></div>
+        <button class="btn btn-primary" onclick="openModal('deliverable')">＋ Nuevo Reporte</button>
+      </div>
+      <div class="stats-grid" id="deliverables-stats"></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Historial de Entregas</div>
+          <div class="search-bar"><span>⌕</span><input type="text" placeholder="Buscar cliente o reporte..." oninput="filterDeliverables(this.value)"></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Cliente</th><th>Nombre del Reporte</th><th>Fecha</th><th>Estatus</th><th></th></tr></thead>
+            <tbody id="deliverables-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div class="page" id="page-alerts">
@@ -1859,6 +1880,7 @@ function renderPage(p) {
   if(p==='pnl') renderPnl();
   if(p==='import') resetImport();
   if(p==='onboarding') renderOnboarding();
+  if(p==='deliverables') renderDeliverables();
   updateBadges();
 }
 
@@ -3856,7 +3878,18 @@ function openModal(type, existing) {
         <div class="form-group" style="justify-content:center"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:14px;font-weight:500"><input type="checkbox" id="f-cs-meeting" ${existing?.csMeeting?'checked':''} style="width:18px;height:18px;accent-color:var(--accent)"> Junta CS Realizada</label></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveRenewal(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Renewal'}</button></div>`;
-      
+  
+  } else if(type === 'deliverable') {
+    const opts = data.clients.map(c => `<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
+    body = `<div class="modal-title">${isEdit?'Editar':'Nuevo'} Reporte / Entregable</div>
+      <div class="form-grid">
+        <div class="form-group span2"><label class="form-label">Cliente</label><select class="form-input" id="f-deliv-client">${opts}</select></div>
+        <div class="form-group span2"><label class="form-label">Nombre del Reporte</label><input class="form-input" id="f-deliv-name" value="${existing?.name||'Reporte Claugto'}"></div>
+        <div class="form-group"><label class="form-label">Fecha de Entrega</label><input class="form-input" type="date" id="f-deliv-date" value="${existing?.date||new Date().toISOString().split('T')[0]}"></div>
+        <div class="form-group"><label class="form-label">Estatus</label><select class="form-input" id="f-deliv-status"><option ${existing?.status==='Pendiente'?'selected':''}>Pendiente</option><option ${existing?.status==='Entregado'?'selected':''}>Entregado</option></select></div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveDeliverable(${existing?.id||'null'})">Guardar</button></div>`;
+    
   } else if(type === 'invoice') {
     // ... [Se mantiene exactamente igual para facturas, sin tocar nada]
     const opts=data.clients.map(c=>`<option value="${c.id}" ${existing?.clientId===c.id?'selected':''}>${c.name}</option>`).join('');
@@ -7135,7 +7168,68 @@ function updateRenewalAmounts() {
   }
 }
 
-// ─── INICIALIZACIÓN ───
+// ═══════════════════════════════════════════════════════════════════════════
+// REPORTES Y ENTREGABLES
+// ═══════════════════════════════════════════════════════════════════════════
+let deliverableSearch = '';
+function filterDeliverables(q) { deliverableSearch = q.toLowerCase(); renderDeliverables(); }
+
+function renderDeliverables() {
+  if (!data.deliverables) data.deliverables = [];
+  
+  const delivered = data.deliverables.filter(d => d.status === 'Entregado').length;
+  const pending = data.deliverables.filter(d => d.status === 'Pendiente').length;
+  
+  document.getElementById('deliverables-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Entregados</div><div class="stat-value green">${delivered}</div><div class="stat-delta">Reportes finalizados históricamente</div></div>
+    <div class="stat-card"><div class="stat-label">En Proceso</div><div class="stat-value amber">${pending}</div><div class="stat-delta">Pendientes de entrega</div></div>
+  `;
+  
+  let rows = data.deliverables.filter(d => {
+     const cName = clientName(d.clientId).toLowerCase();
+     const rName = (d.name || '').toLowerCase();
+     return !deliverableSearch || cName.includes(deliverableSearch) || rName.includes(deliverableSearch);
+  }).sort((a,b) => new Date(b.date) - new Date(a.date)); // Ordena los más recientes primero
+  
+  const tbody = document.getElementById('deliverables-tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = rows.length ? rows.map(d => `
+    <tr>
+      <td style="font-weight:600">${clientName(d.clientId)}</td>
+      <td style="color:var(--text-muted)">${d.name}</td>
+      <td>${fmtDate(d.date)}</td>
+      <td><span class="badge ${d.status==='Entregado'?'badge-green':'badge-amber'}">${d.status}</span></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="openModal('deliverable', data.deliverables.find(x=>x.id===${d.id}))">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteItem('deliverables', ${d.id}, event)">✕</button>
+        </div>
+      </td>
+    </tr>
+  `).join('') : `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">📄</div><div>No hay reportes registrados aún</div></div></td></tr>`;
+}
+
+function saveDeliverable(id) {
+  const clientId = parseInt(document.getElementById('f-deliv-client').value);
+  const name = document.getElementById('f-deliv-name').value.trim();
+  const date = document.getElementById('f-deliv-date').value;
+  const status = document.getElementById('f-deliv-status').value;
+  
+  if(!name || !date) { toast('Nombre y fecha son obligatorios ✗'); return; }
+  if(!data.deliverables) data.deliverables = [];
+  
+  if(id) {
+     const d = data.deliverables.find(x=>x.id === id);
+     if(d) Object.assign(d, {clientId, name, date, status});
+     toast('Reporte actualizado ✓');
+  } else {
+     data.deliverables.push({ id: ++data.nextId, clientId, name, date, status });
+     toast('Reporte registrado ✓');
+  }
+  saveData(); closeModal(); renderPage(currentPage);
+}
+  
 // ─── INICIALIZACIÓN ───
 (async()=>{
   await initFirebase();
