@@ -7079,15 +7079,35 @@ function openOnboardingDetail(id) {
     <div class="detail-row"><span class="detail-label">Fecha Inicio Operación</span><span class="detail-val">${fmtDate(o.startDate)}</span></div>
     <div class="detail-row"><span class="detail-label">Tiempo Transcurrido</span><span class="detail-val" style="color:${daysElapsed>15?'var(--red)':'var(--amber)'};font-weight:600">${daysElapsed} días</span></div>
     <div class="detail-row"><span class="detail-label">Plan del Cliente</span><span class="detail-val">${(Array.isArray(c?.plan)?c.plan:[c?.plan]).join(', ')}</span></div>
+    
+    <div style="margin-top:16px; padding:12px; background:var(--bg); border:1px solid var(--border-soft); border-radius:8px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px">Ciclo de Seguimiento</div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px">
+        <input type="date" class="form-input" id="odp-next-date" value="${o.nextFollowUp||''}" onchange="saveOnboardingField('nextFollowUp', this.value)" style="flex:1">
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-ghost btn-sm" onclick="bumpFollowUp(1, 'onboarding')" style="flex:1;font-size:11px">Sin Respuesta (+1d)</button>
+        <button class="btn btn-ghost btn-sm" onclick="bumpFollowUp(6, 'onboarding')" style="flex:1;font-size:11px">Respondido (+6d)</button>
+      </div>
+    </div>
   `;
 
-  document.getElementById('odp-access-date').value = o.accessDate || '';
-  document.getElementById('odp-owner').value = o.owner || '';
-  document.getElementById('odp-slack-channel').value = o.slackChannel || '';
-  document.getElementById('odp-slack-tags').value = o.slackTags || '';
-  document.getElementById('odp-notes').value = o.notes || '';
-  document.getElementById('odp-slack-msg').value = '';
-  document.getElementById('odp-slack-status').textContent = '';
+  // Insertamos el campo para el Slack ID del Owner
+  const extraFields = `
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Fecha de Acceso</label>
+      <input type="date" class="form-input" id="odp-access-date" value="${o.accessDate||''}" onchange="saveOnboardingField('accessDate', this.value)">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Encargado (Owner)</label>
+      <input class="form-input" id="odp-owner" placeholder="Ej. Ana Pérez" value="${o.owner||''}" onchange="saveOnboardingField('owner', this.value)">
+    </div>
+    <div class="form-group span2" style="margin:0">
+      <label class="form-label">Slack ID del Encargado</label>
+      <input class="form-input" id="odp-owner-slack" placeholder="Ej. U0123ABCD" value="${o.ownerSlack||''}" onchange="saveOnboardingField('ownerSlack', this.value)">
+      <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Lo encuentras en Slack -> Perfil -> Copiar ID de miembro</div>
+    </div>
+  `;
   
   document.getElementById('onboarding-detail-panel').classList.add('open');
   document.getElementById('onboarding-detail-overlay').classList.add('open');
@@ -7123,32 +7143,34 @@ async function sendOnboardingSlack() {
   const c = data.clients.find(x=>x.id===o?.clientId);
   if (!o || !c) return;
 
-  const webhook = localStorage.getItem('slack-webhook');
-  if (!webhook) { toast('Configura el Webhook de Slack en Settings'); return; }
-
   const msgText = document.getElementById('odp-slack-msg').value.trim();
   if (!msgText) { toast('Escribe un mensaje primero'); return; }
 
-  // Leemos directo de la interfaz para evitar problemas de sincronización
   const tagsInput = document.getElementById('odp-slack-tags').value.trim();
-  const channelInput = document.getElementById('odp-slack-channel').value.trim();
+  const channelInput = document.getElementById('odp-slack-channel').value.trim(); 
   
-  // Guardamos silenciosamente
   if (o.slackTags !== tagsInput || o.slackChannel !== channelInput) {
     o.slackTags = tagsInput;
     o.slackChannel = channelInput;
     saveData();
   }
 
-  const tags = tagsInput ? `${tagsInput}\n` : '';
+  const globalWebhook = localStorage.getItem('slack-webhook');
+  const finalWebhook = (channelInput.startsWith('http')) ? channelInput : globalWebhook;
+  if (!finalWebhook) { toast('Falta URL de Webhook global o específico'); return; }
+
+  // MAGIA: Sumamos el tag manual y la mención automática al encargado
+  const ownerTag = o.ownerSlack ? `<@${o.ownerSlack}> ` : '';
+  const tags = tagsInput ? `${tagsInput} ` : '';
+  
   const daysElapsed = Math.round((new Date() - new Date(o.startDate)) / 86400000);
   const statusEl = document.getElementById('odp-slack-status');
   statusEl.innerHTML = '<span style="color:var(--text-muted);font-size:11px">Enviando...</span>';
 
-  const finalMessage = `${tags}🚀 *Update de Onboarding: ${c.name}*\n\n${msgText}\n\n_📌 Etapa: ${o.stage} | Plataforma: ${o.platform} | Owner: ${o.owner||'N/A'} | Días en proceso: ${daysElapsed}_`;
+  const finalMessage = `${tags}${ownerTag}🚀 *Seguimiento de Onboarding: ${c.name}*\n\n${msgText}\n\n_📌 Etapa: ${o.stage} | Owner: ${o.owner||'N/A'} | Próx. Seguimiento: ${o.nextFollowUp ? fmtDate(o.nextFollowUp) : 'No definido'}_`;
 
   try {
-    await slackSend(webhook, finalMessage, channelInput || null);
+    await slackSend(finalWebhook, finalMessage);
     statusEl.innerHTML = '<span style="color:var(--green);font-size:11px">✓ Enviado a Slack</span>';
     document.getElementById('odp-slack-msg').value = ''; 
     toast('Alerta enviada a Slack ✓');
@@ -7229,7 +7251,22 @@ function saveDeliverable(id) {
   }
   saveData(); closeModal(); renderPage(currentPage);
 }
+
+function bumpFollowUp(days, type) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const str = d.toISOString().split('T')[0];
   
+  if (type === 'onboarding') {
+     saveOnboardingField('nextFollowUp', str);
+     document.getElementById('odp-next-date').value = str;
+  } else if (type === 'renewal') {
+     const r = data.renewals.find(x=>x.id===activeRenewalId);
+     if(r) { r.nextFollowUp = str; saveData(); document.getElementById('rdp-next-date').value = str; }
+  }
+  toast(`Seguimiento reprogramado para ${str} ✓`);
+}
+
 // ─── INICIALIZACIÓN ───
 (async()=>{
   await initFirebase();
