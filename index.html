@@ -5303,6 +5303,7 @@ const SCHED_TRIGGERS = [
   { key:'renewal-due-soon',   label:'Renewal Due Soon (Internal)',     desc:'Alert your team when renewal is within N days', client:false },
   { key:'renewal-due-soon-client', label:'Renewal Due Soon → Client', desc:'Remind the client their renewal is coming up', client:true },
   { key:'stale-contact',      label:'Stale Contact',                  desc:'Alert your team when a renewal has no contact in N days', client:false },
+  { key:'onboarding-followup', label:'Onboarding sin actualización (Internal)', desc:'Alerta si un Onboarding rebasó su fecha de seguimiento sin respuesta', client:false },
 ];
 
 function renderScheduledAlerts() {
@@ -5412,6 +5413,13 @@ function countPendingForRule(rule) {
       return lc >= threshold && isDue('ren-'+r.id) && isSelected('ren-'+r.id);
     }).length;
   }
+  if (rule.trigger === 'onboarding-followup') {
+    return (data.onboardings||[]).filter(o => {
+      if (o.stage === 'Facturado' || !o.nextFollowUp) return false;
+      const d = daysUntil(o.nextFollowUp);
+      return d < 0 && isDue('onb-'+o.id) && isSelected('onb-'+o.id);
+    }).length;
+  }
   return 0;
 }
 function toggleSchedRule(id, enabled) {
@@ -5500,6 +5508,14 @@ function buildSchedItemPicker(trigger, rule) {
         const c = data.clients.find(x=>x.id===r.clientId);
         const lc = r.lastContact ? Math.round((new Date()-new Date(r.lastContact))/86400000) : null;
         return { key: 'ren-'+r.id, label: (c?.name||'?') + ' — ' + r.type, sub: lc ? lc+'d since contact' : 'never contacted', badgeColor: (!lc||lc>7)?'var(--red)':'var(--green)', status: r.status };
+      });
+  } else if (trigger === 'onboarding-followup') {
+    items = (data.onboardings||[])
+      .filter(o => o.stage !== 'Facturado' && o.nextFollowUp && daysUntil(o.nextFollowUp) < 0)
+      .map(o => {
+        const c = data.clients.find(x=>x.id===o.clientId);
+        const daysOver = Math.abs(daysUntil(o.nextFollowUp));
+        return { key: 'onb-'+o.id, label: (c?.name||'?') + ' — ' + o.platform, sub: daysOver+'d atrasado', badgeColor: 'var(--red)', status: o.stage };
       });
   }
 
@@ -5731,6 +5747,37 @@ async function executeSchedRule(rule, force = false) {
         ].filter(f => f.value && f.value !== '—')
       };
       items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null, meta));
+    });
+  } 
+  
+  // 5. ONBOARDING SIN ACTUALIZACIÓN
+  } else if (rule.trigger === 'onboarding-followup') {
+    (data.onboardings||[]).filter(o => {
+      if (o.stage === 'Facturado' || !o.nextFollowUp) return false;
+      return daysUntil(o.nextFollowUp) < 0 && isDue('onb-'+o.id) && isSelected('onb-'+o.id);
+    }).forEach(o => {
+      const c = data.clients.find(x=>x.id===o.clientId);
+      const daysOver = Math.abs(daysUntil(o.nextFollowUp));
+      
+      const vars = { client: c?.name||'', contact: o.owner||'Equipo', amount: '', date: fmtDate(o.nextFollowUp), days: daysOver, type: 'Onboarding' };
+      const subj = '🔴 Seguimiento Atrasado: Onboarding — ' + (c?.name||'');
+      
+      const body = (c?.name||'') + " — El seguimiento de Onboarding está ATRASADO.\nFecha límite que acordamos: " + fmtDate(o.nextFollowUp) + " (" + daysOver + "d atrás).\nEncargado: " + (o.owner||'No asignado') + "\n\nPor favor actualiza el estatus en ClientFlow.";
+      
+      // Mención automática al dueño usando su Slack ID
+      const ownerMention = o.ownerSlack ? `<@${o.ownerSlack}> ` : '';
+      const slack = `🔴 ${ownerMention}*Seguimiento Vencido: Onboarding de ${c?.name||''}*\nEtapa actual: ${o.stage} · *${daysOver} días de atraso* de la fecha acordada (${fmtDate(o.nextFollowUp)}). Por favor responde en este hilo o actualiza ClientFlow.`;
+      
+      const meta = {
+        icon: '🔴', accentColor: '#dc2626',
+        fields: [
+          { label: 'Cliente', value: c?.name||'—' },
+          { label: 'Etapa', value: o.stage },
+          { label: 'Encargado', value: o.owner||'Sin asignar' },
+          { label: 'Límite de Seg.', value: fmtDate(o.nextFollowUp) + ` (${daysOver}d atrás)`, highlight: true },
+        ]
+      };
+      items.push(makeItem('onb-'+o.id, vars, subj, body, slack, null, meta));
     });
   }
 
