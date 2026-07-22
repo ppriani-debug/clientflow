@@ -5748,7 +5748,6 @@ async function executeSchedRule(rule, force = false) {
       };
       items.push(makeItem('ren-'+r.id, vars, subj, body, slack, null, meta));
     });
-  } 
   
   // 5. ONBOARDING SIN ACTUALIZACIÓN
   } else if (rule.trigger === 'onboarding-followup') {
@@ -7139,20 +7138,22 @@ function openOnboardingDetail(id) {
     </div>
   `;
 
-  // Insertamos el campo para el Slack ID del Owner
-  const extraFields = `
-    <div class="form-group" style="margin:0">
-      <label class="form-label">Fecha de Acceso</label>
-      <input type="date" class="form-input" id="odp-access-date" value="${o.accessDate||''}" onchange="saveOnboardingField('accessDate', this.value)">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label">Encargado (Owner)</label>
-      <input class="form-input" id="odp-owner" placeholder="Ej. Ana Pérez" value="${o.owner||''}" onchange="saveOnboardingField('owner', this.value)">
-    </div>
-    <div class="form-group span2" style="margin:0">
-      <label class="form-label">Slack ID del Encargado</label>
-      <input class="form-input" id="odp-owner-slack" placeholder="Ej. U0123ABCD" value="${o.ownerSlack||''}" onchange="saveOnboardingField('ownerSlack', this.value)">
-      <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Lo encuentras en Slack -> Perfil -> Copiar ID de miembro</div>
+  // Insertamos el campo para el Slack ID del Owner directamente en el panel
+  document.getElementById('odp-details').innerHTML += `
+    <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Fecha de Acceso</label>
+        <input type="date" class="form-input" id="odp-access-date" value="${o.accessDate||''}" onchange="saveOnboardingField('accessDate', this.value)">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Encargado (Owner)</label>
+        <input class="form-input" id="odp-owner" placeholder="Ej. Ana Pérez" value="${o.owner||''}" onchange="saveOnboardingField('owner', this.value)">
+      </div>
+      <div class="form-group span2" style="margin:0">
+        <label class="form-label">Slack ID del Encargado</label>
+        <input class="form-input" id="odp-owner-slack" placeholder="Ej. U0123ABCD" value="${o.ownerSlack||''}" onchange="saveOnboardingField('ownerSlack', this.value)">
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Lo encuentras en Slack -> Perfil -> Copiar ID de miembro</div>
+      </div>
     </div>
   `;
   
