@@ -1589,18 +1589,41 @@ function updateFirebaseStatusLabel() {
 // ─── AUTO-STATUS UPDATE ───────────────────────────────────────────────────────
 function autoUpdateStatuses() {
   let changed = false;
+  
   data.renewals.forEach(r => {
-    if (r.statusLocked || r.status === 'Renewed') return;
+    // Ignoramos las que ya están cerradas (Ganadas, Perdidas, Canceladas)
+    if (['Renewed', 'Lost', 'Cancelled'].includes(r.status)) return;
+    
     const d = daysUntil(r.date);
-    const next = d < 0 ? 'Overdue' : d <= 14 ? 'Due Soon' : 'Upcoming';
-    if (next !== r.status) { r.status = next; changed = true; }
+    
+    // Forzamos el estatus si la fecha ya pasó o está cerca, rompiendo cualquier candado
+    if (d < 0 && r.status !== 'Overdue') { 
+      r.status = 'Overdue'; 
+      changed = true; 
+    } else if (d >= 0 && d <= 14 && r.status === 'Upcoming') { 
+      r.status = 'Due Soon'; 
+      changed = true; 
+    }
   });
+  
   data.invoices.forEach(i => {
-    if (i.statusLocked || i.status === 'Paid' || i.status === 'Pre-Invoice') return;
+    // Solo ignoramos si ya está Pagada o es una Pre-Factura
+    if (i.status === 'Paid' || i.status === 'Pre-Invoice') return;
+    
     const d = daysUntil(i.dueDate);
-    const next = d < 0 ? 'Overdue' : d <= 14 ? 'Due Soon' : 'Pending';
-    if (next !== i.status) { i.status = next; changed = true; }
+    
+    // Forzar a Overdue automáticamente si la fecha de pago ya se superó
+    if (d < 0 && i.status !== 'Overdue') { 
+      i.status = 'Overdue'; 
+      changed = true; 
+    } 
+    // Pasar a "Due Soon" si faltan 14 días o menos
+    else if (d >= 0 && d <= 14 && i.status === 'Pending') { 
+      i.status = 'Due Soon'; 
+      changed = true; 
+    }
   });
+  
   if (changed) { saveData(); updateBadges(); }
 }
 
