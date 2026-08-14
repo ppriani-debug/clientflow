@@ -1591,12 +1591,8 @@ function autoUpdateStatuses() {
   let changed = false;
   
   data.renewals.forEach(r => {
-    // Ignoramos las que ya están cerradas (Ganadas, Perdidas, Canceladas)
     if (['Renewed', 'Lost', 'Cancelled'].includes(r.status)) return;
-    
     const d = daysUntil(r.date);
-    
-    // Forzamos el estatus si la fecha ya pasó o está cerca, rompiendo cualquier candado
     if (d < 0 && r.status !== 'Overdue') { 
       r.status = 'Overdue'; 
       changed = true; 
@@ -1612,14 +1608,14 @@ function autoUpdateStatuses() {
     
     const d = daysUntil(i.dueDate);
     
-    // Forzar a Overdue automáticamente si la fecha de pago ya se superó
+    // Forzar a Overdue si la fecha ya pasó
     if (d < 0 && i.status !== 'Overdue') { 
       i.status = 'Overdue'; 
       changed = true; 
     } 
-    // Pasar a "Due Soon" si faltan 14 días o menos
-    else if (d >= 0 && d <= 14 && i.status === 'Pending') { 
-      i.status = 'Due Soon'; 
+    // Si la fecha NO ha pasado, forzarla a Pending (eliminando cualquier "Due Soon" viejo)
+    else if (d >= 0 && i.status !== 'Pending') { 
+      i.status = 'Pending'; 
       changed = true; 
     }
   });
@@ -3932,7 +3928,7 @@ function openModal(type, existing) {
         <div class="form-group"><label class="form-label">Due Date <span style="font-size:11px;color:var(--text-muted)">(auto-calculated from invoice date + credit days)</span></label><input class="form-input" id="f-due" type="date" value="${existing?.dueDate||''}"></div>
         <div class="form-group span2"><label class="form-label">Concept <span style="font-size:11px;color:var(--text-muted)">— what this invoice is for</span></label><input class="form-input" id="f-concept" placeholder="e.g. Monthly SaaS license — March 2026" value="${existing?.concept||''}"></div>
         <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input" id="f-amount" type="number" value="${existing?.amount||''}"></div>
-        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status" onchange="togglePaidDate(this.value)"><option ${existing?.status==='Pre-Invoice'?'selected':''}>Pre-Invoice</option><option ${existing?.status==='Pending'?'selected':''}>Pending</option><option ${existing?.status==='Due Soon'?'selected':''}>Due Soon</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Paid'?'selected':''}>Paid</option></select></div>
+        <div class="form-group"><label class="form-label">Status</label><select class="form-input" id="f-status" onchange="togglePaidDate(this.value)"><option ${existing?.status==='Pre-Invoice'?'selected':''}>Pre-Invoice</option><option ${existing?.status==='Pending'?'selected':''}>Pending</option><option ${existing?.status==='Overdue'?'selected':''}>Overdue</option><option ${existing?.status==='Paid'?'selected':''}>Paid</option></select></div>
         <div class="form-group" id="f-paid-date-group" style="display:${existing?.status==='Paid'?'block':'none'}"><label class="form-label">Payment Date</label><input class="form-input" id="f-paid-date" type="date" value="${existing?.paidDate||new Date().toISOString().split('T')[0]}"></div>
       </div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveInvoice(${existing?.id||'null'})">${isEdit?'Save Changes':'Add Invoice'}</button></div>`;
